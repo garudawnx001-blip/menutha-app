@@ -402,3 +402,73 @@ body::before {
   body::before { animation: none; }
   .cslide { transition: opacity 0.2s ease; transform: none !important; }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Round-5 FIX: carousel rebuilt as a flex-translate track (slides live in
+   normal flow — physically cannot overlap the caption or the next section),
+   compact phone frame, and a real mobile nav.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Track is a flex row; each slide is 100% wide; JS translates the track.
+   No absolute positioning, no fixed min-height → no overlap. */
+.carousel-viewport { overflow: hidden; border-radius: 22px; }
+.carousel-track {
+  position: static !important; display: flex; align-items: stretch;
+  min-height: 0 !important; height: auto !important;
+  transition: transform 0.5s cubic-bezier(0.2, 0.8, 0.2, 1); will-change: transform;
+}
+.cslide {
+  position: static !important; inset: auto !important;
+  flex: 0 0 100%; min-width: 100%; width: 100%; box-sizing: border-box;
+  opacity: 1 !important; transform: none !important; pointer-events: auto !important;
+  display: grid; grid-template-columns: 0.85fr 1.15fr; gap: 26px; align-items: center;
+  padding: 26px;
+}
+@media (max-width: 760px) {
+  .cslide { grid-template-columns: 1fr; gap: 16px; padding: 20px 18px; justify-items: center; text-align: center; }
+  .cslide figcaption { align-items: center; }
+  .cslide figcaption p { max-width: 40ch; }
+}
+/* Compact phone frame with a CAPPED height so it never dominates the layout. */
+.cslide .cscreen {
+  width: min(190px, 46vw); max-width: 190px; aspect-ratio: 9 / 17;
+  height: auto; max-height: 360px; margin: 0 auto;
+  border: 8px solid #17140f; border-radius: 34px; padding: 22px 14px 16px;
+  box-shadow: 0 22px 48px rgba(23,21,18,0.28), inset 0 0 0 2px rgba(255,255,255,0.06);
+  position: relative; overflow: hidden;
+  display: flex; flex-direction: column; gap: 8px; justify-content: center;
+}
+.cslide .cscreen::before {
+  content: ''; position: absolute; top: 9px; left: 50%; transform: translateX(-50%);
+  width: 60px; height: 6px; border-radius: 999px; background: #17140f; z-index: 3;
+}
+.cslide .cscreen .mrow { font-size: 11px; padding: 5px 0; }
+.cslide .cscreen .cbtn, .cslide .cscreen .d-cta { font-size: 11px; padding: 7px; }
+.cslide .cscreen .ktik { font-size: 11px; padding: 7px 9px; }
+.cslide .cscreen .d-name { font-size: 15px; }
+
+/* ── Mobile nav: hamburger dropdown so Home/Pricing/Restaurants are reachable ─ */
+.nav-toggle { display: none; background: none; border: 1.5px solid var(--line-strong, #e7decc); border-radius: 10px; width: 42px; height: 40px; align-items: center; justify-content: center; cursor: pointer; }
+.nav-toggle span, .nav-toggle span::before, .nav-toggle span::after { content: ''; display: block; width: 20px; height: 2px; background: var(--ink, #171512); border-radius: 2px; position: relative; transition: transform 0.2s ease, opacity 0.2s ease; }
+.nav-toggle span::before { position: absolute; top: -6px; }
+.nav-toggle span::after { position: absolute; top: 6px; }
+.nav.open .nav-toggle span { background: transparent; }
+.nav.open .nav-toggle span::before { transform: translateY(6px) rotate(45deg); }
+.nav.open .nav-toggle span::after { transform: translateY(-6px) rotate(-45deg); }
+
+@media (max-width: 680px) {
+  .nav:has(.nav-toggle) .nav-toggle { display: inline-flex; }
+  .nav:has(.nav-toggle) .nav-inner { position: relative; }
+  .nav:has(.nav-toggle) .nav-links {
+    display: none; position: absolute; top: calc(100% + 10px); right: 0; left: 0;
+    flex-direction: column; align-items: stretch; gap: 4px;
+    background: rgba(255,255,255,0.94); -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px);
+    border: 1px solid var(--line-strong, #e7decc); border-radius: 14px; padding: 10px;
+    box-shadow: 0 18px 40px rgba(23,21,18,0.14); z-index: 60;
+  }
+  .nav:has(.nav-toggle).open .nav-links { display: flex; }
+  /* inside the open dropdown, show EVERY link (incl. .hide-m) at full size */
+  .nav:has(.nav-toggle) .nav-links a { display: block !important; padding: 11px 12px; border-radius: 10px; font-size: 15px; color: var(--ink); text-align: left; }
+  .nav:has(.nav-toggle) .nav-links a:not(.btn-solid):hover { background: var(--sand, #f4ede1); }
+  .nav:has(.nav-toggle) .nav-links .btn-solid { text-align: center; margin-top: 4px; color: #fff; }
+}
