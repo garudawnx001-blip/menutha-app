@@ -176,3 +176,65 @@ footer { border-top: 1px solid var(--line); margin-top: 60px; padding: 34px 0 48
 .quote footer b { color: var(--ink); }
 .quote footer span { color: var(--ink-soft); }
 .ph-note { text-align: center; font-size: 12.5px; color: var(--ink-soft); margin-top: 20px; font-style: italic; }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Saffron Grove — liquid-glass upgrade layer (frosted panels, saffron warmth,
+   richer micro-interactions). Appended so it overrides the base editorial look.
+   ═══════════════════════════════════════════════════════════════════════════ */
+:root {
+  --saffron: #e8833a;
+  --saffron-deep: #c96a28;
+  --glass-bg: rgba(255, 255, 255, 0.55);
+  --glass-brd: rgba(255, 255, 255, 0.7);
+  --glass-blur: blur(20px) saturate(1.5);
+}
+
+/* Warm saffron ambient behind everything so frosted glass has warmth to refract */
+body {
+  background:
+    radial-gradient(60% 32% at 85% -6%, rgba(232, 131, 58, 0.16), transparent 66%),
+    radial-gradient(46% 30% at 6% 2%, rgba(201, 160, 78, 0.10), transparent 70%),
+    radial-gradient(60% 44% at 50% 108%, rgba(27, 94, 63, 0.06), transparent 72%),
+    var(--paper);
+  background-attachment: fixed;
+}
+
+/* Frosted glass on the marketing panels */
+.card, .quote, .tier, .split-media, .device-scr, details, .band {
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+}
+.card, .quote, .tier, .split-media, details {
+  background: var(--glass-bg);
+  border-color: var(--glass-brd);
+  box-shadow: 0 10px 30px rgba(23, 21, 18, 0.07), inset 0 1px 0 rgba(255, 255, 255, 0.6);
+}
+.board-scr { background: linear-gradient(170deg, rgba(18,40,29,0.86), rgba(15,51,35,0.86)); }
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .card, .quote, .tier, .split-media, details { background: var(--card); }
+}
+
+/* Frosted nav with a hair more depth */
+.nav { background: rgba(250, 248, 244, 0.72); -webkit-backdrop-filter: blur(16px) saturate(1.4); backdrop-filter: blur(16px) saturate(1.4); }
+
+/* Saffron warmth on the primary CTAs + eyebrow */
+.eyebrow { color: var(--saffron); }
+.btn-solid { background: linear-gradient(135deg, var(--saffron), var(--saffron-deep)); box-shadow: 0 10px 24px rgba(232, 131, 58, 0.30); }
+.btn-solid:hover { background: linear-gradient(135deg, var(--saffron-deep), var(--saffron-deep)); }
+.band { background: linear-gradient(150deg, var(--forest), var(--forest-deep)); }
+.band .btn-solid { background: #fdfbf6; color: var(--forest); box-shadow: 0 8px 20px rgba(0,0,0,0.18); }
+.trust { color: var(--saffron-deep); }
+.step-k { color: var(--saffron); }
+
+/* Micro-interactions: smooth lifts + gentle scale on interactive cards/buttons */
+.card, .tier, .quote, .device .device-scr, .btn { transition: transform 0.22s cubic-bezier(0.2,0.7,0.2,1), box-shadow 0.22s ease, background 0.2s ease; }
+.card:hover, .tier:hover, .quote:hover { transform: translateY(-4px); box-shadow: 0 20px 44px rgba(23, 21, 18, 0.12); }
+.btn:hover { transform: translateY(-2px); }
+.btn:active { transform: translateY(0) scale(0.98); }
+.tier.hot { box-shadow: 0 22px 50px rgba(27, 94, 63, 0.16); }
+
+@media (prefers-reduced-motion: reduce) {
+  body { background-attachment: scroll; }
+  .card, .tier, .quote, .btn, .device .device-scr { transition: none !important; }
+  .card:hover, .tier:hover, .quote:hover, .btn:hover { transform: none !important; }
+}

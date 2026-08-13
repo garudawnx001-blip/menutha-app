@@ -15,8 +15,16 @@
   --text-dim: #8a8475;      /* ink.400 */
   --primary: #1b5e3f;       /* forest.600 */
   --primary-deep: #16482f;  /* forest.700 */
+  --saffron: #e8833a;       /* Saffron Grove hero accent */
+  --saffron-deep: #c96a28;
+  --saffron-soft: #fbe7d2;
   --gold: #c9a04e;          /* premiumGold */
   --gold-soft: #f3e8cf;
+  /* liquid-glass materials (frosted translucent panels) */
+  --glass-bg: rgba(255, 253, 248, 0.62);
+  --glass-bg-strong: rgba(255, 253, 248, 0.78);
+  --glass-border: rgba(255, 255, 255, 0.6);
+  --glass-blur: blur(18px) saturate(1.5);
   --veg: #1b8a3e;
   --nonveg: #9b2c24;
   --success: #2e7d52;
@@ -70,32 +78,45 @@ img { max-width: 100%; display: block; }
   .page { padding: 0 24px 40px; }
 }
 
-/* Ambient warmth — a whisper of gold and forest, not a gradient hero */
+/* Ambient warmth — Saffron Grove: a warm saffron wash up top melting into the
+   cream ground, with a forest whisper below. Gives the frosted glass panels
+   something warm to refract. */
 .ambient {
   position: fixed;
   inset: 0;
   pointer-events: none;
   z-index: -1;
   background:
-    radial-gradient(55% 38% at 88% -8%, rgba(201, 160, 78, 0.12), transparent 70%),
-    radial-gradient(45% 32% at -5% 102%, rgba(27, 94, 63, 0.06), transparent 70%),
+    radial-gradient(70% 42% at 84% -10%, rgba(232, 131, 58, 0.18), transparent 68%),
+    radial-gradient(48% 34% at 8% -6%, rgba(201, 160, 78, 0.12), transparent 70%),
+    radial-gradient(52% 40% at -8% 104%, rgba(27, 94, 63, 0.08), transparent 70%),
     var(--bg);
 }
 
-/* ── Cards (ivory surfaces with hairline sand borders) ──────────────────── */
+/* ── Liquid-glass panels (frosted translucent, blur what's behind) ──────── */
 
 .glass {
-  background: var(--surface);
-  border: 1px solid var(--line);
+  background: var(--glass-bg);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border);
   border-radius: var(--r-lg);
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--shadow-sm), inset 0 1px 0 rgba(255, 255, 255, 0.55);
 }
 
 .glass-strong {
-  background: var(--surface);
-  border: 1px solid var(--line-strong);
+  background: var(--glass-bg-strong);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border);
   border-radius: var(--r-lg);
-  box-shadow: var(--shadow-md);
+  box-shadow: var(--shadow-md), inset 0 1px 0 rgba(255, 255, 255, 0.6);
+}
+
+/* Progressive enhancement: if the browser can't do backdrop-filter, fall back
+   to opaque ivory so text never sits on a see-through panel. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .glass, .glass-strong { background: var(--surface); }
 }
 
 /* ── Typography ─────────────────────────────────────────────────────────── */
@@ -164,9 +185,10 @@ img { max-width: 100%; display: block; }
   transition: all 0.12s ease;
 }
 .chip.active {
-  background: var(--primary);
-  border-color: var(--primary);
+  background: var(--saffron);
+  border-color: var(--saffron);
   color: #fffdf8;
+  box-shadow: 0 4px 14px rgba(232, 131, 58, 0.32);
 }
 
 .chip-row {
@@ -271,7 +293,7 @@ img { max-width: 100%; display: block; }
   width: 100%;
   transition: border-color 0.12s ease, box-shadow 0.12s ease, transform 0.12s ease;
 }
-.dish:hover { border-color: var(--gold); box-shadow: var(--shadow-md); transform: translateY(-1px); }
+.dish:hover { border-color: var(--saffron); box-shadow: var(--shadow-md); transform: translateY(-1px); }
 .dish .dish-photo {
   width: 84px; height: 84px; min-width: 84px;
   border-radius: var(--r-md);
@@ -320,7 +342,7 @@ img { max-width: 100%; display: block; }
   text-align: left;
   transition: border-color 0.12s ease, box-shadow 0.12s ease, transform 0.12s ease;
 }
-.rest-card:hover { border-color: var(--gold); box-shadow: var(--shadow-md); transform: translateY(-1px); }
+.rest-card:hover { border-color: var(--saffron); box-shadow: var(--shadow-md); transform: translateY(-1px); }
 .rest-card .rest-logo {
   width: 56px; height: 56px; min-width: 56px;
   border-radius: var(--r-md);
@@ -507,7 +529,7 @@ input.code-input::placeholder { color: var(--text-dim); }
   width: 100%;
   transition: border-color 0.12s ease, box-shadow 0.12s ease, transform 0.12s ease;
 }
-.option-card:hover { border-color: var(--gold); box-shadow: var(--shadow-md); transform: translateY(-2px); }
+.option-card:hover { border-color: var(--saffron); box-shadow: var(--shadow-md); transform: translateY(-2px); }
 .option-card .icon { font-size: 26px; }
 .option-card h3 { font-family: var(--font-display); font-size: 19px; font-weight: 600; }
 .option-card p { font-size: 13.5px; color: var(--text-muted); }
