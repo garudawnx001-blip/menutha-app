@@ -138,14 +138,14 @@ export function Menu() {
             aria-label="Search dishes"
           />
           <button
-            className={diet === 'veg' ? 'chip active' : 'chip'}
+            className={'chip diet-chip diet-veg' + (diet === 'veg' ? ' active' : '')}
             onClick={() => setDiet(diet === 'veg' ? 'all' : 'veg')}
             aria-pressed={diet === 'veg'}
           >
             <span className="veg-mark" /> Veg
           </button>
           <button
-            className={diet === 'nonveg' ? 'chip active' : 'chip'}
+            className={'chip diet-chip diet-nonveg' + (diet === 'nonveg' ? ' active' : '')}
             onClick={() => setDiet(diet === 'nonveg' ? 'all' : 'nonveg')}
             aria-pressed={diet === 'nonveg'}
           >

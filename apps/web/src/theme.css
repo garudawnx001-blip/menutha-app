@@ -606,3 +606,51 @@ input.code-input::placeholder { color: var(--text-dim); }
   .printable { position: absolute; inset: 0; padding: 24px; background: #fff; }
   .portal-nav, .cartbar-wrap { display: none !important; }
 }
+
+/* ── Diet filter chips (Veg green / Non-veg red selected states) ─────────── */
+.diet-chip { gap: 7px; }
+.diet-chip .veg-mark { width: 14px; height: 14px; min-width: 14px; }
+.diet-chip.diet-veg.active {
+  background: rgba(31, 138, 84, 0.12);
+  border-color: var(--veg);
+  color: #14663d;
+  box-shadow: 0 4px 12px rgba(31, 138, 84, 0.18);
+}
+.diet-chip.diet-nonveg.active {
+  background: rgba(192, 69, 59, 0.10);
+  border-color: var(--nonveg);
+  color: #9b2c24;
+  box-shadow: 0 4px 12px rgba(192, 69, 59, 0.16);
+}
+.diet-chip.active .veg-mark { background: #fff; }
+
+/* ── Site-wide hover + press feedback on all interactive controls ────────── */
+.btn { transition: transform 0.14s cubic-bezier(0.2,0.7,0.2,1), box-shadow 0.16s ease, background 0.16s ease, filter 0.16s ease; }
+.btn:hover { transform: translateY(-1.5px); filter: brightness(1.04); }
+.btn:active { transform: translateY(0) scale(0.97); filter: brightness(0.98); }
+.btn-primary:hover { box-shadow: 0 10px 26px rgba(27, 94, 63, 0.34); }
+.btn-ghost:hover { border-color: var(--saffron); }
+
+.chip:hover { border-color: var(--saffron); color: var(--text); }
+.chip.active:hover { color: #fffdf8; }
+.chip:active { transform: scale(0.96); }
+
+.dish, .rest-card, .option-card { transition: border-color 0.14s ease, box-shadow 0.16s ease, transform 0.16s cubic-bezier(0.2,0.7,0.2,1); }
+.dish:active, .rest-card:active, .option-card:active { transform: scale(0.99); }
+
+.stepper button { transition: background 0.12s ease, transform 0.1s ease; }
+.stepper button:hover { background: var(--sand); }
+.stepper button:active { background: var(--gold-soft); transform: scale(0.9); }
+
+.cartbar { transition: transform 0.16s ease, box-shadow 0.16s ease; }
+.cartbar:hover { transform: translateY(-2px); box-shadow: var(--shadow-lg), 0 0 0 1px rgba(255,255,255,0.15) inset; }
+.cartbar:active { transform: translateY(0) scale(0.995); }
+
+/* SPA wordmark: logo mark + text lockup */
+.wordmark { display: inline-flex; align-items: center; gap: 8px; }
+.wordmark .brand-mark { border-radius: 7px; display: block; }
+
+@media (prefers-reduced-motion: reduce) {
+  .btn, .chip, .dish, .rest-card, .option-card, .stepper button, .cartbar { transition: none !important; }
+  .btn:hover, .btn:active, .chip:active, .dish:active, .cartbar:hover, .cartbar:active { transform: none !important; }
+}

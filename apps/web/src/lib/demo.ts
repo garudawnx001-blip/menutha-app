@@ -18,6 +18,24 @@ export const demoRestaurant: Restaurant = {
   parcel_charge: 20,
 };
 
+/** Directory fallback shown when the live Supabase directory is unreachable
+ *  (e.g. project paused), so the pilot restaurant stays discoverable in search.
+ *  Live rows from the DB take precedence and dedupe these out by name. */
+export const directoryFallback: Restaurant[] = [
+  demoRestaurant,
+  {
+    id: 'ashwamedha',
+    name: 'Ashwamedha Lodge and Family Restaurant',
+    city: 'Hospet',
+    banner_url: '',
+    logo_url: '',
+    is_open: true,
+    status: 'active',
+    trial_ends_at: null,
+    parcel_charge: 20,
+  },
+];
+
 export const demoTable: DiningTable = {
   id: 'demo-table',
   restaurant_id: 'demo-restaurant',

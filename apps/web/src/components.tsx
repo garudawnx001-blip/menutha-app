@@ -13,9 +13,11 @@ export function VegMark({ veg }: { veg: boolean }) {
 }
 
 export function Wordmark({ size = 22 }: { size?: number }) {
+  const mark = Math.round(size * 1.2);
   return (
     <span className="wordmark" style={{ fontSize: size }}>
-      <em>menu</em>tha
+      <img className="brand-mark" src="/menutha-mark.svg" alt="" width={mark} height={mark} />
+      <span><em>menu</em>tha</span>
     </span>
   );
 }

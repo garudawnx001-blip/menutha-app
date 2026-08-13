@@ -270,3 +270,26 @@ body { overflow-x: clip; }
    to match the sections (higher specificity than the .hero media rule). */
 header.hero { padding-left: 22px; padding-right: 22px; }
 @media (max-width: 860px) { header.hero { padding-left: 20px; padding-right: 20px; } }
+
+/* ── Round-3 feedback: tighter top spacing + button press feedback ──────── */
+
+/* 1. Trim the dead space at the top so the hero fills the first screen. */
+header.hero { padding-top: 40px; }
+@media (max-width: 860px) {
+  header.hero { padding-top: 20px; padding-bottom: 30px; }
+  section.block { padding: 40px 0; }
+  .nav-inner { padding: 10px 0; }
+}
+
+/* 3. Clear hover AND press feedback on every marketing button. */
+.btn { transition: transform 0.16s cubic-bezier(0.2,0.7,0.2,1), box-shadow 0.18s ease, background 0.18s ease, filter 0.16s ease; }
+.btn:hover { filter: brightness(1.04); }
+.btn:active { transform: translateY(0) scale(0.965); filter: brightness(0.97); }
+.btn-solid:active { box-shadow: 0 4px 12px rgba(232,131,58,0.25); }
+.nav .btn-solid:active { box-shadow: 0 4px 12px rgba(27,94,63,0.25); }
+.btn-line:hover { border-color: var(--saffron); color: var(--ink); }
+.nav-links a:not(.btn) { transition: color 0.14s ease; }
+
+@media (prefers-reduced-motion: reduce) {
+  .btn:hover, .btn:active { transform: none !important; filter: none !important; }
+}

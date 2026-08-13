@@ -4,7 +4,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { fetchRestaurants, startParcelSession } from '../lib/api';
-import { demoRestaurant } from '../lib/demo';
+import { demoRestaurant, directoryFallback } from '../lib/demo';
 import type { Restaurant } from '../lib/types';
 import { useStore } from '../store';
 import { Spinner, Wordmark } from '../components';
@@ -30,7 +30,12 @@ export function Restaurants() {
 
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
-    const all = [demoRestaurant, ...(list ?? [])];
+    // Live DB rows first; then any fallback listings not already present by name
+    // (keeps the pilot restaurant discoverable when the directory is unreachable).
+    const live = list ?? [];
+    const liveNames = new Set(live.map((r) => r.name.trim().toLowerCase()));
+    const fallback = directoryFallback.filter((r) => !liveNames.has(r.name.trim().toLowerCase()));
+    const all = [...live, ...fallback];
     return q
       ? all.filter(
           (r) => r.name.toLowerCase().includes(q) || (r.city ?? '').toLowerCase().includes(q),
