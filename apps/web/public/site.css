@@ -264,3 +264,9 @@ body { overflow-x: clip; }
 .wordmark { display: inline-flex; align-items: center; gap: 9px; }
 .brand-mark { width: 28px; height: 28px; border-radius: 8px; display: block; }
 @media (max-width: 680px) { .brand-mark { width: 26px; height: 26px; } }
+
+/* Fix: the hero overrode .wrap's side padding with `padding: … 0 …`, so hero
+   text sat flush against the screen edge on mobile. Restore horizontal insets
+   to match the sections (higher specificity than the .hero media rule). */
+header.hero { padding-left: 22px; padding-right: 22px; }
+@media (max-width: 860px) { header.hero { padding-left: 20px; padding-right: 20px; } }
