@@ -1,0 +1,6 @@
+User-agent: *
+Allow: /
+Disallow: /partner
+Disallow: /cart
+Disallow: /track/
+Sitemap: https://menutha.app/sitemap.xml
