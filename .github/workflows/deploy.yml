@@ -48,11 +48,26 @@ jobs:
       - name: Build (vite; skip tsc so a stray type error can't block deploy)
         run: npx vite build
 
-      - name: Verify Pages support files landed in dist
+      - name: Compose public site (marketing landing at /, SPA fallback at 404)
         run: |
+          # After vite build: dist/index.html is the SPA shell; dist/home/index.html
+          # is the premium marketing landing; static sub-pages (/pricing, /about, ...)
+          # and site.css/CNAME/.nojekyll came from public/ .
+          #
+          # GitHub Pages serves any real file directly (200) and falls back to
+          # 404.html for unmatched paths. So:
+          #   * 404.html := the SPA shell  -> app routes (/scan/<t>, /menu, /partner,
+          #     /restaurants, /track/<id>, /r/<slug>) load the ordering app.
+          #   * index.html := the marketing landing -> the public homepage.
+          cp dist/index.html dist/app.html          # keep the SPA entry addressable
+          cp dist/index.html dist/404.html          # unmatched paths -> ordering app
+          cp dist/home/index.html dist/index.html   # premium marketing at /
           test -f dist/index.html || { echo "no index.html"; exit 1; }
           test -f dist/404.html   || { echo "no 404.html";   exit 1; }
           test -f dist/CNAME      || { echo "no CNAME";       exit 1; }
+          test -f dist/site.css   || { echo "no site.css";    exit 1; }
+          grep -q "The menu is on the table" dist/index.html || { echo "root is not the marketing landing"; exit 1; }
+          grep -q "id=\"root\"" dist/404.html || { echo "404 is not the SPA shell"; exit 1; }
           echo "CNAME: $(cat dist/CNAME)"
           ls -la dist
 
