@@ -141,6 +141,7 @@ export function Menu() {
         <div className="chip-row diet-row" role="group" aria-label="Dietary filter">
           <button
             className={'chip diet-chip diet-all' + (diet === 'all' ? ' active' : '')}
+            style={diet === 'all' ? { background: '#e8833a', borderColor: '#e8833a', color: '#fffdf8' } : undefined}
             onClick={() => setDiet('all')}
             aria-pressed={diet === 'all'}
           >
@@ -148,6 +149,7 @@ export function Menu() {
           </button>
           <button
             className={'chip diet-chip diet-veg' + (diet === 'veg' ? ' active' : '')}
+            style={diet === 'veg' ? { background: '#e3f1e9', borderColor: '#1b8a3e', color: '#14663d' } : undefined}
             onClick={() => setDiet('veg')}
             aria-pressed={diet === 'veg'}
           >
@@ -155,6 +157,7 @@ export function Menu() {
           </button>
           <button
             className={'chip diet-chip diet-nonveg' + (diet === 'nonveg' ? ' active' : '')}
+            style={diet === 'nonveg' ? { background: '#f8e3e0', borderColor: '#9b2c24', color: '#9b2c24' } : undefined}
             onClick={() => setDiet('nonveg')}
             aria-pressed={diet === 'nonveg'}
           >
