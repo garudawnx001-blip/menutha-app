@@ -137,16 +137,25 @@ export function Menu() {
             onChange={(e) => setQuery(e.target.value)}
             aria-label="Search dishes"
           />
+        </div>
+        <div className="chip-row diet-row" role="group" aria-label="Dietary filter">
+          <button
+            className={'chip diet-chip diet-all' + (diet === 'all' ? ' active' : '')}
+            onClick={() => setDiet('all')}
+            aria-pressed={diet === 'all'}
+          >
+            All
+          </button>
           <button
             className={'chip diet-chip diet-veg' + (diet === 'veg' ? ' active' : '')}
-            onClick={() => setDiet(diet === 'veg' ? 'all' : 'veg')}
+            onClick={() => setDiet('veg')}
             aria-pressed={diet === 'veg'}
           >
             <span className="veg-mark" /> Veg
           </button>
           <button
             className={'chip diet-chip diet-nonveg' + (diet === 'nonveg' ? ' active' : '')}
-            onClick={() => setDiet(diet === 'nonveg' ? 'all' : 'nonveg')}
+            onClick={() => setDiet('nonveg')}
             aria-pressed={diet === 'nonveg'}
           >
             <span className="veg-mark nonveg" /> Non-veg

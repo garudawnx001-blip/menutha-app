@@ -654,3 +654,12 @@ input.code-input::placeholder { color: var(--text-dim); }
   .btn, .chip, .dish, .rest-card, .option-card, .stepper button, .cartbar { transition: none !important; }
   .btn:hover, .btn:active, .chip:active, .dish:active, .cartbar:hover, .cartbar:active { transform: none !important; }
 }
+
+/* Diet filter row — its own row now (was crammed in the search bar). Force the
+   selected states so they always read: All=saffron, Veg=green, Non-veg=red. */
+.diet-row { margin: 2px 0 2px; }
+.diet-chip { padding: 9px 16px; }
+.diet-chip.diet-all.active { background: var(--saffron) !important; border-color: var(--saffron) !important; color: #fffdf8 !important; }
+.diet-chip.diet-veg.active { background: rgba(31,138,84,0.14) !important; border-color: var(--veg) !important; color: #14663d !important; box-shadow: 0 4px 12px rgba(31,138,84,0.18); }
+.diet-chip.diet-nonveg.active { background: rgba(192,69,59,0.12) !important; border-color: var(--nonveg) !important; color: #9b2c24 !important; box-shadow: 0 4px 12px rgba(192,69,59,0.16); }
+.diet-chip .veg-mark { vertical-align: middle; }
