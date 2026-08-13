@@ -238,3 +238,29 @@ body {
   .card, .tier, .quote, .btn, .device .device-scr { transition: none !important; }
   .card:hover, .tier:hover, .quote:hover, .btn:hover { transform: none !important; }
 }
+
+/* ── Fixes from user video feedback ─────────────────────────────────────── */
+
+/* 1. Owner login CTA: forest green (subtler, on-brand) — not saffron */
+.nav .btn-solid { background: var(--forest); box-shadow: 0 6px 16px rgba(27, 94, 63, 0.22); }
+.nav .btn-solid:hover { background: var(--forest-deep); }
+
+/* 2. CRITICAL: the nav row must never exceed the viewport on phones.
+   Below 680px collapse the text links (still reachable in the footer + hero)
+   and keep only the wordmark + the single Owner-login CTA, so the page always
+   lands correctly scaled with no horizontal overflow / pinch-zoom. */
+@media (max-width: 680px) {
+  .nav-inner { padding: 12px 0; gap: 10px; }
+  .nav-links { gap: 10px; }
+  .nav-links a:not(.btn-solid) { display: none; }
+  .nav .btn { padding: 10px 16px; font-size: 14px; }
+}
+
+/* Belt-and-braces: nothing may cause horizontal scroll. (Kept off <html> so the
+   sticky nav still works; the real overflow source is fixed above.) */
+body { overflow-x: clip; }
+
+/* Brand mark in the wordmark lockup */
+.wordmark { display: inline-flex; align-items: center; gap: 9px; }
+.brand-mark { width: 28px; height: 28px; border-radius: 8px; display: block; }
+@media (max-width: 680px) { .brand-mark { width: 26px; height: 26px; } }
