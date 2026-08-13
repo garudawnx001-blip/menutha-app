@@ -647,8 +647,9 @@ input.code-input::placeholder { color: var(--text-dim); }
 .cartbar:active { transform: translateY(0) scale(0.995); }
 
 /* SPA wordmark: logo mark + text lockup */
-.wordmark { display: inline-flex; align-items: center; gap: 8px; }
-.wordmark .brand-mark { border-radius: 7px; display: block; }
+/* No flex gap — avoids the "menu tha" space between <em>menu</em> and "tha". */
+.wordmark { display: inline-flex; align-items: center; white-space: nowrap; }
+.wordmark .brand-mark { border-radius: 7px; display: block; margin-right: 8px; flex: none; }
 
 @media (prefers-reduced-motion: reduce) {
   .btn, .chip, .dish, .rest-card, .option-card, .stepper button, .cartbar { transition: none !important; }

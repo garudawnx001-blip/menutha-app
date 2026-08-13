@@ -261,8 +261,12 @@ body {
 body { overflow-x: clip; }
 
 /* Brand mark in the wordmark lockup */
-.wordmark { display: inline-flex; align-items: center; gap: 9px; }
-.brand-mark { width: 28px; height: 28px; border-radius: 8px; display: block; }
+/* No flex `gap` here — it would insert a space between <b>menu</b> and the
+   "tha" text node on pages where the text isn't wrapped ("menu tha" bug).
+   Space the mark from the text with a margin instead. */
+.wordmark { display: inline-flex; align-items: center; white-space: nowrap; }
+.wordmark b, .wordmark span { white-space: nowrap; }
+.brand-mark { width: 28px; height: 28px; border-radius: 8px; display: block; margin-right: 9px; flex: none; }
 @media (max-width: 680px) { .brand-mark { width: 26px; height: 26px; } }
 
 /* Fix: the hero overrode .wrap's side padding with `padding: … 0 …`, so hero
@@ -344,4 +348,57 @@ header.hero { padding-top: 40px; }
 
 @media (prefers-reduced-motion: reduce) {
   .cslide { transition: opacity 0.2s ease; transform: none; }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Round-4 elegance: phone-frame carousel, ambient background animation,
+   tabular numbers, tighter first viewport.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Slow, GPU-friendly ambient drift behind everything (subtle glass glow). */
+body::before {
+  content: ''; position: fixed; inset: -30%; z-index: -1; pointer-events: none;
+  background:
+    radial-gradient(closest-side at 18% 28%, rgba(232,131,58,0.12), transparent),
+    radial-gradient(closest-side at 82% 18%, rgba(201,160,78,0.10), transparent),
+    radial-gradient(closest-side at 62% 82%, rgba(27,94,63,0.08), transparent);
+  animation: bgdrift 28s ease-in-out infinite alternate;
+  will-change: transform;
+}
+@keyframes bgdrift {
+  from { transform: translate3d(0,0,0) scale(1) rotate(0deg); }
+  to   { transform: translate3d(2.5%, 1.8%, 0) scale(1.07) rotate(1.5deg); }
+}
+
+/* Carousel → app-store phone-frame screenshots that slide in horizontally. */
+.carousel-track { min-height: 380px; }
+@media (max-width: 720px) { .carousel-track { min-height: 500px; } }
+.cslide { transform: translateX(60px); transition: opacity 0.55s ease, transform 0.6s cubic-bezier(0.2,0.8,0.2,1); }
+.cslide.is-active { transform: translateX(0); }
+.cslide .cscreen {
+  max-width: 244px; width: 100%; margin: 0 auto; aspect-ratio: 9 / 18.5;
+  border: 9px solid #17140f; border-radius: 38px; padding: 26px 16px 20px;
+  box-shadow: 0 26px 60px rgba(23,21,18,0.30), inset 0 0 0 2px rgba(255,255,255,0.06);
+  position: relative; overflow: hidden; min-height: 0;
+}
+.cslide .cscreen::before {
+  content: ''; position: absolute; top: 11px; left: 50%; transform: translateX(-50%);
+  width: 78px; height: 7px; border-radius: 999px; background: #17140f; z-index: 3;
+}
+.s-menu, .s-order, .s-bill { background: linear-gradient(180deg,#ffffff,#fbf5ea); }
+
+/* Tabular figures so prices/totals line up in columns everywhere. */
+.mrow, .mrow b, .price, .price small, .tier .price, .ps-price, .cmp td,
+.d-line, .split-media, .band, .trust { font-variant-numeric: tabular-nums; }
+
+/* Tighter first viewport so the product is visible without scrolling. */
+@media (max-width: 860px) {
+  header.hero { padding-top: 14px; padding-bottom: 22px; }
+  .hero-note { margin-top: 10px; }
+  .trust { margin-top: 14px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body::before { animation: none; }
+  .cslide { transition: opacity 0.2s ease; transform: none !important; }
 }
