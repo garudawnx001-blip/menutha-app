@@ -233,6 +233,11 @@ export function Track() {
         <button className="btn btn-ghost" style={{ flex: 1 }} onClick={() => nav('/menu')}>
           Order more
         </button>
+        {!o.is_parcel && (
+          <button className="btn btn-ghost" style={{ flex: 1 }} onClick={() => nav('/bill')}>
+            🧾 Table bill
+          </button>
+        )}
         {done && (
           <button className="btn btn-primary" style={{ flex: 1 }} onClick={() => window.print()}>
             Save receipt

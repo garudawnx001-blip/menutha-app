@@ -3,7 +3,7 @@
  *  menu_item + options, place_order RPC (server-side pricing), and the
  *  get_order_status RPC for guest tracking. Demo token short-circuits locally. */
 import { supabase } from './supabase';
-import type { CartLine, DiningTable, MenuItem, OrderView, Restaurant, Session } from './types';
+import type { CartLine, DiningTable, MenuItem, OrderView, Restaurant, Session, TableBill } from './types';
 import {
   DEMO_TOKEN,
   demoMenu,
@@ -157,11 +157,15 @@ export async function placeOrder(
   if (session.demo) return demoPlaceOrder(lines, notes, session.table.is_parcel);
 
   // Server-side pricing: only ids + qty go up, place_order re-prices everything.
+  // Diner name/phone tag the order (6-arg place_order) so the kitchen and the
+  // table bill can attribute it to the person who ordered.
   const { data, error } = await supabase.rpc('place_order', {
     p_restaurant_id: session.restaurant.id,
     p_table_id: session.table.id,
     p_items: lines.map((l) => ({ menu_item_id: l.menuItemId, qty: l.qty, option_ids: l.optionIds })),
     p_notes: notes || null,
+    p_guest_name: session.guest?.name || null,
+    p_guest_phone: session.guest?.phone || null,
   });
   if (error) {
     const msg = String(error.message ?? '');
@@ -172,6 +176,31 @@ export async function placeOrder(
   }
   notifyStaff((data as { id: string }).id).catch(() => {});
   return data as { id: string };
+}
+
+/** The whole table's live bill: every open order, a combined total (the
+ *  default) and a per-diner split. combined.total === sum(per_person.total). */
+export async function fetchTableBill(session: Session): Promise<TableBill> {
+  if (session.demo) {
+    const o = demoOrderStatus();
+    const totals = o
+      ? { subtotal: o.subtotal, packing_charge: o.packing_charge, gst_amount: o.gst_amount, total: o.total, order_count: 1 }
+      : { subtotal: 0, packing_charge: 0, gst_amount: 0, total: 0, order_count: 0 };
+    const who = session.guest?.name || 'You';
+    return {
+      table_id: session.table.id,
+      orders: o
+        ? [{ order_id: o.id, status: o.status, diner_name: who, diner_phone: session.guest?.phone,
+             subtotal: o.subtotal, packing_charge: o.packing_charge, gst_amount: o.gst_amount, total: o.total,
+             items: o.items }]
+        : [],
+      combined: totals,
+      per_person: o ? [{ diner_name: who, diner_phone: session.guest?.phone, ...totals }] : [],
+    };
+  }
+  const { data, error } = await supabase.rpc('get_table_bill', { p_table_id: session.table.id });
+  if (error) throw error;
+  return data as TableBill;
 }
 
 export async function fetchOrderStatus(session: Session | null, orderId: string): Promise<OrderView> {

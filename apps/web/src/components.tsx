@@ -53,6 +53,76 @@ export function Spinner({ label }: { label?: string }) {
   );
 }
 
+/** First-open identity gate — name + phone, no OTP, no account. Tags every
+ *  order the diner places so the kitchen and the table bill stay attributed. */
+export function IdentityGate({
+  restaurantName,
+  tableLabel,
+  onSubmit,
+}: {
+  restaurantName?: string;
+  tableLabel?: string;
+  onSubmit: (g: { name: string; phone: string }) => void;
+}) {
+  const [name, setName] = React.useState('');
+  const [phone, setPhone] = React.useState('');
+  const digits = phone.replace(/\D/g, '');
+  const validPhone = /^[6-9]\d{9}$/.test(digits);
+  const validName = name.trim().length >= 2;
+  const ok = validName && validPhone;
+  const field: React.CSSProperties = {
+    width: '100%', boxSizing: 'border-box', marginTop: 6, padding: '12px 14px',
+    borderRadius: 12, border: '1px solid var(--line-strong, #e7decc)',
+    background: 'var(--surface, #fffdf8)', color: 'var(--ink)', fontSize: 16,
+    fontFamily: 'inherit', outline: 'none',
+  };
+  const submit = () => ok && onSubmit({ name: name.trim(), phone: digits });
+  return (
+    <div className="modal-scrim">
+      <div className="sheet" onClick={(e) => e.stopPropagation()}>
+        <span className="live-dot" aria-hidden style={{ marginBottom: 10 }} />
+        <h2 className="display" style={{ fontSize: 25, lineHeight: 1.2 }}>
+          Welcome{restaurantName ? ` to ${restaurantName}` : ''} 👋
+        </h2>
+        <p className="muted" style={{ fontSize: 14, marginTop: 8 }}>
+          {tableLabel ? `You're at ${tableLabel}. ` : ''}Tell us who's ordering so the
+          kitchen knows whose dish is whose and your bill stays yours. No OTP, no account.
+        </p>
+
+        <label className="overline" style={{ display: 'block', marginTop: 18 }}>Your name</label>
+        <input
+          style={field} value={name} onChange={(e) => setName(e.target.value)}
+          placeholder="e.g. Aarav" autoComplete="given-name" aria-label="Your name"
+          onKeyDown={(e) => e.key === 'Enter' && submit()}
+        />
+
+        <label className="overline" style={{ display: 'block', marginTop: 14 }}>Mobile number</label>
+        <input
+          style={field} value={phone} onChange={(e) => setPhone(e.target.value)}
+          placeholder="10-digit mobile" inputMode="numeric" autoComplete="tel"
+          aria-label="Mobile number" maxLength={14}
+          onKeyDown={(e) => e.key === 'Enter' && submit()}
+        />
+        {phone.length > 0 && !validPhone && (
+          <p style={{ color: 'var(--error)', fontSize: 13, marginTop: 6 }}>
+            Enter a valid 10-digit Indian mobile number.
+          </p>
+        )}
+
+        <button
+          className="btn btn-primary btn-block" style={{ marginTop: 18 }}
+          disabled={!ok} onClick={submit}
+        >
+          Start ordering →
+        </button>
+        <p className="dim" style={{ fontSize: 11.5, textAlign: 'center', marginTop: 10 }}>
+          We use this only to route your order and bill at this restaurant.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 /** Item detail sheet: option groups (one choice per group), add-ons stack. */
 export function ItemSheet({
   item,

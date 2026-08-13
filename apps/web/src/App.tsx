@@ -20,6 +20,7 @@ import { Settings } from './pages/partner/Settings';
 import { Menu } from './pages/Menu';
 import { Cart } from './pages/Cart';
 import { Track } from './pages/Track';
+import { Bill } from './pages/Bill';
 
 // Path routing in production (printed QRs encode /scan/<token>); hash routing
 // for single-file/static-preview builds where the host can't rewrite paths.
@@ -38,6 +39,7 @@ export function App() {
           <Route path="/menu" element={<Menu />} />
           <Route path="/cart" element={<Cart />} />
           <Route path="/track/:id" element={<Track />} />
+          <Route path="/bill" element={<Bill />} />
           <Route path="/partner" element={<PartnerLogin />} />
           <Route path="/partner/register" element={<Register />} />
           <Route element={<PartnerShell />}>

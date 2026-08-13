@@ -7,11 +7,11 @@ import { fetchMenu, subscribeMenu } from '../lib/api';
 import type { CartLine, MenuItem } from '../lib/types';
 import { calcBill, inr } from '../lib/types';
 import { useStore } from '../store';
-import { ItemSheet, Spinner, VegMark, Wordmark } from '../components';
+import { IdentityGate, ItemSheet, Spinner, VegMark, Wordmark } from '../components';
 
 export function Menu() {
   const nav = useNavigate();
-  const { session, cart, addLine } = useStore();
+  const { session, cart, addLine, setGuest } = useStore();
   const [items, setItems] = useState<MenuItem[] | null>(null);
   const [failed, setFailed] = useState(false);
   // Filters persist while browsing (cart ↔ menu round-trips, reloads).
@@ -82,9 +82,16 @@ export function Menu() {
     <div className="page fade-in" style={{ paddingBottom: count ? 110 : undefined }}>
       <div className="topbar">
         <Wordmark size={22} />
-        <span className="badge gold">
-          {table.is_parcel ? '📦 Parcel / Takeaway' : `🍽 ${table.label}`}
-        </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {!table.is_parcel && (
+            <button className="chip" onClick={() => nav('/bill')} aria-label="View the table bill">
+              🧾 Table bill
+            </button>
+          )}
+          <span className="badge gold">
+            {table.is_parcel ? '📦 Parcel / Takeaway' : `🍽 ${table.label}`}
+          </span>
+        </div>
       </div>
 
       <div className="menu-hero">
@@ -232,6 +239,16 @@ export function Menu() {
           item={open}
           onClose={() => setOpen(null)}
           onAdd={(line: CartLine) => addLine(line)}
+        />
+      )}
+
+      {/* First-open identity gate — capture the diner once so orders + bill
+          stay attributed. Skipped for demo and view-only (no ordering). */}
+      {!session.demo && !session.orderingDisabled && !session.guest && (
+        <IdentityGate
+          restaurantName={restaurant.name}
+          tableLabel={table.is_parcel ? undefined : table.label}
+          onSubmit={(g) => setGuest(g)}
         />
       )}
 

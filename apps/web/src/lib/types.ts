@@ -68,6 +68,14 @@ export interface OrderView {
   items: { name: string; qty: number; unit_price: number; options?: unknown; is_veg?: boolean }[];
 }
 
+/** The diner's lightweight identity, captured once on first open (no OTP,
+ *  no account). Tags every order they place so the kitchen and the table bill
+ *  can attribute each order to a person. */
+export interface Guest {
+  name: string;
+  phone: string;
+}
+
 export interface Session {
   token: string;
   restaurant: Restaurant;
@@ -76,6 +84,54 @@ export interface Session {
   /** Soft lock (subscription paused / trial over): menu stays viewable,
    *  placing orders is disabled (also enforced server-side). */
   orderingDisabled?: boolean;
+  /** Who's ordering at this table (persists across re-scans in the session). */
+  guest?: Guest;
+}
+
+// ── Table bill (get_table_bill RPC) ────────────────────────────────────────
+// DEFAULT view = the whole table as one combined total. SPLIT view = the same
+// orders grouped per diner. combined.total always === sum(per_person.total)
+// because place_order rounds once per order (single source of truth).
+
+export interface BillTotals {
+  subtotal: number;
+  packing_charge: number;
+  gst_amount: number;
+  total: number;
+  order_count: number;
+}
+
+export interface BillOrderLine {
+  name: string;
+  qty: number;
+  unit_price: number;
+  options?: unknown;
+  is_veg?: boolean;
+}
+
+export interface BillOrder {
+  order_id: string;
+  placed_at?: string | null;
+  status: string;
+  diner_name?: string | null;
+  diner_phone?: string | null;
+  subtotal: number;
+  packing_charge: number;
+  gst_amount: number;
+  total: number;
+  items: BillOrderLine[];
+}
+
+export interface PersonBill extends BillTotals {
+  diner_name: string;
+  diner_phone?: string | null;
+}
+
+export interface TableBill {
+  table_id: string;
+  orders: BillOrder[];
+  combined: BillTotals;
+  per_person: PersonBill[];
 }
 
 /** Mirrors the server-side pricing in place_order (5% GST, 2-decimal rounding). */

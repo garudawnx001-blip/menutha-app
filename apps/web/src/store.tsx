@@ -2,7 +2,7 @@
  *  mid-meal keeps the table context — one restaurant per session, switching
  *  restaurants clears the cart (same rule as the mobile app's cartSlice). */
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
-import type { CartLine, Session } from './lib/types';
+import type { CartLine, Guest, Session } from './lib/types';
 
 const SESSION_KEY = 'menutha-web:session';
 const CART_KEY = 'menutha-web:cart';
@@ -11,6 +11,7 @@ interface Store {
   session: Session | null;
   cart: CartLine[];
   startSession: (s: Session) => void;
+  setGuest: (guest: Guest) => void;
   endSession: () => void;
   addLine: (line: CartLine) => void;
   setQty: (index: number, qty: number) => void;
@@ -48,9 +49,11 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       startSession: (s) => {
         setSession((prev) => {
           if (prev?.restaurant.id !== s.restaurant.id) setCart([]);
-          return s;
+          // Carry the diner identity across re-scans (same person, new table).
+          return prev?.guest && !s.guest ? { ...s, guest: prev.guest } : s;
         });
       },
+      setGuest: (guest) => setSession((prev) => (prev ? { ...prev, guest } : prev)),
       endSession: () => {
         setSession(null);
         setCart([]);

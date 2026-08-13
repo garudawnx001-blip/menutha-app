@@ -670,3 +670,21 @@ input.code-input::placeholder { color: var(--text-dim); }
 .chip-row.diet-row .diet-all.active { background: var(--saffron) !important; border-color: var(--saffron) !important; color: #fffdf8 !important; }
 .chip-row.diet-row .diet-veg.active { background: #e3f1e9 !important; border-color: #1b8a3e !important; color: #14663d !important; }
 .chip-row.diet-row .diet-nonveg.active { background: #f8e3e0 !important; border-color: #9b2c24 !important; color: #9b2c24 !important; }
+
+/* Segmented control — table-bill view switch (Whole table ⇄ Split by person). */
+.seg {
+  display: flex; gap: 4px; padding: 4px;
+  background: var(--sand); border: 1px solid var(--line-strong);
+  border-radius: 999px;
+}
+.seg-btn {
+  flex: 1; padding: 9px 14px; border: none; border-radius: 999px;
+  background: transparent; color: var(--text-muted, #6f6857);
+  font: inherit; font-size: 14px; font-weight: 700; cursor: pointer;
+  transition: background .18s ease, color .18s ease, box-shadow .18s ease;
+}
+.seg-btn:hover { color: var(--primary); }
+.seg-btn.active {
+  background: var(--primary); color: #fffdf8;
+  box-shadow: 0 4px 12px rgba(27,94,63,0.28);
+}
