@@ -1,0 +1,12 @@
+{
+  "name": "@menutha/entitlements",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "description": "Shared feature-gating logic for Menutha plans (subscription-only monetization).",
+  "scripts": {
+    "test": "node --test"
+  }
+}

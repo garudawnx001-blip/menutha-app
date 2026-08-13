@@ -1,7 +1,9 @@
 name: Deploy web to GitHub Pages
 
-# Builds the Menutha customer web-ordering app (Vite) and publishes it to
-# GitHub Pages at the custom domain https://menutha.com .
+# Builds the Menutha customer web-ordering app (Vite, in apps/web) and publishes
+# it to GitHub Pages at the custom domain https://menutha.com .
+# apps/web imports three workspace packages (packages/entitlements, menu-import,
+# payments) via relative paths, so the monorepo layout is preserved here.
 # SPA deep links (/scan/<token>, /track/<id>, /r/<slug>) work via the
 # public/404.html + index.html restore snippet (HTTP 200 on deep links).
 
@@ -23,6 +25,9 @@ jobs:
   build:
     name: Build (Vite)
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/web
     steps:
       - uses: actions/checkout@v4
 
@@ -31,7 +36,7 @@ jobs:
         with:
           node-version: 20
           cache: npm
-          cache-dependency-path: package-lock.json
+          cache-dependency-path: apps/web/package-lock.json
 
       - name: Install dependencies
         run: |
@@ -54,7 +59,7 @@ jobs:
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: dist
+          path: apps/web/dist
 
   deploy:
     name: Deploy to Pages
