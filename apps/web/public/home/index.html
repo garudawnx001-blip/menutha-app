@@ -19,7 +19,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
-<link rel="stylesheet" href="/site.css?v=4" />
+<link rel="stylesheet" href="/site.css?v=5" />
 <link rel="icon" href="/menutha-mark.svg" />
 <script type="application/ld+json">
 {"@context":"https://schema.org","@type":"Organization","name":"Menutha","legalName":"Menutha Technologies (Daiva)","url":"https://menutha.com","description":"QR-first restaurant ordering platform for India. Zero commission; restaurants pay a monthly subscription.","areaServed":"IN"}
@@ -63,6 +63,38 @@
     </div>
   </div>
 </header>
+
+<section class="block"><div class="wrap">
+  <p class="eyebrow reveal">See it in motion</p>
+  <h2 class="reveal">From the QR to the bill</h2>
+  <div class="carousel reveal" id="story" role="group" aria-roledescription="carousel" aria-label="How Menutha works">
+    <div class="carousel-viewport">
+      <div class="carousel-track" id="storyTrack">
+        <figure class="cslide">
+          <div class="cscreen s-scan"><div class="qr"></div><div class="cscap">Scan · Table 4</div></div>
+          <figcaption><span class="cstep">1</span><b>Scan the table QR</b><p>The diner points their phone camera at the QR on the table — the menu opens in the browser. No app, no sign-up.</p></figcaption>
+        </figure>
+        <figure class="cslide">
+          <div class="cscreen s-menu"><div class="mrow"><span>Chicken Biriyani</span><b>₹260</b></div><div class="mrow"><span>Paneer Butter Masala</span><b>₹240</b></div><div class="mrow"><span>Butter Naan</span><b>₹55</b></div><div class="cscap">Live menu</div></div>
+          <figcaption><span class="cstep">2</span><b>Browse the live menu</b><p>Real photos, veg / non-veg marks, spice levels and add-ons — always up to date, edited by the restaurant in real time.</p></figcaption>
+        </figure>
+        <figure class="cslide">
+          <div class="cscreen s-order"><div class="mrow"><span>Name &amp; phone</span><b>✓</b></div><div class="mrow"><span>2 × Biriyani</span><b>₹520</b></div><div class="cbtn">Place order →</div></div>
+          <figcaption><span class="cstep">3</span><b>Order from your seat</b><p>Add your name &amp; number once, then order — and order again through the meal. Every order is tagged to you and the table.</p></figcaption>
+        </figure>
+        <figure class="cslide">
+          <div class="cscreen s-kitchen"><div class="ktik"><b>#42 · Table 4</b><span class="kchip">NEW</span></div><div class="ktik dim"><b>#41 · Table 7</b><span class="kchip prep">PREP</span></div><div class="cscap gold">Kitchen board · live</div></div>
+          <figcaption><span class="cstep">4</span><b>The kitchen gets it instantly</b><p>Orders land on the kitchen board the second they're placed — with a chime — so the staff start cooking immediately.</p></figcaption>
+        </figure>
+        <figure class="cslide">
+          <div class="cscreen s-bill"><div class="mrow"><span>Table total</span><b>₹1,340</b></div><div class="mrow small"><span>You (Arjun)</span><b>₹520</b></div><div class="mrow small"><span>Priya</span><b>₹820</b></div><div class="cscap">Combined · or split by person</div></div>
+          <figcaption><span class="cstep">5</span><b>One bill — or split it</b><p>The whole table rolls into one running total by default. Tap to split by person — each pays exactly for what they ordered.</p></figcaption>
+        </figure>
+      </div>
+    </div>
+    <div class="carousel-dots" id="storyDots" role="tablist" aria-label="Choose a step"></div>
+  </div>
+</div></section>
 
 <section class="block"><div class="wrap">
   <p class="eyebrow reveal">How it works</p>
@@ -200,7 +232,7 @@
 </div></section>
 
 <footer><div class="wrap foot">
-  <div><span class="wordmark" style="font-size:18px"><b>menu</b>tha</span><p style="margin-top:6px">Menutha Technologies · Hospet &amp; Hubli, Karnataka</p></div>
+  <div><span class="wordmark" style="font-size:18px"><img class="brand-mark" src="/menutha-mark.svg" alt="" width="24" height="24" /><span><b>menu</b>tha</span></span><p style="margin-top:6px">Menutha Technologies · Hospet &amp; Hubli, Karnataka</p></div>
   <div class="foot-links">
     <a href="/">Home</a><a href="/pricing/">Pricing</a><a href="/about/">About</a><a href="/for-restaurants/">For restaurants</a><a href="/contact/">Contact</a><a href="/restaurants">Directory</a><a href="/partner">Owner login</a>
   </div>
@@ -209,6 +241,48 @@
 <script>
   const io = new IntersectionObserver((es) => es.forEach((e) => e.isIntersecting && e.target.classList.add('in')), { threshold: 0.12 });
   document.querySelectorAll('.reveal').forEach((el) => io.observe(el));
+
+  // Auto-advancing product-story carousel (pause on hover/focus/off-screen,
+  // dots, swipe, respects reduced-motion).
+  (function () {
+    const root = document.getElementById('story');
+    if (!root) return;
+    const slides = Array.from(root.querySelectorAll('.cslide'));
+    const dotsWrap = document.getElementById('storyDots');
+    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    let i = 0, timer = null, paused = false, visible = true;
+    const dots = slides.map((_, n) => {
+      const b = document.createElement('button');
+      b.setAttribute('role', 'tab');
+      b.setAttribute('aria-label', 'Step ' + (n + 1));
+      b.addEventListener('click', () => { go(n); restart(); });
+      dotsWrap.appendChild(b);
+      return b;
+    });
+    function go(n) {
+      i = (n + slides.length) % slides.length;
+      slides.forEach((s, k) => s.classList.toggle('is-active', k === i));
+      dots.forEach((d, k) => d.setAttribute('aria-selected', k === i ? 'true' : 'false'));
+    }
+    function tick() { if (!paused && visible) go(i + 1); }
+    function restart() { if (timer) clearInterval(timer); if (!reduce) timer = setInterval(tick, 4200); }
+    root.addEventListener('mouseenter', () => (paused = true));
+    root.addEventListener('mouseleave', () => (paused = false));
+    root.addEventListener('focusin', () => (paused = true));
+    root.addEventListener('focusout', () => (paused = false));
+    new IntersectionObserver((e) => (visible = e[0].isIntersecting), { threshold: 0.3 }).observe(root);
+    // swipe
+    let x0 = null;
+    root.addEventListener('touchstart', (e) => (x0 = e.touches[0].clientX), { passive: true });
+    root.addEventListener('touchend', (e) => {
+      if (x0 === null) return;
+      const dx = e.changedTouches[0].clientX - x0;
+      if (Math.abs(dx) > 40) { go(i + (dx < 0 ? 1 : -1)); restart(); }
+      x0 = null;
+    });
+    go(0);
+    restart();
+  })();
 </script>
 </body>
 </html>

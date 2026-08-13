@@ -293,3 +293,55 @@ header.hero { padding-top: 40px; }
 @media (prefers-reduced-motion: reduce) {
   .btn:hover, .btn:active { transform: none !important; filter: none !important; }
 }
+
+/* ── Auto-advancing product-story carousel ─────────────────────────────── */
+.carousel { margin-top: 28px; }
+.carousel-viewport { position: relative; overflow: hidden; border-radius: 22px; }
+.carousel-track { position: relative; min-height: 340px; }
+@media (max-width: 720px) { .carousel-track { min-height: 460px; } }
+.cslide {
+  position: absolute; inset: 0; margin: 0;
+  display: grid; grid-template-columns: 0.9fr 1.1fr; gap: 30px; align-items: center;
+  padding: 30px; border-radius: 22px;
+  background: var(--glass-bg, rgba(255,255,255,0.55));
+  -webkit-backdrop-filter: blur(20px) saturate(1.5); backdrop-filter: blur(20px) saturate(1.5);
+  border: 1px solid var(--glass-brd, rgba(255,255,255,0.7));
+  box-shadow: 0 14px 40px rgba(23,21,18,0.10), inset 0 1px 0 rgba(255,255,255,0.6);
+  opacity: 0; transform: translateX(24px) scale(0.985); pointer-events: none;
+  transition: opacity 0.6s ease, transform 0.6s cubic-bezier(0.2,0.7,0.2,1);
+}
+.cslide.is-active { opacity: 1; transform: none; pointer-events: auto; }
+@media (max-width: 720px) { .cslide { grid-template-columns: 1fr; gap: 18px; padding: 22px; text-align: left; } }
+.cslide figcaption { display: flex; flex-direction: column; gap: 8px; }
+.cstep { font-family: var(--serif); font-size: 15px; font-weight: 700; color: #fff; background: var(--saffron, #e8833a); width: 34px; height: 34px; border-radius: 10px; display: inline-flex; align-items: center; justify-content: center; }
+.cslide figcaption b { font-family: var(--serif); font-size: clamp(20px, 3vw, 27px); font-weight: 600; color: var(--ink); }
+.cslide figcaption p { font-size: 15px; color: var(--ink-soft); max-width: 34ch; }
+
+/* per-slide mock screens */
+.cscreen { border-radius: 18px; padding: 18px; min-height: 210px; display: flex; flex-direction: column; gap: 10px; justify-content: center; border: 1px solid var(--line); box-shadow: 0 10px 26px rgba(23,21,18,0.10); }
+.s-scan { background: linear-gradient(160deg, #1f6b47, #143d2a); align-items: center; justify-content: center; }
+.s-menu, .s-order, .s-bill { background: linear-gradient(170deg, #ffffff, #fbf7ef); }
+.s-kitchen { background: linear-gradient(170deg, #12281d, #0f3323); }
+.qr { width: 96px; height: 96px; border-radius: 12px; background:
+  repeating-conic-gradient(#0f3323 0 25%, #eaf3ee 0 50%) 0 0 / 22px 22px; box-shadow: 0 0 0 8px #fff, 0 0 0 9px #d9c289; }
+.cscap { font-size: 11px; letter-spacing: 0.1em; font-weight: 700; text-transform: uppercase; color: var(--forest); text-align: center; margin-top: 4px; }
+.s-scan .cscap { color: #d9c289; }
+.cscap.gold { color: #d9c289; }
+.mrow { display: flex; justify-content: space-between; align-items: center; font-size: 14px; color: var(--ink); border-top: 1px solid rgba(0,0,0,0.06); padding: 8px 0; }
+.mrow:first-child { border-top: none; }
+.mrow b { color: var(--forest); font-weight: 700; }
+.mrow.small { font-size: 12.5px; color: var(--ink-soft); }
+.mrow.small b { color: var(--ink); }
+.cbtn { margin-top: 6px; background: var(--forest); color: #fff; text-align: center; border-radius: 10px; padding: 9px; font-weight: 700; font-size: 13px; }
+.ktik { background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12); border-radius: 12px; padding: 10px 12px; display: flex; justify-content: space-between; align-items: center; color: #eef3ee; font-size: 13px; }
+.ktik.dim { opacity: 0.6; }
+.kchip { font-size: 9.5px; font-weight: 800; letter-spacing: 0.06em; padding: 2px 8px; border-radius: 999px; background: #d9c289; color: #143d2a; }
+.kchip.prep { background: rgba(217,194,137,0.2); color: #d9c289; border: 1px solid rgba(217,194,137,0.4); }
+
+.carousel-dots { display: flex; justify-content: center; gap: 8px; margin-top: 18px; }
+.carousel-dots button { width: 9px; height: 9px; border-radius: 999px; background: var(--line-strong, #e7decc); border: none; padding: 0; cursor: pointer; transition: width 0.3s ease, background 0.3s ease; }
+.carousel-dots button[aria-selected="true"] { width: 26px; background: var(--saffron, #e8833a); }
+
+@media (prefers-reduced-motion: reduce) {
+  .cslide { transition: opacity 0.2s ease; transform: none; }
+}
