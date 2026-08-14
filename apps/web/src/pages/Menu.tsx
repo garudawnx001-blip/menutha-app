@@ -26,6 +26,7 @@ export function Menu() {
     try { sessionStorage.setItem(FILTER_KEY, JSON.stringify({ query, diet, cat: activeCat })); } catch {}
   }, [query, diet, activeCat]);
   const [open, setOpen] = useState<MenuItem | null>(null);
+  const [toast, setToast] = useState('');
 
   // The menu is the session root: a diner reaches it when /scan/<token>
   // replaced its own history entry, so a browser Back would otherwise land on a
@@ -249,9 +250,17 @@ export function Menu() {
         <ItemSheet
           item={open}
           onClose={() => setOpen(null)}
-          onAdd={(line: CartLine) => addLine(line)}
+          onAdd={(line: CartLine) => {
+            addLine(line);
+            // Instant feedback: flash a toast + pulse the cart bar so the diner
+            // sees the add land immediately (state already updates synchronously).
+            setToast(`${line.qty} × ${line.name} added`);
+            window.setTimeout(() => setToast(''), 1800);
+          }}
         />
       )}
+
+      {toast && <div className="cart-toast" role="status">{toast}</div>}
 
       {/* First-open identity gate — capture the diner once so orders + bill
           stay attributed. Skipped for demo and view-only (no ordering). */}

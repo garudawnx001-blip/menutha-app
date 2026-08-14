@@ -2,7 +2,7 @@
  *  parcel packing charge, 5% GST) mirroring the server's place_order math. */
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { placeOrder } from '../lib/api';
+import { placeOrder, fetchTableBill } from '../lib/api';
 import { calcBill, inr } from '../lib/types';
 import { useStore } from '../store';
 import { Stepper, VegMark, Wordmark } from '../components';
@@ -13,6 +13,32 @@ export function Cart() {
   const [notes, setNotes] = useState('');
   const [placing, setPlacing] = useState(false);
   const [error, setError] = useState('');
+  // What everyone else at this table has already ordered (shared session).
+  const [tableSoFar, setTableSoFar] = useState<{ who: string; total: number; items: string }[]>([]);
+
+  useEffect(() => {
+    if (!session || session.table.is_parcel) return;
+    let alive = true;
+    const load = () =>
+      fetchTableBill(session)
+        .then((b) => {
+          if (!alive) return;
+          const mine = (session.guest?.phone ?? '').trim();
+          setTableSoFar(
+            (b.orders ?? [])
+              .filter((o) => !mine || (o.diner_phone ?? '') !== mine)
+              .map((o) => ({
+                who: o.diner_name || 'Guest',
+                total: Number(o.total || 0),
+                items: (o.items ?? []).map((i) => `${i.qty}× ${i.name}`).join(', '),
+              })),
+          );
+        })
+        .catch(() => {});
+    load();
+    const t = setInterval(load, 8000); // keep in step as others order
+    return () => { alive = false; clearInterval(t); };
+  }, [session?.table.id, session?.guest?.phone]);
 
   useEffect(() => {
     if (!session) nav('/', { replace: true });
@@ -86,6 +112,23 @@ export function Cart() {
               </div>
             ))}
           </div>
+
+          {tableSoFar.length > 0 && (
+            <div className="glass table-so-far" style={{ padding: 16 }}>
+              <p className="overline" style={{ marginBottom: 8 }}>
+                Your table so far · {session.table.label}
+              </p>
+              {tableSoFar.map((o, i) => (
+                <div key={i} className="tsf-row">
+                  <span><span className="tsf-who">{o.who}</span>{o.items ? ` — ${o.items}` : ''}</span>
+                  <span style={{ whiteSpace: 'nowrap' }}>{inr(o.total)}</span>
+                </div>
+              ))}
+              <p className="dim" style={{ fontSize: 12, marginTop: 8 }}>
+                Everyone at this table shares one running bill — you can split it by person at the end.
+              </p>
+            </div>
+          )}
 
           <div style={{ marginTop: 16 }}>
             <p className="overline" style={{ marginBottom: 8 }}>Cooking instructions</p>
