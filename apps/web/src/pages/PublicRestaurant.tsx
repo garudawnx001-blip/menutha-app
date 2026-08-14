@@ -3,7 +3,7 @@
  *  a real table QR and is enforced server-side in place_order. Injects
  *  schema.org Restaurant JSON-LD + per-page meta for SEO. */
 import React, { useEffect, useMemo, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { inr } from '../lib/types';
 import { Spinner, VegMark, Wordmark } from '../components';
@@ -18,6 +18,7 @@ interface PublicRest {
 
 export function PublicRestaurant() {
   const { slug = '' } = useParams();
+  const nav = useNavigate();
   const [r, setR] = useState<PublicRest | null>(null);
   const [failed, setFailed] = useState(false);
   const [diet, setDiet] = useState<'all' | 'veg' | 'nonveg'>('all');
@@ -93,7 +94,7 @@ export function PublicRestaurant() {
   return (
     <div className="page fade-in">
       <div className="topbar">
-        <Wordmark size={22} />
+        <button className="chip" onClick={() => nav('/restaurants')}>← Back</button>
         <span className="badge gold">Menu is view-only — order by scanning the table QR</span>
       </div>
 

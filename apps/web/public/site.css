@@ -3,7 +3,7 @@
    Asymmetric layouts, generous whitespace, scroll reveals. */
 :root {
   --paper: #faf8f4; --card: #ffffff; --ink: #171512; --ink-soft: #5f594d;
-  --line: #e9e2d4; --forest: #1b5e3f; --forest-deep: #143d2a; --gold: #b8923e;
+  --line: #e9e2d4; --forest: #d97757; --forest-deep: #c15f3c; --gold: #b8923e;
   --serif: 'Fraunces', Georgia, serif; --sans: 'Inter', system-ui, sans-serif;
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -500,3 +500,13 @@ body::before {
 @media (max-width: 760px) {
   .cslide .cscreen { width: min(190px, 62vw) !important; max-width: 190px !important; }
 }
+
+/* Consistent Back control on inner pages. */
+.nav-back {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 13px; font-weight: 600; color: var(--ink-soft, #6b6357);
+  border: 1px solid var(--line-strong, #e7decc); border-radius: 999px;
+  padding: 6px 13px; margin-right: 12px; background: var(--surface, #fffdf8);
+  white-space: nowrap; transition: color .16s ease, border-color .16s ease;
+}
+.nav-back:hover { color: var(--saffron); border-color: var(--saffron); }
