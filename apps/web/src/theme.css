@@ -688,3 +688,20 @@ input.code-input::placeholder { color: var(--text-dim); }
   background: var(--primary); color: #fffdf8;
   box-shadow: 0 4px 12px rgba(27,94,63,0.28);
 }
+
+/* Partner Orders — today's-sales KPI header (Swiggy/Zomato-partner style). */
+.kpi-strip {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;
+  margin: 4px 0 16px;
+}
+.kpi {
+  padding: 12px 14px; border-radius: 14px;
+  display: flex; flex-direction: column; gap: 2px;
+}
+.kpi-label { font-size: 11.5px; font-weight: 700; letter-spacing: 0.4px; text-transform: uppercase; color: var(--text-muted, #6f6857); }
+.kpi-value { font-family: 'Fraunces', Georgia, serif; font-size: 24px; font-weight: 600; line-height: 1.1; color: var(--ink); font-variant-numeric: tabular-nums; }
+.kpi-sub { font-size: 12px; color: var(--text-muted, #6f6857); }
+@media (max-width: 420px) {
+  .kpi-value { font-size: 20px; }
+  .kpi { padding: 10px 11px; }
+}

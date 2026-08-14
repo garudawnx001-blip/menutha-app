@@ -114,6 +114,12 @@ export function OrdersBoard() {
     placed: 'Accept', accepted: 'Start preparing', preparing: 'Mark ready', ready: 'Mark served',
   };
 
+  // Today's-sales header (Swiggy/Zomato-partner style) — realized sales are the
+  // orders served today; live + unpaid give the floor its at-a-glance state.
+  const salesToday = servedToday.reduce((a, o) => a + Number(o.total || 0), 0);
+  const unpaidLive = orders.filter((o) => !o.paid).length;
+  const newCount = orders.filter((o) => o.status === 'placed').length;
+
   return (
     <div className="fade-in">
       <div className="topbar" style={{ alignItems: 'flex-end' }}>
@@ -136,6 +142,24 @@ export function OrdersBoard() {
         </button>
       </div>
       {error && <p style={{ color: 'var(--error)', fontSize: 14, marginBottom: 10 }}>{error}</p>}
+
+      <div className="kpi-strip">
+        <div className="kpi glass">
+          <span className="kpi-label">Today's sales</span>
+          <span className="kpi-value">{inr(salesToday)}</span>
+          <span className="kpi-sub">{servedToday.length} served</span>
+        </div>
+        <div className="kpi glass">
+          <span className="kpi-label">Live now</span>
+          <span className="kpi-value" style={{ color: orders.length ? 'var(--primary)' : undefined }}>{orders.length}</span>
+          <span className="kpi-sub">{newCount ? `${newCount} new` : 'all caught up'}</span>
+        </div>
+        <div className="kpi glass">
+          <span className="kpi-label">Unpaid</span>
+          <span className="kpi-value" style={{ color: unpaidLive ? 'var(--gold-ink, #8a6a25)' : undefined }}>{unpaidLive}</span>
+          <span className="kpi-sub">on the floor</span>
+        </div>
+      </div>
 
       {orders.length === 0 && (
         <div className="glass" style={{ padding: 22, textAlign: 'center' }}>
