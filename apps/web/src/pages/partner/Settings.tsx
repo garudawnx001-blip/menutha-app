@@ -21,6 +21,8 @@ export function Settings() {
     gateway_key_id: restaurant.gateway_key_id ?? '',
     brand_color: (restaurant as any).brand_color ?? '#1B5E3F',
     is_open: restaurant.is_open !== false,
+    gst_pct: String((restaurant as any).gst_pct ?? 5),
+    service_charge_pct: String((restaurant as any).service_charge_pct ?? 0),
   });
   const [pnlVisible, setPnl] = useState(!!restaurant.pnl_visible_to_managers);
   const [busy, setBusy] = useState(false);
@@ -41,6 +43,8 @@ export function Settings() {
         own_website: form.own_website.trim() || null,
         gateway_key_id: form.gateway_key_id.trim() || null,
         is_open: form.is_open,
+        gst_pct: Math.min(28, Math.max(0, Number(form.gst_pct) || 0)),
+        service_charge_pct: Math.min(25, Math.max(0, Number(form.service_charge_pct) || 0)),
         ...(can('white_label') || can('basic_theme') ? { brand_color: form.brand_color } : {}),
       });
       if (role === 'owner') await setPnlVisibility(restaurant.id, pnlVisible);
@@ -116,6 +120,25 @@ export function Settings() {
       </div>
 
       <div className="glass" style={{ padding: 16, marginBottom: 14 }}>
+        <h3 style={{ fontWeight: 700, marginBottom: 10 }}>Bill charges</h3>
+        <div style={{ display: 'flex', gap: 10 }}>
+          <div style={{ flex: 1 }}>
+            <F label="GST %">
+              <input className="code-input" inputMode="decimal" value={form.gst_pct}
+                onChange={(e) => setForm({ ...form, gst_pct: e.target.value })} />
+            </F>
+          </div>
+          <div style={{ flex: 1 }}>
+            <F label="Service charge % (0 = none)">
+              <input className="code-input" inputMode="decimal" value={form.service_charge_pct}
+                onChange={(e) => setForm({ ...form, service_charge_pct: e.target.value })} />
+            </F>
+          </div>
+        </div>
+        <p className="dim" style={{ fontSize: 12, marginBottom: 12 }}>
+          Applied to every new order and shown as line items on diner bills and receipts.
+        </p>
+
         <h3 style={{ fontWeight: 700, marginBottom: 10 }}>Payments — direct to you</h3>
         <F label="UPI ID (VPA) — diners' payment QR points here">
           <input className="code-input" placeholder="yourshop@okhdfcbank" value={form.upi_vpa}

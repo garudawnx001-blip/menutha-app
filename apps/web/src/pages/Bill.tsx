@@ -12,14 +12,17 @@ import { inr } from '../lib/types';
 import { useStore } from '../store';
 import { Spinner, Wordmark } from '../components';
 
-function TotalsBlock({ b }: { b: { subtotal: number; packing_charge: number; gst_amount: number; total: number } }) {
+function TotalsBlock({ b }: { b: { subtotal: number; packing_charge: number; service_charge?: number; gst_amount: number; total: number } }) {
   return (
     <>
       <div className="bill-row"><span>Subtotal</span><span>{inr(b.subtotal)}</span></div>
       {Number(b.packing_charge) > 0 && (
         <div className="bill-row"><span>Packing charge</span><span>{inr(b.packing_charge)}</span></div>
       )}
-      <div className="bill-row"><span>GST (5%)</span><span>{inr(b.gst_amount)}</span></div>
+      {Number(b.service_charge ?? 0) > 0 && (
+        <div className="bill-row"><span>Service charge</span><span>{inr(b.service_charge!)}</span></div>
+      )}
+      <div className="bill-row"><span>GST</span><span>{inr(b.gst_amount)}</span></div>
       <div className="bill-row total"><span>Total</span><span>{inr(b.total)}</span></div>
     </>
   );

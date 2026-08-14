@@ -28,7 +28,7 @@ export async function resolveToken(token: string): Promise<Session> {
   const { data, error } = await supabase
     .from('dining_table')
     .select(
-      'id, restaurant_id, label, is_parcel, restaurant(id, name, city, banner_url, logo_url, is_open, status, trial_ends_at, parcel_charge)',
+      'id, restaurant_id, label, is_parcel, restaurant(id, name, city, banner_url, logo_url, is_open, status, trial_ends_at, parcel_charge, gst_pct, service_charge_pct)',
     )
     .eq('qr_token', token)
     .eq('is_active', true)

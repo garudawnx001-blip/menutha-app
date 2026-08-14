@@ -219,7 +219,10 @@ export function Track() {
         {Number(o.packing_charge) > 0 && (
           <div className="bill-row"><span>Packing charge</span><span>{inr(o.packing_charge)}</span></div>
         )}
-        <div className="bill-row"><span>GST (5%)</span><span>{inr(o.gst_amount)}</span></div>
+        {Number(o.service_charge ?? 0) > 0 && (
+          <div className="bill-row"><span>Service charge</span><span>{inr(o.service_charge!)}</span></div>
+        )}
+        <div className="bill-row"><span>GST{o.gst_pct != null ? ` (${o.gst_pct}%)` : ''}</span><span>{inr(o.gst_amount)}</span></div>
         <div className="bill-row total"><span>Total</span><span>{inr(o.total)}</span></div>
       </div>
 

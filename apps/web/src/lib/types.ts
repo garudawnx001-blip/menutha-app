@@ -8,6 +8,9 @@ export interface Restaurant {
   status?: string;
   trial_ends_at?: string | null;
   parcel_charge?: number | null;
+  /** Owner-configurable pricing (server is the source of truth). */
+  gst_pct?: number | null;
+  service_charge_pct?: number | null;
 }
 
 export interface DiningTable {
@@ -59,7 +62,9 @@ export interface OrderView {
   table_label?: string | null;
   subtotal: number;
   packing_charge: number;
+  service_charge?: number;
   gst_amount: number;
+  gst_pct?: number | null;
   total: number;
   placed_at?: string | null;
   ready_at?: string | null;
@@ -96,6 +101,7 @@ export interface Session {
 export interface BillTotals {
   subtotal: number;
   packing_charge: number;
+  service_charge?: number;
   gst_amount: number;
   total: number;
   order_count: number;
@@ -134,14 +140,16 @@ export interface TableBill {
   per_person: PersonBill[];
 }
 
-/** Mirrors the server-side pricing in place_order (5% GST, 2-decimal rounding). */
+/** Mirrors the server-side pricing in place_order: owner-configurable GST %
+ *  and service-charge % (defaults 5 / 0), 2-decimal rounding once per order. */
 export const GST_PCT = 5;
 
-export function calcBill(lines: CartLine[], packing: number) {
+export function calcBill(lines: CartLine[], packing: number, gstPct = GST_PCT, svcPct = 0) {
   const subtotal = lines.reduce((a, l) => a + (l.price + l.optionDelta) * l.qty, 0);
-  const gst = Math.round((subtotal + packing) * GST_PCT) / 100;
-  const total = Math.round((subtotal + packing + gst) * 100) / 100;
-  return { subtotal, packing, gst, total };
+  const service = Math.round(subtotal * svcPct) / 100;
+  const gst = Math.round((subtotal + packing + service) * gstPct) / 100;
+  const total = Math.round((subtotal + packing + service + gst) * 100) / 100;
+  return { subtotal, packing, service, gst, total };
 }
 
 export const inr = (n: number) =>
