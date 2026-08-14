@@ -510,3 +510,8 @@ body::before {
   white-space: nowrap; transition: color .16s ease, border-color .16s ease;
 }
 .nav-back:hover { color: var(--saffron); border-color: var(--saffron); }
+
+/* Alignment fix: inline `padding: X 0 Y` on .wrap headers and .nav-inner's
+   `padding: 14px 0` were zeroing HORIZONTAL padding, flushing headings/nav to
+   the screen edge. Force the container's side padding back on every .wrap. */
+.wrap { padding-left: 22px !important; padding-right: 22px !important; }
