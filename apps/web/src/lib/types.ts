@@ -10,6 +10,9 @@ export interface Restaurant {
   parcel_charge?: number | null;
   /** Owner-configurable pricing (server is the source of truth). */
   gst_pct?: number | null;
+  /** Indian GST split — SGST + CGST (gst_pct is kept as their sum). */
+  sgst_pct?: number | null;
+  cgst_pct?: number | null;
   service_charge_pct?: number | null;
 }
 
@@ -63,8 +66,12 @@ export interface OrderView {
   subtotal: number;
   packing_charge: number;
   service_charge?: number;
+  sgst_amount?: number;
+  cgst_amount?: number;
   gst_amount: number;
   gst_pct?: number | null;
+  sgst_pct?: number | null;
+  cgst_pct?: number | null;
   total: number;
   placed_at?: string | null;
   ready_at?: string | null;
@@ -102,6 +109,8 @@ export interface BillTotals {
   subtotal: number;
   packing_charge: number;
   service_charge?: number;
+  sgst_amount?: number;
+  cgst_amount?: number;
   gst_amount: number;
   total: number;
   order_count: number;
@@ -123,6 +132,9 @@ export interface BillOrder {
   diner_phone?: string | null;
   subtotal: number;
   packing_charge: number;
+  service_charge?: number;
+  sgst_amount?: number;
+  cgst_amount?: number;
   gst_amount: number;
   total: number;
   items: BillOrderLine[];
@@ -135,6 +147,9 @@ export interface PersonBill extends BillTotals {
 
 export interface TableBill {
   table_id: string;
+  /** Tax rates in force for this restaurant (Indian SGST + CGST split). */
+  sgst_pct?: number | null;
+  cgst_pct?: number | null;
   orders: BillOrder[];
   combined: BillTotals;
   per_person: PersonBill[];
@@ -144,12 +159,19 @@ export interface TableBill {
  *  and service-charge % (defaults 5 / 0), 2-decimal rounding once per order. */
 export const GST_PCT = 5;
 
-export function calcBill(lines: CartLine[], packing: number, gstPct = GST_PCT, svcPct = 0) {
+export function calcBill(
+  lines: CartLine[], packing: number,
+  sgstPct = GST_PCT / 2, cgstPct = GST_PCT / 2, svcPct = 0,
+) {
   const subtotal = lines.reduce((a, l) => a + (l.price + l.optionDelta) * l.qty, 0);
   const service = Math.round(subtotal * svcPct) / 100;
-  const gst = Math.round((subtotal + packing + service) * gstPct) / 100;
-  const total = Math.round((subtotal + packing + service + gst) * 100) / 100;
-  return { subtotal, packing, service, gst, total };
+  const taxable = subtotal + packing + service;
+  // Rounded per component, exactly as place_order does server-side.
+  const sgst = Math.round(taxable * sgstPct) / 100;
+  const cgst = Math.round(taxable * cgstPct) / 100;
+  const gst = sgst + cgst;
+  const total = Math.round((taxable + gst) * 100) / 100;
+  return { subtotal, packing, service, sgst, cgst, gst, total };
 }
 
 export const inr = (n: number) =>

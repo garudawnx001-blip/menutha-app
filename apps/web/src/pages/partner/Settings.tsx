@@ -21,7 +21,8 @@ export function Settings() {
     gateway_key_id: restaurant.gateway_key_id ?? '',
     brand_color: (restaurant as any).brand_color ?? '#1B5E3F',
     is_open: restaurant.is_open !== false,
-    gst_pct: String((restaurant as any).gst_pct ?? 5),
+    sgst_pct: String((restaurant as any).sgst_pct ?? 2.5),
+    cgst_pct: String((restaurant as any).cgst_pct ?? 2.5),
     service_charge_pct: String((restaurant as any).service_charge_pct ?? 0),
   });
   const [pnlVisible, setPnl] = useState(!!restaurant.pnl_visible_to_managers);
@@ -43,7 +44,9 @@ export function Settings() {
         own_website: form.own_website.trim() || null,
         gateway_key_id: form.gateway_key_id.trim() || null,
         is_open: form.is_open,
-        gst_pct: Math.min(28, Math.max(0, Number(form.gst_pct) || 0)),
+        // gst_pct is kept in sync as sgst+cgst by a DB trigger.
+        sgst_pct: Math.min(14, Math.max(0, Number(form.sgst_pct) || 0)),
+        cgst_pct: Math.min(14, Math.max(0, Number(form.cgst_pct) || 0)),
         service_charge_pct: Math.min(25, Math.max(0, Number(form.service_charge_pct) || 0)),
         ...(can('white_label') || can('basic_theme') ? { brand_color: form.brand_color } : {}),
       });
@@ -123,20 +126,28 @@ export function Settings() {
         <h3 style={{ fontWeight: 700, marginBottom: 10 }}>Bill charges</h3>
         <div style={{ display: 'flex', gap: 10 }}>
           <div style={{ flex: 1 }}>
-            <F label="GST %">
-              <input className="code-input" inputMode="decimal" value={form.gst_pct}
-                onChange={(e) => setForm({ ...form, gst_pct: e.target.value })} />
+            <F label="SGST %">
+              <input className="code-input" inputMode="decimal" value={form.sgst_pct}
+                onChange={(e) => setForm({ ...form, sgst_pct: e.target.value })} />
             </F>
           </div>
           <div style={{ flex: 1 }}>
-            <F label="Service charge % (0 = none)">
+            <F label="CGST %">
+              <input className="code-input" inputMode="decimal" value={form.cgst_pct}
+                onChange={(e) => setForm({ ...form, cgst_pct: e.target.value })} />
+            </F>
+          </div>
+          <div style={{ flex: 1 }}>
+            <F label="Service charge %">
               <input className="code-input" inputMode="decimal" value={form.service_charge_pct}
                 onChange={(e) => setForm({ ...form, service_charge_pct: e.target.value })} />
             </F>
           </div>
         </div>
         <p className="dim" style={{ fontSize: 12, marginBottom: 12 }}>
-          Applied to every new order and shown as line items on diner bills and receipts.
+          Indian GST convention: SGST + CGST are charged as equal halves (2.5% + 2.5% = 5% for
+          restaurants). Both appear as separate lines on every diner bill, receipt and printed bill —
+          total GST is {(Number(form.sgst_pct) || 0) + (Number(form.cgst_pct) || 0)}%.
         </p>
 
         <h3 style={{ fontWeight: 700, marginBottom: 10 }}>Payments — direct to you</h3>

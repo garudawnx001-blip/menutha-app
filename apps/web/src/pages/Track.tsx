@@ -222,7 +222,18 @@ export function Track() {
         {Number(o.service_charge ?? 0) > 0 && (
           <div className="bill-row"><span>Service charge</span><span>{inr(o.service_charge!)}</span></div>
         )}
-        <div className="bill-row"><span>GST{o.gst_pct != null ? ` (${o.gst_pct}%)` : ''}</span><span>{inr(o.gst_amount)}</span></div>
+        {o.sgst_amount != null || o.cgst_amount != null ? (
+          <>
+            <div className="bill-row">
+              <span>SGST{o.sgst_pct != null ? ` (${o.sgst_pct}%)` : ''}</span><span>{inr(o.sgst_amount ?? 0)}</span>
+            </div>
+            <div className="bill-row">
+              <span>CGST{o.cgst_pct != null ? ` (${o.cgst_pct}%)` : ''}</span><span>{inr(o.cgst_amount ?? 0)}</span>
+            </div>
+          </>
+        ) : (
+          <div className="bill-row"><span>GST{o.gst_pct != null ? ` (${o.gst_pct}%)` : ''}</span><span>{inr(o.gst_amount)}</span></div>
+        )}
         <div className="bill-row total"><span>Total</span><span>{inr(o.total)}</span></div>
       </div>
 

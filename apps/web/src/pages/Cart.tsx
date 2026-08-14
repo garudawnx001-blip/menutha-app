@@ -20,9 +20,10 @@ export function Cart() {
   if (!session) return null;
 
   const packing = session.table.is_parcel ? Number(session.restaurant.parcel_charge ?? 0) : 0;
-  const gstPct = Number(session.restaurant.gst_pct ?? 5);
+  const sgstPct = Number(session.restaurant.sgst_pct ?? 2.5);
+  const cgstPct = Number(session.restaurant.cgst_pct ?? 2.5);
   const svcPct = Number(session.restaurant.service_charge_pct ?? 0);
-  const bill = calcBill(cart, packing, gstPct, svcPct);
+  const bill = calcBill(cart, packing, sgstPct, cgstPct, svcPct);
 
   const submit = async () => {
     if (placing || !cart.length) return;
@@ -104,7 +105,8 @@ export function Cart() {
             {bill.service > 0 && (
               <div className="bill-row"><span>Service charge ({svcPct}%)</span><span>{inr(bill.service)}</span></div>
             )}
-            <div className="bill-row"><span>GST ({gstPct}%)</span><span>{inr(bill.gst)}</span></div>
+            <div className="bill-row"><span>SGST ({sgstPct}%)</span><span>{inr(bill.sgst)}</span></div>
+            <div className="bill-row"><span>CGST ({cgstPct}%)</span><span>{inr(bill.cgst)}</span></div>
             <div className="bill-row total"><span>Total</span><span>{inr(bill.total)}</span></div>
             <p className="dim" style={{ fontSize: 12, marginTop: 8 }}>
               Pay at the restaurant — cash or UPI at the counter.

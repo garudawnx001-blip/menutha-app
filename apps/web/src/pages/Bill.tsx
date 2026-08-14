@@ -12,7 +12,11 @@ import { inr } from '../lib/types';
 import { useStore } from '../store';
 import { Spinner, Wordmark } from '../components';
 
-function TotalsBlock({ b }: { b: { subtotal: number; packing_charge: number; service_charge?: number; gst_amount: number; total: number } }) {
+function TotalsBlock({ b, sgstPct, cgstPct }: {
+  b: { subtotal: number; packing_charge: number; service_charge?: number; sgst_amount?: number; cgst_amount?: number; gst_amount: number; total: number };
+  sgstPct?: number | null; cgstPct?: number | null;
+}) {
+  const hasSplit = b.sgst_amount != null || b.cgst_amount != null;
   return (
     <>
       <div className="bill-row"><span>Subtotal</span><span>{inr(b.subtotal)}</span></div>
@@ -22,7 +26,14 @@ function TotalsBlock({ b }: { b: { subtotal: number; packing_charge: number; ser
       {Number(b.service_charge ?? 0) > 0 && (
         <div className="bill-row"><span>Service charge</span><span>{inr(b.service_charge!)}</span></div>
       )}
-      <div className="bill-row"><span>GST</span><span>{inr(b.gst_amount)}</span></div>
+      {hasSplit ? (
+        <>
+          <div className="bill-row"><span>SGST{sgstPct != null ? ` (${sgstPct}%)` : ''}</span><span>{inr(b.sgst_amount ?? 0)}</span></div>
+          <div className="bill-row"><span>CGST{cgstPct != null ? ` (${cgstPct}%)` : ''}</span><span>{inr(b.cgst_amount ?? 0)}</span></div>
+        </>
+      ) : (
+        <div className="bill-row"><span>GST</span><span>{inr(b.gst_amount)}</span></div>
+      )}
       <div className="bill-row total"><span>Total</span><span>{inr(b.total)}</span></div>
     </>
   );
@@ -136,7 +147,7 @@ export function Bill() {
               ))}
               <div className="glass" style={{ padding: 16, marginTop: 16, borderColor: 'var(--primary)' }}>
                 <p className="overline" style={{ marginBottom: 10 }}>Table total</p>
-                <TotalsBlock b={b.combined} />
+                <TotalsBlock b={b.combined} sgstPct={b.sgst_pct} cgstPct={b.cgst_pct} />
               </div>
             </>
           ) : (
@@ -152,7 +163,7 @@ export function Bill() {
                       {p.order_count} order{p.order_count === 1 ? '' : 's'}
                     </span>
                   </div>
-                  <div style={{ marginTop: 6 }}><TotalsBlock b={p} /></div>
+                  <div style={{ marginTop: 6 }}><TotalsBlock b={p} sgstPct={b.sgst_pct} cgstPct={b.cgst_pct} /></div>
                 </div>
               ))}
               <div className="glass" style={{ padding: 16, marginTop: 16, borderColor: 'var(--primary)' }}>
