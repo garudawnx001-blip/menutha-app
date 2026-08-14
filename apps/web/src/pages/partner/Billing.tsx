@@ -233,6 +233,17 @@ export function Billing() {
               <tr style={{ fontWeight: 700 }}><td style={{ paddingTop: 6 }}>TOTAL</td><td style={{ textAlign: 'right', paddingTop: 6 }}>{inr(bill.total)}</td></tr>
             </tbody>
           </table>
+          {/* Scan-to-pay QR embedded IN the printed/shared bill itself */}
+          {billQr && (
+            <div style={{ marginTop: 14, display: 'flex', gap: 12, alignItems: 'center' }}>
+              <img src={billQr} width={120} height={120} alt="" style={{ border: '1px solid #ddd', borderRadius: 8 }} />
+              <div style={{ fontSize: 12, lineHeight: 1.5 }}>
+                <strong>Scan to pay {inr(bill.total)}</strong><br />
+                Any UPI app · pays {restaurant.name} directly<br />
+                <span style={{ color: '#666' }}>{(restaurant as any).upi_vpa}</span>
+              </div>
+            </div>
+          )}
           <p style={{ marginTop: 14, fontSize: 11, color: '#666' }}>SAC 996331 · Thank you — powered by Menutha</p>
         </div>
       )}
