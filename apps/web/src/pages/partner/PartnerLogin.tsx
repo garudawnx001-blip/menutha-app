@@ -7,6 +7,7 @@ import { Wordmark } from '../../components';
 
 export function PartnerLogin() {
   const nav = useNavigate();
+  const [mode, setMode] = useState<'login' | 'signup'>('login');
   const [tab, setTab] = useState<'otp' | 'email'>('otp');
   const [phone, setPhone] = useState('');
   const [otp, setOtp] = useState('');
@@ -38,7 +39,9 @@ export function PartnerLogin() {
     const { error: err } = await supabase.auth.verifyOtp({ phone: e164(), token: otp.trim(), type: 'sms' });
     setBusy(false);
     if (err) { setError('That code didn’t match — try again.'); return; }
-    nav('/partner/orders', { replace: true });
+    // Brand-new owners go straight to registering their restaurant; returning
+    // accounts land on the live board.
+    nav(mode === 'signup' ? '/partner/register' : '/partner/orders', { replace: true });
   };
 
   const signInEmail = async () => {
@@ -57,17 +60,35 @@ export function PartnerLogin() {
       </div>
       <div className="center-fill" style={{ gap: 14 }}>
         <p className="overline">For restaurants</p>
-        <h1 className="display" style={{ fontSize: 'clamp(26px, 5vw, 36px)' }}>Run your restaurant from anywhere</h1>
+        <h1 className="display" style={{ fontSize: 'clamp(26px, 5vw, 36px)' }}>
+          {mode === 'signup' ? 'Get your restaurant online' : 'Run your restaurant from anywhere'}
+        </h1>
         <p className="muted" style={{ maxWidth: 440, fontSize: 14.5 }}>
-          Live orders, menu, billing, QR codes and your plan — from any phone or
-          computer. Zero commission: diners always pay you directly.
+          {mode === 'signup'
+            ? 'Create your account with your phone number, then register your restaurant — QR ordering, live kitchen board and billing. 10-day free trial, no card, zero commission.'
+            : 'Live orders, menu, billing, QR codes and your plan — from any phone or computer. Zero commission: diners always pay you directly.'}
         </p>
 
         <div className="glass" style={{ width: '100%', maxWidth: 420, padding: 20, textAlign: 'left' }}>
-          <div className="chip-row" style={{ paddingBottom: 6 }}>
-            <button className={tab === 'otp' ? 'chip active' : 'chip'} onClick={() => { setTab('otp'); setError(''); }}>📱 Phone OTP</button>
-            <button className={tab === 'email' ? 'chip active' : 'chip'} onClick={() => { setTab('email'); setError(''); }}>✉️ Email</button>
+          {/* Prominent Log in / Sign up switch */}
+          <div className="seg" role="tablist" aria-label="Log in or sign up" style={{ marginBottom: 14 }}>
+            <button role="tab" aria-selected={mode === 'login'}
+              className={mode === 'login' ? 'seg-btn active' : 'seg-btn'}
+              onClick={() => { setMode('login'); setError(''); setOtpSent(false); }}>Log in</button>
+            <button role="tab" aria-selected={mode === 'signup'}
+              className={mode === 'signup' ? 'seg-btn active' : 'seg-btn'}
+              onClick={() => { setMode('signup'); setTab('otp'); setError(''); setOtpSent(false); }}>Sign up</button>
           </div>
+
+          {mode === 'login' && (
+            <div className="chip-row" style={{ paddingBottom: 6 }}>
+              <button className={tab === 'otp' ? 'chip active' : 'chip'} onClick={() => { setTab('otp'); setError(''); }}>📱 Phone OTP</button>
+              <button className={tab === 'email' ? 'chip active' : 'chip'} onClick={() => { setTab('email'); setError(''); }}>✉️ Email</button>
+            </div>
+          )}
+          {mode === 'signup' && (
+            <p className="overline" style={{ marginBottom: 2, color: 'var(--primary)' }}>Create your account</p>
+          )}
 
           {tab === 'otp' ? (
             !otpSent ? (
@@ -77,7 +98,7 @@ export function PartnerLogin() {
                   onChange={(e) => setPhone(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && sendOtp()} />
                 {error && <p style={{ color: 'var(--error)', fontSize: 13.5, marginTop: 10 }}>{error}</p>}
                 <button className="btn btn-primary btn-block" style={{ marginTop: 14 }} disabled={busy} onClick={sendOtp}>
-                  {busy ? 'Sending…' : 'Send OTP'}
+                  {busy ? 'Sending…' : mode === 'signup' ? 'Send OTP to sign up' : 'Send OTP'}
                 </button>
               </>
             ) : (
@@ -87,7 +108,7 @@ export function PartnerLogin() {
                   onChange={(e) => setOtp(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && verifyOtp()} />
                 {error && <p style={{ color: 'var(--error)', fontSize: 13.5, marginTop: 10 }}>{error}</p>}
                 <button className="btn btn-primary btn-block" style={{ marginTop: 14 }} disabled={busy || otp.trim().length < 4} onClick={verifyOtp}>
-                  {busy ? 'Verifying…' : 'Verify & sign in'}
+                  {busy ? 'Verifying…' : mode === 'signup' ? 'Verify & create account' : 'Verify & sign in'}
                 </button>
                 <button className="chip" style={{ marginTop: 10 }} onClick={() => { setOtpSent(false); setOtp(''); }}>← Change number</button>
               </>
@@ -109,8 +130,9 @@ export function PartnerLogin() {
         </div>
 
         <p className="dim" style={{ fontSize: 12.5, maxWidth: 400 }}>
-          New restaurant? Sign in with your phone — you'll register your
-          restaurant right after (10-day free trial, full Growth features).
+          {mode === 'signup'
+            ? 'Already have an account? Tap “Log in” above.'
+            : 'New restaurant? Tap “Sign up” above to create your account and register — 10-day free trial, full Growth features.'}
         </p>
       </div>
     </div>
