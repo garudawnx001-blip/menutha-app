@@ -182,8 +182,8 @@ footer { border-top: 1px solid var(--line); margin-top: 60px; padding: 34px 0 48
    richer micro-interactions). Appended so it overrides the base editorial look.
    ═══════════════════════════════════════════════════════════════════════════ */
 :root {
-  --saffron: #e8833a;
-  --saffron-deep: #c96a28;
+  --saffron: #d97757;       /* Claude terracotta — dominant warm accent */
+  --saffron-deep: #c15f3c;
   --glass-bg: rgba(255, 255, 255, 0.55);
   --glass-brd: rgba(255, 255, 255, 0.7);
   --glass-blur: blur(20px) saturate(1.5);

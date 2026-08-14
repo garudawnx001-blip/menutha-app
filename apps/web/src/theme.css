@@ -13,10 +13,11 @@
   --text: #1c1a15;          /* ink.900 */
   --text-muted: #6b6557;    /* ink.500 */
   --text-dim: #8a8475;      /* ink.400 */
-  --primary: #1b5e3f;       /* forest.600 */
-  --primary-deep: #16482f;  /* forest.700 */
-  --saffron: #e8833a;       /* Saffron Grove hero accent */
-  --saffron-deep: #c96a28;
+  --primary: #d97757;       /* Claude terracotta — dominant accent (buttons, links, active) */
+  --primary-deep: #c15f3c;  /* terracotta pressed */
+  --forest: #1b5e3f;        /* forest is now SECONDARY (veg marks, occasional structure) */
+  --saffron: #e0865c;       /* warm saffron-terracotta highlight */
+  --saffron-deep: #c15f3c;
   --saffron-soft: #fbe7d2;
   --gold: #c9a04e;          /* premiumGold */
   --gold-soft: #f3e8cf;
