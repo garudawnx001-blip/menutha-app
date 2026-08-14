@@ -472,3 +472,31 @@ body::before {
   .nav:has(.nav-toggle) .nav-links a:not(.btn-solid):hover { background: var(--sand, #f4ede1); }
   .nav:has(.nav-toggle) .nav-links .btn-solid { text-align: center; margin-top: 4px; color: #fff; }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Round-6: ONE authoritative phone frame. Three earlier .cscreen blocks
+   (a flat card + two phone frames of equal specificity) were fighting in the
+   cascade and rendering the mock inconsistently. This is the single source of
+   truth — realistic modern phone aspect (9:19), clean on desktop and mobile.
+   Backgrounds stay owned by the per-slide .s-scan/.s-menu/.s-kitchen rules.
+   ═══════════════════════════════════════════════════════════════════════════ */
+.cslide .cscreen {
+  width: min(200px, 54vw) !important; max-width: 200px !important;
+  aspect-ratio: 9 / 19 !important; height: auto !important;
+  min-height: 0 !important; max-height: 440px !important; margin: 0 auto !important;
+  border: 10px solid #14110c !important; border-radius: 40px !important;
+  padding: 26px 15px 18px !important;
+  box-shadow: 0 24px 52px rgba(23,21,18,0.26), inset 0 0 0 2px rgba(255,255,255,0.05) !important;
+  position: relative !important; overflow: hidden !important;
+  display: flex !important; flex-direction: column !important; gap: 9px !important;
+  justify-content: center !important;
+}
+.cslide .cscreen::before {
+  content: '' !important; position: absolute !important; top: 12px !important;
+  left: 50% !important; transform: translateX(-50%) !important;
+  width: 52px !important; height: 6px !important; border-radius: 999px !important;
+  background: #14110c !important; z-index: 3 !important;
+}
+@media (max-width: 760px) {
+  .cslide .cscreen { width: min(190px, 62vw) !important; max-width: 190px !important; }
+}

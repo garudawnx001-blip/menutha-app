@@ -27,6 +27,17 @@ export function Menu() {
   }, [query, diet, activeCat]);
   const [open, setOpen] = useState<MenuItem | null>(null);
 
+  // The menu is the session root: a diner reaches it when /scan/<token>
+  // replaced its own history entry, so a browser Back would otherwise land on a
+  // dead/blank page (or bounce through the scan redirect). Re-anchor Back to the
+  // menu — the table's home — instead of leaving the app.
+  useEffect(() => {
+    window.history.pushState(null, document.title, window.location.href);
+    const onPop = () => window.history.pushState(null, document.title, window.location.href);
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, []);
+
   useEffect(() => {
     if (!session) {
       nav('/', { replace: true });

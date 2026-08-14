@@ -4,7 +4,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import QRCode from 'qrcode';
-import { fetchOrderStatus, fetchPaymentQr, recordDinerPayment, startGatewayCheckout, type PaymentQr } from '../lib/api';
+import { fetchOrderStatus, fetchPaymentQr, startGatewayCheckout, type PaymentQr } from '../lib/api';
 import { buildUpiUri, isValidVpa } from '../../../../packages/payments/index.js';
 import type { OrderView } from '../lib/types';
 import { inr } from '../lib/types';
@@ -92,34 +92,28 @@ function PaymentPanel({ order, demo, onChanged }: { order: OrderView; demo?: boo
           <img src={qrImg} width={132} height={132} alt="UPI payment QR" style={{ borderRadius: 12, border: '1px solid var(--line-strong)' }} />
           <div style={{ flex: 1, minWidth: 180 }}>
             <p className="muted" style={{ fontSize: 13.5 }}>
-              Scan with GPay / PhonePe / Paytm — pays <strong>{qr.payee_name}</strong> instantly, no fees.
+              Scan with any UPI app, or tap below — pays <strong>{qr.payee_name}</strong> directly, no fees.
             </p>
             <a className="btn btn-primary btn-block" style={{ marginTop: 10 }} href={upiUri}>
-              Open UPI app
+              Pay {inr(qr.amount)} via UPI
             </a>
-            <button className="btn btn-ghost btn-block" style={{ marginTop: 8 }}
-              disabled={busy !== ''} onClick={() => act(() => recordDinerPayment(order.id, 'upi_qr', undefined, demo), 'upi')}>
-              {busy === 'upi' ? '…' : "I've paid ✓"}
-            </button>
           </div>
         </div>
       ) : (
         <p className="muted" style={{ fontSize: 13.5, marginTop: 6 }}>
-          UPI QR isn’t set up here yet — pay at the counter.
+          UPI isn’t set up here yet — pay cash at the counter.
         </p>
       )}
-      <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-        {qr.gateway_key_id && (
-          <button className="btn btn-ghost" style={{ flex: 1 }} disabled={busy !== ''}
-            onClick={() => act(() => startGatewayCheckout(order.id, demo), 'gw')}>
-            {busy === 'gw' ? 'Opening…' : '💳 Card / online'}
-          </button>
-        )}
-        <button className="btn btn-ghost" style={{ flex: 1 }} disabled={busy !== ''}
-          onClick={() => act(() => recordDinerPayment(order.id, 'cash', undefined, demo), 'cash')}>
-          {busy === 'cash' ? '…' : '₹ Cash at counter'}
+      {qr.gateway_key_id && (
+        <button className="btn btn-ghost btn-block" style={{ marginTop: 10 }} disabled={busy !== ''}
+          onClick={() => act(() => startGatewayCheckout(order.id, demo), 'gw')}>
+          {busy === 'gw' ? 'Opening…' : '💳 Pay by card / netbanking'}
         </button>
-      </div>
+      )}
+      <p className="dim" style={{ fontSize: 12, marginTop: 12 }}>
+        Paying by UPI or cash? Just pay — the restaurant marks your order paid on their
+        side once received. Nothing else needed from you.
+      </p>
       {error && <p style={{ color: 'var(--error)', fontSize: 13.5, marginTop: 8 }}>{error}</p>}
     </div>
   );
@@ -170,7 +164,7 @@ export function Track() {
   return (
     <div className="page fade-in">
       <div className="topbar">
-        <Wordmark size={20} />
+        <button className="chip" onClick={() => nav('/menu')}>← Menu</button>
         <span className="badge gold">
           {o.is_parcel ? '📦 Parcel' : `🍽 ${o.table_label ?? 'Table'}`}
         </span>
