@@ -274,3 +274,11 @@ export async function updateRestaurant(restaurantId: string, patch: Record<strin
   if (error) throw error;
 }
 
+
+/** Delete a category. Callers must move or delete its dishes first — the
+ *  portal blocks the action rather than orphaning dishes behind the diner's
+ *  category filter, where they become effectively invisible. */
+export async function deleteCategory(id: string) {
+  const { error } = await supabase.from('menu_category').delete().eq('id', id);
+  if (error) throw error;
+}

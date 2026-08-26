@@ -21,6 +21,34 @@ export function downloadTemplate() {
   XLSX.writeFile(wb, 'menutha-menu-template.xlsx');
 }
 
+/** Export the live menu as a workbook using the SAME columns as the import
+ *  template, so a menu can be exported, edited in Excel and re-imported
+ *  without any reshaping. Only a blank template existed before, which is why
+ *  "Export" appeared to be missing — it was. */
+export function exportMenu(
+  categories: PortalCategory[],
+  dishes: PortalDish[],
+  restaurantName = 'menu',
+) {
+  const catName = new Map(categories.map((c) => [c.id, c.name]));
+  const body = dishes.map((d) => [
+    d.name,
+    d.category_id ? catName.get(d.category_id) ?? '' : '',
+    d.is_veg ? 'Veg' : 'NonVeg',
+    Number(d.price),
+    d.description ?? '',
+    d.is_available ? 'Y' : 'N',
+    // Image column carries the filename the importer matches on, not the URL.
+    d.photo_url ? decodeURIComponent(d.photo_url.split('/').pop() || '') : '',
+  ]);
+  const ws = XLSX.utils.aoa_to_sheet([TEMPLATE_HEADERS, ...body]);
+  ws['!cols'] = [{ wch: 26 }, { wch: 16 }, { wch: 10 }, { wch: 8 }, { wch: 40 }, { wch: 14 }, { wch: 20 }];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Menu');
+  const slug = restaurantName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'menu';
+  XLSX.writeFile(wb, `${slug}-menu.xlsx`);
+}
+
 export interface ParsedRow {
   row: number; name: string; category: string; isVeg: boolean;
   price: number; description: string; available: boolean; image: string;
