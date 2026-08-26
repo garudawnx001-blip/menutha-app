@@ -10,6 +10,7 @@ import {
 } from '../../lib/portalApi';
 import { inr } from '../../lib/types';
 import { usePartner } from './PartnerShell';
+import { Growth } from './Growth';
 import { Spinner, VegMark } from '../../components';
 
 const LIVE = ['placed', 'accepted', 'preparing', 'ready'];
@@ -70,6 +71,7 @@ export function OrdersBoard() {
   const [sound, setSound] = useState(() => localStorage.getItem(SOUND_KEY) !== 'off');
   // Ids that arrived while this board was open — highlighted until acted on.
   const [justIn, setJustIn] = useState<Set<string>>(new Set());
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [notifyPerm, setNotifyPerm] = useState<string>(
     () => (typeof window !== 'undefined' && 'Notification' in window ? Notification.permission : 'unsupported'),
   );
@@ -226,6 +228,10 @@ export function OrdersBoard() {
         </div>
       </div>
 
+
+      {/* Growth. Owners and managers only — the floor doesn't need revenue
+          trends mid-service, and kitchen accounts shouldn't see turnover. */}
+      {(role === 'owner' || role === 'manager') && <Growth restaurantId={restaurant.id} />}
       {orders.length === 0 && (
         <div className="glass" style={{ padding: 22, textAlign: 'center' }}>
           <p className="muted">No live orders. New orders appear here instantly — keep this tab open.</p>
@@ -271,24 +277,43 @@ export function OrdersBoard() {
                   {NEXT_LABEL[o.status]}
                 </button>
               )}
-              {!o.paid && o.pendingPayment && (
-                <button className="btn btn-primary" style={{ padding: '10px 12px', fontSize: 13, borderColor: 'var(--gold)' }}
-                  disabled={busy === o.id} onClick={() => quickPaid(o, 'cash')}>
-                  Confirm {o.pendingPayment.provider === 'cash' ? 'cash' : 'UPI'} received ✓
-                </button>
-              )}
-              {!o.paid && !o.pendingPayment && (
-                <>
-                  <button className="btn btn-ghost" style={{ padding: '10px 12px', fontSize: 13 }}
-                    disabled={busy === o.id} onClick={() => quickPaid(o, 'cash')}>₹ Cash</button>
-                  <button className="btn btn-ghost" style={{ padding: '10px 12px', fontSize: 13 }}
-                    disabled={busy === o.id} onClick={() => quickPaid(o, 'upi_qr')}>UPI ✓</button>
-                </>
-              )}
               {role !== 'waiter' && o.status === 'placed' && (
-                <button className="chip" disabled={busy === o.id} onClick={() => cancel(o)}>✕</button>
+                <button className="chip" disabled={busy === o.id} onClick={() => cancel(o)} title="Cancel this order">✕</button>
               )}
             </div>
+            {/* Payment. Two unlabelled buttons reading "₹ Cash" and "UPI ✓" sat
+                next to the status button, and it was not clear whether they
+                recorded a payment or requested one — the "confusing Paid
+                option". They are now under an explicit heading that says what
+                pressing them does, and the table-level route is signposted. */}
+            {!o.paid && (
+              <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px dashed var(--line)' }}>
+                {o.pendingPayment ? (
+                  <>
+                    <p className="overline" style={{ marginBottom: 6 }}>
+                      Diner says they paid by {o.pendingPayment.provider === 'cash' ? 'cash' : 'UPI'}
+                    </p>
+                    <button className="btn btn-primary btn-block" style={{ padding: '10px 12px', fontSize: 13 }}
+                      disabled={busy === o.id} onClick={() => quickPaid(o, 'cash')}>
+                      Confirm we received it ✓
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <p className="overline" style={{ marginBottom: 6 }}>Record payment received</p>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button className="btn btn-ghost" style={{ padding: '10px 12px', fontSize: 13, flex: 1 }}
+                        disabled={busy === o.id} onClick={() => quickPaid(o, 'cash')}>Cash</button>
+                      <button className="btn btn-ghost" style={{ padding: '10px 12px', fontSize: 13, flex: 1 }}
+                        disabled={busy === o.id} onClick={() => quickPaid(o, 'upi_qr')}>UPI</button>
+                    </div>
+                    <p className="dim" style={{ fontSize: 11.5, marginTop: 6 }}>
+                      Settles this one order. To bill a whole table together, use Billing.
+                    </p>
+                  </>
+                )}
+              </div>
+            )}
           </div>
         ))}
       </div>
@@ -297,17 +322,64 @@ export function OrdersBoard() {
         <>
           <h2 className="cat-heading">Served today ({servedToday.length})</h2>
           <div className="glass" style={{ padding: '4px 16px' }}>
-            {servedToday.slice(0, 12).map((o) => (
-              <div key={o.id} className="row-item">
-                <span className="muted" style={{ fontSize: 14 }}>
-                  #{o.order_no} · {o.is_parcel ? 'Parcel' : o.table_label} · {o.items.reduce((a, i) => a + i.qty, 0)} items
-                </span>
-                <span style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-                  <span style={{ fontWeight: 700 }}>{inr(o.total)}</span>
-                  <span className={o.paid ? 'badge open' : 'badge'}>{o.paid ? 'Paid' : 'Unpaid'}</span>
-                </span>
-              </div>
-            ))}
+            {/* Rows were a one-line summary with no way to see what was in the
+                order — "expand the cards". Tap a row for the full itemisation. */}
+            {servedToday.map((o) => {
+              const open = expanded.has(o.id);
+              return (
+                <div key={o.id}>
+                  <button
+                    className="row-expand row-item"
+                    aria-expanded={open}
+                    onClick={() => setExpanded((prev) => {
+                      const n = new Set(prev);
+                      n.has(o.id) ? n.delete(o.id) : n.add(o.id);
+                      return n;
+                    })}
+                  >
+                    <span className="muted" style={{ fontSize: 14, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      <span aria-hidden style={{ display: 'inline-block', width: 14 }}>{open ? '▾' : '▸'}</span>
+                      #{o.order_no} · {o.is_parcel ? 'Parcel' : o.table_label}
+                      {(o.guest_name || '').trim() ? ` · ${o.guest_name}` : ''}
+                      {' · '}{o.items.reduce((a, i) => a + i.qty, 0)} items
+                    </span>
+                    <span style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                      <span style={{ fontWeight: 700 }}>{inr(o.total)}</span>
+                      <span className={o.paid ? 'badge open' : 'badge'}>{o.paid ? 'Paid' : 'Unpaid'}</span>
+                    </span>
+                  </button>
+                  {open && (
+                    <div className="row-detail">
+                      {o.items.map((it, i) => (
+                        <div key={i} className="bill-row" style={{ fontSize: 13.5 }}>
+                          <span style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                            <VegMark veg={!!it.is_veg} />
+                            {it.qty}× {it.name}
+                          </span>
+                          <span>{inr(it.unit_price * it.qty)}</span>
+                        </div>
+                      ))}
+                      {o.notes && <p className="dim" style={{ fontSize: 12.5, fontStyle: 'italic', marginTop: 4 }}>“{o.notes}”</p>}
+                      <div className="bill-row" style={{ fontSize: 13 }}>
+                        <span className="dim">Subtotal</span><span>{inr(o.subtotal)}</span>
+                      </div>
+                      {Number(o.packing_charge) > 0 && (
+                        <div className="bill-row" style={{ fontSize: 13 }}>
+                          <span className="dim">Packing</span><span>{inr(o.packing_charge)}</span>
+                        </div>
+                      )}
+                      <div className="bill-row" style={{ fontSize: 13 }}>
+                        <span className="dim">Tax</span><span>{inr(o.gst_amount)}</span>
+                      </div>
+                      <p className="dim" style={{ fontSize: 12 }}>
+                        Placed {new Date(o.placed_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        {o.guest_phone ? ` · ${o.guest_phone}` : ''}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </>
       )}

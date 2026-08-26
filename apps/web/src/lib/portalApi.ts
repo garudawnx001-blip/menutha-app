@@ -284,3 +284,64 @@ export async function deleteCategory(id: string) {
   const { error } = await supabase.from('menu_category').delete().eq('id', id);
   if (error) throw error;
 }
+
+// ── Growth ─────────────────────────────────────────────────────────────────
+
+export type GrowthPeriod = 'week' | 'month' | 'year';
+
+export interface GrowthPoint { label: string; revenue: number; orders: number }
+
+/** Revenue and order counts bucketed for the growth charts. Cancelled orders
+ *  are excluded — they are not sales. Buckets are built in the browser's local
+ *  timezone so "today" means the restaurant's today, not UTC's. */
+export async function fetchGrowth(restaurantId: string, period: GrowthPeriod): Promise<GrowthPoint[]> {
+  const now = new Date();
+  const start = new Date(now);
+  if (period === 'week') start.setDate(now.getDate() - 6);
+  else if (period === 'month') start.setDate(now.getDate() - 29);
+  else start.setMonth(now.getMonth() - 11, 1);
+  start.setHours(0, 0, 0, 0);
+
+  const { data, error } = await supabase
+    .from('food_order')
+    .select('placed_at, total, status')
+    .eq('restaurant_id', restaurantId)
+    .neq('status', 'cancelled')
+    .gte('placed_at', start.toISOString())
+    .order('placed_at');
+  if (error) throw error;
+
+  // Pre-seed every bucket so quiet days render as gaps in the trend rather
+  // than disappearing and making the chart lie about the shape of the week.
+  const buckets = new Map<string, GrowthPoint>();
+  const dayKey = (d: Date) => `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
+  const monKey = (d: Date) => `${d.getFullYear()}-${d.getMonth() + 1}`;
+  const DAY = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+  if (period === 'year') {
+    for (let i = 0; i < 12; i++) {
+      const d = new Date(start.getFullYear(), start.getMonth() + i, 1);
+      buckets.set(monKey(d), { label: MON[d.getMonth()], revenue: 0, orders: 0 });
+    }
+  } else {
+    const days = period === 'week' ? 7 : 30;
+    for (let i = 0; i < days; i++) {
+      const d = new Date(start);
+      d.setDate(start.getDate() + i);
+      buckets.set(dayKey(d), {
+        label: period === 'week' ? DAY[d.getDay()] : String(d.getDate()),
+        revenue: 0, orders: 0,
+      });
+    }
+  }
+
+  for (const row of (data ?? []) as { placed_at: string; total: number }[]) {
+    const d = new Date(row.placed_at);
+    const b = buckets.get(period === 'year' ? monKey(d) : dayKey(d));
+    if (!b) continue;
+    b.revenue += Number(row.total || 0);
+    b.orders += 1;
+  }
+  return [...buckets.values()];
+}

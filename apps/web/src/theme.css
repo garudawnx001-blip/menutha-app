@@ -777,3 +777,41 @@ input.code-input::placeholder { color: var(--text-dim); }
 @media (prefers-reduced-motion: reduce) {
   .ticket-new { animation: none; }
 }
+
+/* ── Growth charts (Orders page) ────────────────────────────────────────────
+   Plain flex bars rather than a charting library: this is a bar chart, and a
+   library would be the largest thing in the bundle. */
+.growth-chart {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  height: 132px;
+  margin-top: 14px;
+  padding-top: 4px;
+}
+.growth-col { flex: 1; min-width: 0; display: flex; flex-direction: column; height: 100%; }
+.growth-bar-wrap { flex: 1; display: flex; align-items: flex-end; }
+.growth-bar {
+  width: 100%;
+  border-radius: 4px 4px 2px 2px;
+  background: linear-gradient(180deg, var(--primary), color-mix(in srgb, var(--primary) 72%, transparent));
+  transition: filter 0.12s ease;
+}
+.growth-bar:hover { filter: brightness(1.1); }
+.growth-bar.empty { background: var(--line); border-radius: 2px; }
+.growth-tick {
+  font-size: 10.5px; color: var(--text-muted); text-align: center;
+  margin-top: 6px; height: 13px; overflow: hidden; white-space: nowrap;
+}
+@media (prefers-reduced-motion: reduce) { .growth-bar { transition: none; } }
+
+/* Expandable served-order rows */
+.row-expand {
+  width: 100%; text-align: left; background: none; border: 0;
+  cursor: pointer; padding: 0;
+}
+.row-detail {
+  padding: 2px 0 12px;
+  border-top: 1px dashed var(--line);
+  margin-top: -4px;
+}
