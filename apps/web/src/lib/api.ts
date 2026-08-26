@@ -174,7 +174,18 @@ export async function placeOrder(
     }
     throw error;
   }
-  notifyStaff((data as { id: string }).id).catch(() => {});
+  // Detail on the lock screen: where, who, what and how much — enough to start
+  // cooking without unlocking the phone.
+  const count = lines.reduce((a, l) => a + l.qty, 0);
+  const where = session.table.is_parcel ? 'Parcel' : session.table.label ?? 'Table';
+  const who = (session.guest?.name ?? '').trim();
+  const items = lines.map((l) => `${l.qty}× ${l.name}`).join(', ');
+  const detail = [
+    [where, who].filter(Boolean).join(' · '),
+    `${count} item${count === 1 ? '' : 's'}`,
+    items,
+  ].join(' — ');
+  notifyStaff((data as { id: string }).id, detail).catch(() => {});
   return data as { id: string };
 }
 
@@ -283,26 +294,39 @@ export async function startGatewayCheckout(orderId: string, demo?: boolean): Pro
   });
 }
 
-/** Best-effort "new order" push to staff devices — same client-side fan-out the
- *  mobile app uses (get_order_push_tokens + Expo push API). The kitchen's
- *  realtime board is the primary signal; this may be blocked by CORS and is
- *  always fire-and-forget. */
-async function notifyStaff(orderId: string) {
+/** Best-effort "new order" push to staff devices, so a partner phone with the
+ *  app closed still buzzes (the kitchen's realtime board is the primary
+ *  signal). Fire-and-forget: this runs in the diner's browser and may be
+ *  blocked, which is why the portal board also alerts independently. */
+async function notifyStaff(orderId: string, detail?: string) {
   const { data } = await supabase.rpc('get_order_push_tokens', {
     p_order_id: orderId,
     p_audience: 'staff',
   });
-  const tokens: string[] = (data ?? []).map((r: any) => r.push_token).filter(Boolean);
+  // get_order_push_tokens is `returns setof text`, so PostgREST hands back an
+  // array of plain strings. This used to read `r.push_token` off each entry,
+  // which is undefined for a scalar set — every token was filtered out and the
+  // push was never sent. Accept both shapes so a future table-returning
+  // version keeps working.
+  const tokens: string[] = (data ?? [])
+    .map((r: any) => (typeof r === 'string' ? r : r?.push_token))
+    .filter((t: unknown): t is string => typeof t === 'string' && t.startsWith('ExponentPushToken'));
   if (!tokens.length) return;
   await fetch('https://exp.host/--/api/v2/push/send', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
+    // keepalive: the diner is navigated to the tracking page the moment the
+    // order lands, which would otherwise cancel this request in flight.
+    keepalive: true,
     body: JSON.stringify(
       tokens.map((to) => ({
         to,
         title: 'New order',
-        body: 'A new order was just placed from the web menu.',
+        body: detail || 'A new order was just placed from the table QR menu.',
         sound: 'default',
+        channelId: 'orders',
+        priority: 'high',
+        data: { orderId, kind: 'order_placed' },
       })),
     ),
   });
