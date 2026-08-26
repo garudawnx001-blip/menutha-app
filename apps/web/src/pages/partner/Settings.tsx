@@ -3,7 +3,7 @@
  *  wires the secret via Edge Function config — never client-side). */
 import React, { useState } from 'react';
 import {
-  updateRestaurant, setPnlVisibility, uploadImage,
+  updateRestaurant, uploadImage,
 } from '../../lib/portalApi';
 import { usePartner } from './PartnerShell';
 
@@ -25,7 +25,6 @@ export function Settings() {
     cgst_pct: String((restaurant as any).cgst_pct ?? 2.5),
     service_charge_pct: String((restaurant as any).service_charge_pct ?? 0),
   });
-  const [pnlVisible, setPnl] = useState(!!restaurant.pnl_visible_to_managers);
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState('');
@@ -50,7 +49,6 @@ export function Settings() {
         service_charge_pct: Math.min(25, Math.max(0, Number(form.service_charge_pct) || 0)),
         ...(can('white_label') || can('basic_theme') ? { brand_color: form.brand_color } : {}),
       });
-      if (role === 'owner') await setPnlVisibility(restaurant.id, pnlVisible);
       await reload();
       setSaved(true);
       setTimeout(() => setSaved(false), 2500);
@@ -186,18 +184,6 @@ export function Settings() {
           )}
         </div>
       </div>
-
-      {role === 'owner' && (
-        <div className="glass" style={{ padding: 16, marginBottom: 14, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
-          <div>
-            <h3 style={{ fontWeight: 700 }}>P&L visible to managers</h3>
-            <p className="dim" style={{ fontSize: 12.5 }}>Off by default — only you see revenue, expenses and profit.</p>
-          </div>
-          <button className={pnlVisible ? 'chip active' : 'chip'} onClick={() => setPnl(!pnlVisible)} aria-pressed={pnlVisible}>
-            {pnlVisible ? 'Visible' : 'Hidden'}
-          </button>
-        </div>
-      )}
 
       <button className="btn btn-primary btn-block" disabled={busy} onClick={save}>
         {busy ? 'Saving…' : saved ? 'Saved ✓' : 'Save settings'}

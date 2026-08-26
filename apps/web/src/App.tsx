@@ -13,7 +13,6 @@ import { OrdersBoard } from './pages/partner/OrdersBoard';
 import { MenuManager } from './pages/partner/MenuManager';
 import { TablesQR } from './pages/partner/TablesQR';
 import { Billing } from './pages/partner/Billing';
-import { Expenses } from './pages/partner/Expenses';
 import { Reservations } from './pages/partner/Reservations';
 import { Staff } from './pages/partner/Staff';
 import { Settings } from './pages/partner/Settings';
@@ -47,7 +46,6 @@ export function App() {
             <Route path="/partner/menu" element={<MenuManager />} />
             <Route path="/partner/tables" element={<TablesQR />} />
             <Route path="/partner/billing" element={<Billing />} />
-            <Route path="/partner/expenses" element={<Expenses />} />
             <Route path="/partner/reservations" element={<Reservations />} />
             <Route path="/partner/staff" element={<Staff />} />
             <Route path="/partner/settings" element={<Settings />} />

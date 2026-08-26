@@ -195,31 +195,9 @@ export async function confirmPayment(paymentId: string) {
   if (error) throw error;
 }
 
-// ── Expenses & P&L ─────────────────────────────────────────────────────────
-
-export interface Expense { id: string; category: string; amount: number; note: string | null; spent_on: string; receipt_url: string | null }
-
-export async function fetchExpenses(restaurantId: string, monthISO: string): Promise<Expense[]> {
-  const start = monthISO + '-01';
-  const end = new Date(new Date(start).getFullYear(), new Date(start).getMonth() + 1, 1).toISOString().slice(0, 10);
-  const { data, error } = await supabase
-    .from('expense').select('id, category, amount, note, spent_on, receipt_url')
-    .eq('restaurant_id', restaurantId).gte('spent_on', start).lt('spent_on', end)
-    .order('spent_on', { ascending: false });
-  if (error) throw error;
-  return (data ?? []) as Expense[];
-}
-
-export async function addExpense(restaurantId: string, e: { category: string; amount: number; note?: string; spent_on: string; receipt_url?: string }) {
-  const { error } = await supabase.from('expense').insert({ restaurant_id: restaurantId, ...e });
-  if (error) throw error;
-}
-
-export async function deleteExpense(id: string) {
-  const { error } = await supabase.from('expense').delete().eq('id', id);
-  if (error) throw error;
-}
-
+// ── Revenue (P&L) ──────────────────────────────────────────────────────────
+// The Expenses section was removed at the client's request; get_pnl is kept
+// because the revenue half still backs the Orders growth charts.
 export async function fetchPnl(restaurantId: string, monthISO: string) {
   const { data, error } = await supabase.rpc('get_pnl', {
     p_restaurant_id: restaurantId, p_month: monthISO + '-01',
@@ -296,9 +274,3 @@ export async function updateRestaurant(restaurantId: string, patch: Record<strin
   if (error) throw error;
 }
 
-export async function setPnlVisibility(restaurantId: string, visible: boolean) {
-  const { error } = await supabase.rpc('set_pnl_visibility', {
-    p_restaurant_id: restaurantId, p_visible: visible,
-  });
-  if (error) throw error;
-}

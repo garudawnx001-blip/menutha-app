@@ -27,7 +27,6 @@ const NAV: { to: string; label: string; icon: string; roles: PortalRole[] }[] = 
   { to: '/partner/menu', label: 'Menu', icon: '🍛', roles: ['owner', 'manager'] },
   { to: '/partner/tables', label: 'Tables & QR', icon: '🪑', roles: ['owner', 'manager'] },
   { to: '/partner/billing', label: 'Billing', icon: '💳', roles: ['owner', 'manager', 'waiter'] },
-  { to: '/partner/expenses', label: 'Expenses', icon: '📒', roles: ['owner', 'manager'] },
   { to: '/partner/reservations', label: 'Reservations', icon: '📅', roles: ['owner', 'manager'] },
   { to: '/partner/staff', label: 'Staff', icon: '👥', roles: ['owner'] },
   { to: '/partner/plan', label: 'Plan', icon: '⭐', roles: ['owner'] },
@@ -79,8 +78,7 @@ export function PartnerShell() {
     );
   }
 
-  const items = NAV.filter((n) => n.roles.includes(member.role))
-    .filter((n) => !(n.to === '/partner/expenses' && member.role === 'manager' && !member.restaurant.pnl_visible_to_managers));
+  const items = NAV.filter((n) => n.roles.includes(member.role));
 
   return (
     <Ctx.Provider
