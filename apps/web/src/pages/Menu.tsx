@@ -7,11 +7,13 @@ import { fetchMenu, subscribeMenu } from '../lib/api';
 import type { CartLine, MenuItem } from '../lib/types';
 import { calcBill, inr } from '../lib/types';
 import { useStore } from '../store';
-import { IdentityGate, ItemSheet, Spinner, Stepper, VegMark, Wordmark } from '../components';
+import { IdentityGate, ItemSheet, LanguagePicker, Spinner, Stepper, VegMark, Wordmark } from '../components';
+import { useT } from '../lib/i18n';
 
 export function Menu() {
   const nav = useNavigate();
   const { session, cart, addLine, setQty, setGuest } = useStore();
+  const t = useT();
   const [items, setItems] = useState<MenuItem[] | null>(null);
   const [failed, setFailed] = useState(false);
   // Filters persist while browsing (cart ↔ menu round-trips, reloads).
@@ -95,9 +97,10 @@ export function Menu() {
       <div className="topbar">
         <Wordmark size={22} />
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <LanguagePicker />
           {!table.is_parcel && (
-            <button className="chip" onClick={() => nav('/bill')} aria-label="View the table bill">
-              🧾 Table bill
+            <button className="chip" onClick={() => nav('/bill')} aria-label={t('menu.bill')}>
+              🧾 {t('menu.bill')}
             </button>
           )}
           <span className="badge gold">
@@ -151,10 +154,10 @@ export function Menu() {
         <div className="search">
           <span aria-hidden>🔍</span>
           <input
-            placeholder="Search dishes…"
+            placeholder={t("menu.search") + "…"}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            aria-label="Search dishes"
+            aria-label={t("menu.search")}
           />
         </div>
         <div className="chip-row diet-row" role="group" aria-label="Dietary filter">
@@ -164,7 +167,7 @@ export function Menu() {
             onClick={() => setDiet('all')}
             aria-pressed={diet === 'all'}
           >
-            All
+            {t('menu.all')}
           </button>
           <button
             className={'chip diet-chip diet-veg' + (diet === 'veg' ? ' active' : '')}
@@ -172,7 +175,7 @@ export function Menu() {
             onClick={() => setDiet('veg')}
             aria-pressed={diet === 'veg'}
           >
-            <span className="veg-mark" /> Veg
+            <span className="veg-mark" /> {t('menu.veg')}
           </button>
           <button
             className={'chip diet-chip diet-nonveg' + (diet === 'nonveg' ? ' active' : '')}
@@ -180,7 +183,7 @@ export function Menu() {
             onClick={() => setDiet('nonveg')}
             aria-pressed={diet === 'nonveg'}
           >
-            <span className="veg-mark nonveg" /> Non-veg
+            <span className="veg-mark nonveg" /> {t('menu.nonveg')}
           </button>
         </div>
         <div className="chip-row" role="tablist">
@@ -192,7 +195,9 @@ export function Menu() {
               className={activeCat === c ? 'chip active' : 'chip'}
               onClick={() => setActiveCat(c)}
             >
-              {c}
+              {/* Only the synthetic "All" chip is ours to translate — every other
+                  chip is a category name the restaurant typed. */}
+              {c === 'All' ? t('menu.all') : c}
             </button>
           ))}
         </div>
@@ -208,7 +213,7 @@ export function Menu() {
       )}
       {items !== null && !failed && visible.length === 0 && (
         <div className="center-fill">
-          <p className="muted">No dishes match — try clearing the search or filters.</p>
+          <p className="muted">{t('menu.none')}</p>
         </div>
       )}
 
@@ -263,7 +268,7 @@ export function Menu() {
                         <span onClick={(e) => e.stopPropagation()}>
                           {d.options.length ? (
                             <button className="add-btn" onClick={() => setOpen(d)}>
-                              Choose
+                              {t('menu.choose')}
                             </button>
                           ) : qty > 0 ? (
                             <Stepper qty={qty} onChange={(q) => setQty(li, q)} />
@@ -273,7 +278,7 @@ export function Menu() {
                               onClick={quickAdd}
                               aria-label={`Add ${d.name}`}
                             >
-                              Add
+                              {t('menu.add')}
                             </button>
                           )}
                         </span>
@@ -319,7 +324,7 @@ export function Menu() {
             <span style={{ fontWeight: 700 }}>
               {count} item{count > 1 ? 's' : ''} · {inr(bill.subtotal)}
             </span>
-            <span style={{ color: 'var(--accent)', fontWeight: 700 }}>View cart →</span>
+            <span style={{ color: 'var(--accent)', fontWeight: 700 }}>{t('menu.viewCart')} →</span>
           </button>
         </div>
       )}

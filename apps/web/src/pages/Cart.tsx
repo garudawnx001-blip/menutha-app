@@ -5,11 +5,13 @@ import { useNavigate } from 'react-router-dom';
 import { placeOrder, fetchTableBill } from '../lib/api';
 import { calcBill, inr } from '../lib/types';
 import { useStore } from '../store';
+import { useT } from '../lib/i18n';
 import { Stepper, VegMark, Wordmark } from '../components';
 
 export function Cart() {
   const nav = useNavigate();
   const { session, cart, setQty, clearCart } = useStore();
+  const t = useT();
   const [notes, setNotes] = useState('');
   const [placing, setPlacing] = useState(false);
   const [error, setError] = useState('');
@@ -69,7 +71,7 @@ export function Cart() {
   return (
     <div className="page fade-in">
       <div className="topbar">
-        <button className="chip" onClick={() => nav('/menu')}>← Menu</button>
+        <button className="chip" onClick={() => nav('/menu')}>← {t('cart.back')}</button>
         <Wordmark size={20} />
       </div>
 
@@ -81,8 +83,8 @@ export function Cart() {
 
       {!cart.length ? (
         <div className="center-fill">
-          <p className="muted">Your cart is empty.</p>
-          <button className="btn btn-primary" onClick={() => nav('/menu')}>Browse the menu</button>
+          <p className="muted">{t('cart.empty')}</p>
+          <button className="btn btn-primary" onClick={() => nav('/menu')}>{t('cart.browse')}</button>
         </div>
       ) : (
         <>
@@ -166,7 +168,7 @@ export function Cart() {
             disabled={placing}
             onClick={submit}
           >
-            {placing ? 'Placing your order…' : `Place order · ${inr(bill.total)}`}
+            {placing ? t('cart.place') + '…' : `${t('cart.place')} · ${inr(bill.total)}`}
           </button>
           <p className="dim" style={{ fontSize: 12, textAlign: 'center', marginTop: 10 }}>
             The kitchen sees your order the moment you place it.

@@ -13,20 +13,22 @@ import type { TableBill } from '../lib/types';
 import { inr } from '../lib/types';
 import { useStore } from '../store';
 import { Spinner, Wordmark } from '../components';
+import { useT } from '../lib/i18n';
 
 function TotalsBlock({ b, sgstPct, cgstPct }: {
   b: { subtotal: number; packing_charge: number; service_charge?: number; sgst_amount?: number; cgst_amount?: number; gst_amount: number; total: number };
   sgstPct?: number | null; cgstPct?: number | null;
 }) {
+  const t = useT();
   const hasSplit = b.sgst_amount != null || b.cgst_amount != null;
   return (
     <>
-      <div className="bill-row"><span>Subtotal</span><span>{inr(b.subtotal)}</span></div>
+      <div className="bill-row"><span>{t('bill.subtotal')}</span><span>{inr(b.subtotal)}</span></div>
       {Number(b.packing_charge) > 0 && (
-        <div className="bill-row"><span>Packing charge</span><span>{inr(b.packing_charge)}</span></div>
+        <div className="bill-row"><span>{t('bill.packing')}</span><span>{inr(b.packing_charge)}</span></div>
       )}
       {Number(b.service_charge ?? 0) > 0 && (
-        <div className="bill-row"><span>Service charge</span><span>{inr(b.service_charge!)}</span></div>
+        <div className="bill-row"><span>{t('bill.service')}</span><span>{inr(b.service_charge!)}</span></div>
       )}
       {hasSplit ? (
         <>
@@ -36,7 +38,7 @@ function TotalsBlock({ b, sgstPct, cgstPct }: {
       ) : (
         <div className="bill-row"><span>GST</span><span>{inr(b.gst_amount)}</span></div>
       )}
-      <div className="bill-row total"><span>Total</span><span>{inr(b.total)}</span></div>
+      <div className="bill-row total"><span>{t('bill.total')}</span><span>{inr(b.total)}</span></div>
     </>
   );
 }
@@ -44,6 +46,7 @@ function TotalsBlock({ b, sgstPct, cgstPct }: {
 export function Bill() {
   const nav = useNavigate();
   const { session } = useStore();
+  const t = useT();
   const [bill, setBill] = useState<TableBill | null>(null);
   const [failed, setFailed] = useState(false);
   const [mode, setMode] = useState<'combined' | 'split'>('combined');
@@ -137,18 +140,18 @@ export function Bill() {
   return (
     <div className="page fade-in">
       <div className="topbar">
-        <button className="chip" onClick={() => nav('/menu')}>← Menu</button>
+        <button className="chip" onClick={() => nav('/menu')}>← {t('cart.back')}</button>
         <Wordmark size={20} />
       </div>
 
       <p className="overline" style={{ marginTop: 12 }}>
         {session.restaurant.name}{session.table.is_parcel ? '' : ` · ${session.table.label}`}
       </p>
-      <h1 className="display" style={{ fontSize: 30, marginTop: 4 }}>Table bill</h1>
+      <h1 className="display" style={{ fontSize: 30, marginTop: 4 }}>{t('bill.title')}</h1>
 
       {empty ? (
         <div className="center-fill">
-          <p className="muted">No open orders at this table yet.</p>
+          <p className="muted">{t('bill.none')}</p>
           <button className="btn btn-primary" onClick={() => nav('/menu')}>Browse the menu</button>
         </div>
       ) : (
@@ -159,14 +162,14 @@ export function Bill() {
               className={mode === 'combined' ? 'seg-btn active' : 'seg-btn'}
               onClick={() => setMode('combined')}
             >
-              Whole table
+              {t('bill.whole')}
             </button>
             <button
               role="tab" aria-selected={mode === 'split'}
               className={mode === 'split' ? 'seg-btn active' : 'seg-btn'}
               onClick={() => setMode('split')}
             >
-              Split by person
+              {t('bill.split')}
             </button>
           </div>
 
@@ -252,8 +255,8 @@ export function Bill() {
               : 'Pay at the restaurant — cash or UPI at the counter.'} Updates live as your table orders.
           </p>
           <div style={{ display: 'flex', gap: 10, marginTop: 12 }}>
-            <button className="btn btn-ghost" style={{ flex: 1 }} onClick={() => nav('/menu')}>Order more</button>
-            <button className="btn btn-primary" style={{ flex: 1 }} onClick={() => window.print()}>Save bill</button>
+            <button className="btn btn-ghost" style={{ flex: 1 }} onClick={() => nav('/menu')}>{t('bill.orderMore')}</button>
+            <button className="btn btn-primary" style={{ flex: 1 }} onClick={() => window.print()}>{t('bill.save')}</button>
           </div>
         </>
       )}

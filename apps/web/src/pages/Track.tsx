@@ -10,16 +10,17 @@ import type { OrderView } from '../lib/types';
 import { inr } from '../lib/types';
 import { useStore } from '../store';
 import { Spinner, Wordmark } from '../components';
+import { useT } from '../lib/i18n';
 
 /** Dine-in, not delivery: the diner is already sitting at the table, so the
  *  courier-style five-stage timeline ("accepted", "on its way to you") was both
  *  jargon and the wrong metaphor. Four honest states, plainly worded. The
  *  kitchen's own statuses are unchanged — only the diner's wording is. */
-const STEPS: { key: string; title: string; body: string }[] = [
-  { key: 'placed', title: 'Order placed', body: 'The kitchen has your order.' },
-  { key: 'preparing', title: 'Being cooked', body: 'Your food is on the fire.' },
-  { key: 'ready', title: 'Ready', body: 'Coming to your table.' },
-  { key: 'served', title: 'Served', body: 'Enjoy your meal.' },
+const stepsFor = (t: (k: string) => string) => [
+  { key: 'placed', title: t('track.placed'), body: t('track.placedBody') },
+  { key: 'preparing', title: t('track.cooking'), body: t('track.cookingBody') },
+  { key: 'ready', title: t('track.ready'), body: t('track.readyBody') },
+  { key: 'served', title: t('track.served'), body: t('track.servedBody') },
 ];
 
 const STAGE_INDEX: Record<string, number> = {
@@ -124,6 +125,8 @@ function PaymentPanel({ order, demo, onChanged }: { order: OrderView; demo?: boo
 
 export function Track() {
   const { id = '' } = useParams();
+  const t = useT();
+  const STEPS = stepsFor(t);
   const nav = useNavigate();
   const { session } = useStore();
   const [order, setOrder] = useState<OrderView | null>(null);

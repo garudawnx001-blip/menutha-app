@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useState } from 'react';
 import type { CartLine, MenuItem } from './lib/types';
 import { inr } from './lib/types';
+import { LANGS, getLang, setLang, translate, type Lang } from './lib/i18n';
 
 export function VegMark({ veg }: { veg: boolean }) {
   return (
@@ -89,14 +90,14 @@ export function IdentityGate({
           kitchen knows whose dish is whose and your bill stays yours. No OTP, no account.
         </p>
 
-        <label className="overline" style={{ display: 'block', marginTop: 18 }}>Your name</label>
+        <label className="overline" style={{ display: 'block', marginTop: 18 }}>{translate(getLang(), 'gate.name')}</label>
         <input
           style={field} value={name} onChange={(e) => setName(e.target.value)}
           placeholder="e.g. Aarav" autoComplete="given-name" aria-label="Your name"
           onKeyDown={(e) => e.key === 'Enter' && submit()}
         />
 
-        <label className="overline" style={{ display: 'block', marginTop: 14 }}>Mobile number</label>
+        <label className="overline" style={{ display: 'block', marginTop: 14 }}>{translate(getLang(), 'gate.phone')}</label>
         <input
           style={field} value={phone} onChange={(e) => setPhone(e.target.value)}
           placeholder="10-digit mobile" inputMode="numeric" autoComplete="tel"
@@ -113,7 +114,7 @@ export function IdentityGate({
           className="btn btn-primary btn-block" style={{ marginTop: 18 }}
           disabled={!ok} onClick={submit}
         >
-          Start ordering →
+          {translate(getLang(), 'gate.start')} →
         </button>
         <p className="dim" style={{ fontSize: 11.5, textAlign: 'center', marginTop: 10 }}>
           We use this only to route your order and bill at this restaurant.
@@ -218,5 +219,53 @@ export function ItemSheet({
         </div>
       </div>
     </div>
+  );
+}
+
+/** Language switch for diners. Sits in the menu's top bar, shows each language
+ *  in its own script (a Kannada speaker looks for "ಕನ್ನಡ", not "Kannada"), and
+ *  persists the choice. Only the app's own wording changes — dish names are
+ *  the restaurant's data. */
+export function LanguagePicker() {
+  const [lang, setL] = useState<Lang>(getLang);
+  const [open, setOpen] = useState(false);
+  const current = LANGS.find((l) => l.key === lang) ?? LANGS[0];
+  return (
+    <span style={{ position: 'relative' }}>
+      <button
+        className="chip"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-label="Change language"
+        onClick={() => setOpen((o) => !o)}
+      >
+        {current.native}
+      </button>
+      {open && (
+        <span
+          role="listbox"
+          style={{
+            position: 'absolute', top: '100%', right: 0, marginTop: 6, zIndex: 40,
+            background: 'var(--surface)', border: '1px solid var(--line-strong)',
+            borderRadius: 12, padding: 4, minWidth: 128,
+            boxShadow: '0 12px 30px rgba(0,0,0,0.14)', display: 'block',
+          }}
+        >
+          {LANGS.map((l) => (
+            <button
+              key={l.key}
+              role="option"
+              aria-selected={l.key === lang}
+              className="chip"
+              style={{ display: 'block', width: '100%', textAlign: 'left', border: 0, marginBottom: 2 }}
+              onClick={() => { setLang(l.key); setL(l.key); setOpen(false); }}
+            >
+              {l.native}
+              {l.key === lang ? ' ✓' : ''}
+            </button>
+          ))}
+        </span>
+      )}
+    </span>
   );
 }
