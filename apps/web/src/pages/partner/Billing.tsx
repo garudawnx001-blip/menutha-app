@@ -13,8 +13,11 @@ interface BillDraft {
   orders: PortalOrder[];
 }
 
-   *  Everything still goes through the browser's own print dialog, so any
-   *  installed printer — laser, inkjet or thermal — works unchanged. */
+/** Paper formats a restaurant actually owns. @page accepts only one active
+ *  size per document, so the chosen one is written into a dedicated <style>
+ *  immediately before printing rather than shipped as three dead rules.
+ *  Everything still goes through the browser's own print dialog, so any
+ *  installed printer — laser, inkjet or thermal — works unchanged. */
 const PRINT_FORMATS = {
   a4:   { label: 'A4 sheet',  page: 'size: A4; margin: 12mm;',        cls: 'fmt-a4' },
   mm80: { label: '80mm roll', page: 'size: 80mm auto; margin: 3mm;',  cls: 'fmt-80' },
@@ -140,9 +143,6 @@ export function Billing() {
     } catch (e: any) { setError(e?.message ?? 'Could not mark the bill paid.'); }
     finally { setBusy(false); }
   };
-  /** Paper formats a restaurant actually owns. @page accepts only one active
-   *  size per document, so the chosen one is written into a dedicated <style>
-   *  immediately before printing rather than shipped as three dead rules.
   useEffect(() => {
     if (!printing) return;
     const id = 'menutha-print-format';
