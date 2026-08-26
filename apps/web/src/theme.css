@@ -815,3 +815,85 @@ input.code-input::placeholder { color: var(--text-dim); }
   border-top: 1px dashed var(--line);
   margin-top: -4px;
 }
+
+/* ── Printable table QR cards ───────────────────────────────────────────────
+   Table tents that a restaurant is willing to put on a table. Each card takes
+   a deterministic accent from a small curated palette, keyed off the table
+   label: cards stay in the brand family but are visibly distinct, so a stack
+   of them can be sorted by eye. print-color-adjust keeps the colour when the
+   browser would otherwise strip backgrounds for printing. */
+.qr-card {
+  position: relative;
+  background: #FFFDF8;
+  border: 1px solid #E7DECC;
+  border-radius: 18px;
+  padding: 26px 22px 20px;
+  text-align: center;
+  page-break-inside: avoid;
+  break-inside: avoid;
+  overflow: hidden;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+/* The accent band and the corner rules are what make it read as printed
+   stationery rather than a screenshot of a box. */
+.qr-card::before {
+  content: '';
+  position: absolute; inset: 0 0 auto 0; height: 6px;
+  background: var(--card-accent, #D97757);
+}
+.qr-card::after {
+  content: '';
+  position: absolute; inset: auto 0 0 0; height: 1px;
+  background: #E7DECC;
+}
+.qr-card .qr-eyebrow {
+  font-size: 9.5px; font-weight: 800; letter-spacing: 0.22em;
+  text-transform: uppercase; color: var(--card-accent, #D97757);
+}
+.qr-card .qr-house {
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 17px; font-weight: 700; color: #1C1A15;
+  margin-top: 6px; line-height: 1.25;
+}
+/* The table number is the card's identity — large, and the first thing the
+   eye lands on when the cards are stacked. */
+.qr-card .qr-table {
+  display: inline-block;
+  margin: 12px 0 14px;
+  padding: 5px 18px;
+  border-radius: 999px;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 22px; font-weight: 700; letter-spacing: 0.01em;
+  color: #FFFDF8;
+  background: var(--card-accent, #D97757);
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+.qr-card .qr-well {
+  display: inline-block;
+  padding: 12px;
+  border: 1px solid #EDE4D4;
+  border-radius: 14px;
+  background: #fff;
+}
+.qr-card .qr-cta {
+  font-weight: 700; font-size: 15px; color: #1C1A15; margin-top: 15px;
+}
+.qr-card .qr-steps {
+  font-size: 11.5px; color: #6B6557; margin-top: 5px; line-height: 1.55;
+}
+.qr-card .qr-foot {
+  font-size: 9px; letter-spacing: 0.16em; text-transform: uppercase;
+  color: #A79C86; margin-top: 12px;
+}
+.qr-sheet {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 22px;
+}
+@media print {
+  /* Two across on A4 with room to cut, and never a card split across pages. */
+  .qr-sheet { grid-template-columns: 1fr 1fr; gap: 16px; }
+  .qr-card { border-color: #DDD2BC; }
+}

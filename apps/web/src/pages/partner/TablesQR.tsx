@@ -29,6 +29,25 @@ const ORDER_BASE = (
  *  refuse to open a 404, which /scan/<token> used to return. */
 const qrLink = (token: string) => `${ORDER_BASE}/scan.html?t=${encodeURIComponent(token)}`;
 
+/** A deterministic accent per table, from a curated in-brand palette. The
+ *  point is practical, not decorative: a printed stack of table tents is
+ *  otherwise identical apart from a small label, and staff have to read every
+ *  one to sort them. Same label always yields the same colour, so a reprinted
+ *  card matches the one already on the table. */
+const CARD_ACCENTS = [
+  '#D97757', // terracotta — the house colour
+  '#1B5E3F', // forest
+  '#C9A04E', // gold
+  '#9B4B3F', // clay
+  '#3E6B63', // teal
+  '#8A5A83', // plum
+];
+function accentFor(label: string) {
+  let h = 0;
+  for (let i = 0; i < label.length; i++) h = (h * 31 + label.charCodeAt(i)) >>> 0;
+  return CARD_ACCENTS[h % CARD_ACCENTS.length];
+}
+
 function QrImg({ token, size = 132 }: { token: string; size?: number }) {
   const [src, setSrc] = useState('');
   useEffect(() => {
@@ -134,18 +153,21 @@ export function TablesQR() {
 
       {printTables && (
         <div className="printable">
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 24 }}>
+          <div className="qr-sheet">
             {printTables.map((t) => (
-              <div key={t.id} style={{ border: '2px solid #E7DECC', borderRadius: 20, padding: 24, textAlign: 'center', pageBreakInside: 'avoid' }}>
-                <p style={{ fontFamily: 'Georgia, serif', fontSize: 30, fontWeight: 700 }}>
-                  <span style={{ color: '#1B5E3F' }}>menu</span>tha
+              <div key={t.id} className="qr-card" style={{ ['--card-accent' as any]: accentFor(t.label) }}>
+                <p className="qr-eyebrow">Scan · Order · Relax</p>
+                <p className="qr-house">{restaurant.name}</p>
+                <span className="qr-table">{t.is_parcel ? 'Takeaway' : t.label}</span>
+                <div>
+                  <span className="qr-well"><QrImg token={t.qr_token} size={200} /></span>
+                </div>
+                <p className="qr-cta">Point your camera here</p>
+                <p className="qr-steps">
+                  The menu opens straight away — browse, order,<br />
+                  and pay from your phone. No app to install.
                 </p>
-                <p style={{ color: '#6B6557', fontSize: 14, margin: '2px 0 14px' }}>{restaurant.name} · {t.label}</p>
-                <QrImg token={t.qr_token} size={220} />
-                <p style={{ fontWeight: 700, fontSize: 16, marginTop: 14 }}>Scan to see the menu & order</p>
-                <p style={{ color: '#C9A04E', fontSize: 10.5, letterSpacing: 2, marginTop: 8 }}>
-                  NO APP · NO SIGN-UP · POWERED BY MENUTHA
-                </p>
+                <p className="qr-foot">Powered by Menutha</p>
               </div>
             ))}
           </div>
