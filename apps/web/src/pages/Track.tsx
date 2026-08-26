@@ -1,6 +1,6 @@
-/** Live order tracking — timeline Placed → Being cooked → Ready →
- *  Served, refreshed by polling get_order_status (guest-safe; realtime RLS
- *  hides guest rows, so polling is the reliable channel). Handles cancelled. */
+/** The diner's order screen — confirmation, what they ordered, and the pay
+ *  section. Deliberately NOT a kitchen-status timeline: see the note in the
+ *  render below. Polls get_order_status for cancellation and payment state. */
 import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import QRCode from 'qrcode';
@@ -10,26 +10,7 @@ import type { OrderView } from '../lib/types';
 import { inr } from '../lib/types';
 import { useStore } from '../store';
 import { Spinner, Wordmark } from '../components';
-import { useT } from '../lib/i18n';
 
-/** Dine-in, not delivery: the diner is already sitting at the table, so the
- *  courier-style five-stage timeline ("accepted", "on its way to you") was both
- *  jargon and the wrong metaphor. Four honest states, plainly worded. The
- *  kitchen's own statuses are unchanged — only the diner's wording is. */
-const stepsFor = (t: (k: string) => string) => [
-  { key: 'placed', title: t('track.placed'), body: t('track.placedBody') },
-  { key: 'preparing', title: t('track.cooking'), body: t('track.cookingBody') },
-  { key: 'ready', title: t('track.ready'), body: t('track.readyBody') },
-  { key: 'served', title: t('track.served'), body: t('track.servedBody') },
-];
-
-const STAGE_INDEX: Record<string, number> = {
-  placed: 0,
-  accepted: 0,
-  preparing: 1,
-  ready: 2,
-  served: 3,
-};
 
 /** Pay the restaurant directly: dynamic UPI QR from THEIR VPA, optional card
  *  checkout on THEIR gateway, or cash at the counter. Zero platform fees. */
@@ -125,8 +106,6 @@ function PaymentPanel({ order, demo, onChanged }: { order: OrderView; demo?: boo
 
 export function Track() {
   const { id = '' } = useParams();
-  const t = useT();
-  const STEPS = stepsFor(t);
   const nav = useNavigate();
   const { session } = useStore();
   const [order, setOrder] = useState<OrderView | null>(null);
@@ -164,7 +143,6 @@ export function Track() {
 
   const o = order!;
   const cancelled = o.status === 'cancelled';
-  const stage = STAGE_INDEX[o.status] ?? 0;
   const done = o.status === 'served';
 
   return (
@@ -191,18 +169,32 @@ export function Track() {
           </p>
         </div>
       ) : (
-        <div className="glass" style={{ padding: '22px 20px', marginTop: 18 }}>
-          <div className="timeline">
-            {STEPS.map((s, i) => {
-              const cls = i < stage ? 'step done' : i === stage ? (done ? 'step done' : 'step current') : 'step pending';
-              return (
-                <div key={s.key} className={cls}>
-                  <span className="dot" />
-                  <h4>{s.title}</h4>
-                  <p>{s.body}</p>
-                </div>
-              );
-            })}
+        <div className="glass" style={{ padding: '20px', marginTop: 18 }}>
+          {/* Order confirmed + what was ordered. The kitchen's stage-by-stage
+              status was removed on the client's instruction: the diner is
+              sitting at the table and can see their food arrive, so a
+              Placed/Cooking/Ready/Served timeline was theatre that invited
+              "why is it still on Preparing?" questions at the counter. The
+              kitchen still runs those statuses on their own board. */}
+          <p style={{ fontSize: 34, lineHeight: 1 }} aria-hidden>✓</p>
+          <h2 style={{ fontSize: 21, fontWeight: 700, marginTop: 8 }}>
+            Order confirmed
+          </h2>
+          <p className="muted" style={{ fontSize: 13.5, marginTop: 4 }}>
+            The kitchen has it. Your food will be brought to
+            {o.is_parcel ? ' the counter' : ` ${session?.table.label ?? 'your table'}`}.
+          </p>
+
+          <div style={{ marginTop: 14, borderTop: '1px solid var(--line)', paddingTop: 10 }}>
+            {(o.items ?? []).map((it, i) => (
+              <div key={i} className="bill-row" style={{ fontSize: 14 }}>
+                <span>{it.qty} × {it.name}</span>
+                <span>{inr(it.unit_price * it.qty)}</span>
+              </div>
+            ))}
+            {o.notes && (
+              <p className="dim" style={{ fontSize: 12.5, fontStyle: 'italic', marginTop: 6 }}>“{o.notes}”</p>
+            )}
           </div>
         </div>
       )}

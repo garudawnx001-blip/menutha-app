@@ -897,3 +897,33 @@ input.code-input::placeholder { color: var(--text-dim); }
   .qr-sheet { grid-template-columns: 1fr 1fr; gap: 16px; }
   .qr-card { border-color: #DDD2BC; }
 }
+
+/* ── "Already ordered at this table" (menu screen) ───────────────────────────
+   Sits under the filters, above the dish grid: the diner sees what the table
+   has already ordered without leaving the menu, which is what stopped people
+   double-ordering. Collapsed by default so it never competes with the food. */
+.table-so-far-strip {
+  margin: 0 0 12px;
+  padding: 0;
+  overflow: hidden;
+  border-color: var(--primary);
+}
+.tsf-head {
+  width: 100%;
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 11px 14px;
+  background: none; border: 0; cursor: pointer; text-align: left;
+}
+.tsf-head .overline { display: block; margin-bottom: 2px; }
+.tsf-sum { display: block; font-weight: 700; font-size: 14px; }
+.tsf-toggle { color: var(--text-muted); font-size: 13px; }
+.tsf-body { padding: 0 14px 12px; }
+.tsf-row {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 10px;
+  padding: 7px 0; border-top: 1px dashed var(--line);
+}
+.tsf-row strong { display: block; }
+.tsf-items {
+  display: block; font-size: 12.5px; color: var(--text-muted);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}

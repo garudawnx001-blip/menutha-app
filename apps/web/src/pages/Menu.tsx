@@ -9,6 +9,7 @@ import { calcBill, inr } from '../lib/types';
 import { useStore } from '../store';
 import { IdentityGate, ItemSheet, LanguagePicker, Spinner, Stepper, VegMark, Wordmark } from '../components';
 import { useT } from '../lib/i18n';
+import { TableSoFar } from './TableSoFar';
 
 export function Menu() {
   const nav = useNavigate();
@@ -202,6 +203,10 @@ export function Menu() {
           ))}
         </div>
       </div>
+
+      {/* What the table has already ordered — on the menu itself, because
+          leaving to the bill screen to check is what caused double-ordering. */}
+      {!session.demo && !session.table.is_parcel && <TableSoFar session={session} />}
 
       {items === null && !failed && <Spinner label="Fetching the live menu…" />}
       {failed && (
