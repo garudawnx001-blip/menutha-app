@@ -26,6 +26,23 @@ interface PlanState {
   addons: string[];
 }
 
+/** Billing periods. The discounts are a commercial decision, not a technical
+ *  one — they live here as one line each so they can be changed without
+ *  touching anything else. Checkout still runs monthly: Razorpay is not wired
+ *  for longer terms yet, so the longer periods are quoted honestly and settled
+ *  by invoice rather than pretending the button does something it doesn't. */
+const PERIODS = [
+  { key: 'monthly', label: 'Monthly', months: 1, discount: 0 },
+  { key: 'half', label: '6 months', months: 6, discount: 0.10 },
+  { key: 'annual', label: 'Annual', months: 12, discount: 0.20 },
+] as const;
+type PeriodKey = (typeof PERIODS)[number]['key'];
+
+/** Price for a whole term, rounded to the rupee. */
+function termPrice(monthly: number, months: number, discount: number) {
+  return Math.round(monthly * months * (1 - discount));
+}
+
 const FEATURE_LABELS: Record<string, string> = {
   qr_ordering: 'QR ordering & billing',
   dynamic_menu: 'Dynamic menu',
@@ -54,6 +71,7 @@ export function PlanScreen() {
   const [state, setState] = useState<PlanState | null>(null);
   const [history, setHistory] = useState<{ event_type: string; processed_at: string }[]>([]);
   const [busyPlan, setBusyPlan] = useState('');
+  const [period, setPeriod] = useState<PeriodKey>('monthly');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
 
@@ -182,15 +200,45 @@ export function PlanScreen() {
       {error && <p style={{ color: 'var(--error)', fontSize: 14, marginTop: 12 }}>{error}</p>}
 
       <h2 className="cat-heading">Plans</h2>
+      {/* Billing period. Longer terms are quoted at a discount; monthly is the
+          only one the gateway can take today, so the others say so plainly
+          rather than dropping the diner into a monthly checkout. */}
+      <div className="seg" style={{ width: 'fit-content', marginBottom: 12 }}>
+        {PERIODS.map((pd) => (
+          <button
+            key={pd.key}
+            className={period === pd.key ? 'seg-btn active' : 'seg-btn'}
+            onClick={() => setPeriod(pd.key)}
+          >
+            {pd.label}{pd.discount > 0 ? ` · save ${Math.round(pd.discount * 100)}%` : ''}
+          </button>
+        ))}
+      </div>
       <div className="menu-grid">
         {plans.filter((p) => p.kind === 'tier').map((p) => {
           const isCurrent = state?.plan_tier === p.id && ent?.state === 'active';
+          const pd = PERIODS.find((x) => x.key === period)!;
+          const term = termPrice(p.price_inr, pd.months, pd.discount);
+          const perMonth = Math.round(term / pd.months);
+          const saved = p.price_inr * pd.months - term;
           return (
             <div key={p.id} className="glass" style={{ padding: 18, display: 'flex', flexDirection: 'column', gap: 10, borderColor: isCurrent ? 'var(--primary)' : undefined }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
                 <h3 className="display" style={{ fontSize: 21 }}>{p.name}</h3>
-                <span style={{ fontWeight: 700, color: 'var(--primary)' }}>{inr(p.price_inr)}<span className="dim" style={{ fontSize: 12 }}>/mo</span></span>
+                <span style={{ textAlign: 'right' }}>
+                  <span style={{ fontWeight: 700, color: 'var(--primary)' }}>
+                    {inr(perMonth)}<span className="dim" style={{ fontSize: 12 }}>/mo</span>
+                  </span>
+                  {pd.months > 1 && p.price_inr > 0 && (
+                    <span className="dim" style={{ display: 'block', fontSize: 11.5 }}>
+                      {inr(term)} every {pd.months} months
+                    </span>
+                  )}
+                </span>
               </div>
+              {pd.months > 1 && saved > 0 && (
+                <span className="badge gold" style={{ alignSelf: 'flex-start' }}>Saves {inr(saved)}</span>
+              )}
               <ul style={{ listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 6 }}>
                 {p.features.map((f) => (
                   <li key={f} className="muted" style={{ fontSize: 13.5 }}>✓ {FEATURE_LABELS[f] ?? f}</li>
@@ -200,6 +248,15 @@ export function PlanScreen() {
                 <button className="btn btn-ghost btn-block" disabled={busyPlan !== ''} onClick={() => callFn('cancel', p.id)}>
                   {busyPlan === p.id ? 'Working…' : 'Current plan · Cancel at cycle end'}
                 </button>
+              ) : pd.months > 1 ? (
+                <>
+                  <a className="btn btn-ghost btn-block" href="/contact/">
+                    Ask us about {pd.label.toLowerCase()} billing
+                  </a>
+                  <p className="dim" style={{ fontSize: 11.5 }}>
+                    Longer terms are invoiced directly — online checkout is monthly for now.
+                  </p>
+                </>
               ) : (
                 <button className="btn btn-primary btn-block" disabled={busyPlan !== ''} onClick={() => callFn('subscribe', p.id)}>
                   {busyPlan === p.id ? 'Opening checkout…' : (ent?.state === 'active' ? `Switch to ${p.name}` : `Choose ${p.name}`)}
