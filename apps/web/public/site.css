@@ -515,3 +515,26 @@ body::before {
    `padding: 14px 0` were zeroing HORIZONTAL padding, flushing headings/nav to
    the screen edge. Force the container's side padding back on every .wrap. */
 .wrap { padding-left: 22px !important; padding-right: 22px !important; }
+
+/* ── Touch targets ──────────────────────────────────────────────────────────
+   Measured on a 360px viewport: every nav link rendered 22px tall, well under
+   the 44px minimum both Apple and Material specify. Inline links get a
+   vertical hit area without changing where the text sits, so the visual
+   rhythm of the nav is untouched. */
+.nav-links a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+}
+.nav-links a.btn { min-height: 44px; }
+
+@media (max-width: 720px) {
+  /* Footer link lists are read one item at a time on a phone; give each row
+     a real hit area rather than relying on the 14px text box. */
+  footer a,
+  .foot-col a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 40px;
+  }
+}

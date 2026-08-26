@@ -196,7 +196,14 @@ img { max-width: 100%; display: block; }
   display: flex;
   gap: 8px;
   overflow-x: auto;
+  /* The 2px of horizontal padding keeps focus rings from being clipped inside
+     the scroll container, but it also pushed every chip 2px right of the dish
+     cards below — measured at 360, 390, 412, 768, 1024 and 1440, the only
+     alignment deviation on the page. The negative inline margin cancels it, so
+     chips sit flush on the same grid line as the cards while the scroller keeps
+     its breathing room. */
   padding: 4px 2px 10px;
+  margin-inline: -2px;
   scrollbar-width: none;
 }
 .chip-row::-webkit-scrollbar { display: none; }
