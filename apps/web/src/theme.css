@@ -746,3 +746,24 @@ input.code-input::placeholder { color: var(--text-dim); }
 @media (prefers-reduced-motion: reduce) {
   .dish .add-btn { transition: none !important; }
 }
+
+/* An order that landed while this board was open. The highlight persists
+   until someone accepts, cancels or settles it, so a ticket that arrived
+   during a busy stretch can't quietly blend into the queue. */
+.ticket-new {
+  border-color: var(--primary) !important;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 22%, transparent);
+  animation: ticket-in 0.5s ease;
+}
+@keyframes ticket-in {
+  from { transform: translateY(-4px); opacity: 0.5; }
+  to   { transform: none; opacity: 1; }
+}
+.new-badge {
+  font-size: 10.5px; font-weight: 800; letter-spacing: 0.06em;
+  color: #fff; background: var(--primary);
+  border-radius: 999px; padding: 3px 8px; line-height: 1;
+}
+@media (prefers-reduced-motion: reduce) {
+  .ticket-new { animation: none; }
+}

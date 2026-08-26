@@ -15,9 +15,16 @@ import { Spinner, VegMark } from '../../components';
 const LIVE = ['placed', 'accepted', 'preparing', 'ready'];
 const SOUND_KEY = 'menutha-portal:sound';
 
+/** One AudioContext for the page. A fresh one per chime leaks contexts —
+ *  browsers cap them at around six, after which the alert goes silent for the
+ *  rest of the shift. Contexts also start suspended until a user gesture, so
+ *  resume() is attempted on every play. */
+let audioCtx: AudioContext | null = null;
 function chime() {
   try {
-    const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+    if (!audioCtx) audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+    const ctx = audioCtx;
+    if (ctx.state === 'suspended') ctx.resume().catch(() => {});
     const play = (freq: number, at: number) => {
       const o = ctx.createOscillator();
       const g = ctx.createGain();
@@ -32,6 +39,28 @@ function chime() {
   } catch { /* audio blocked until first interaction — fine */ }
 }
 
+const canNotify = () => typeof window !== 'undefined' && 'Notification' in window;
+
+/** Everything the counter needs without opening the order: who, where, what,
+ *  and how much. The old alert carried only the table and a truncated item
+ *  list. */
+function notifyOrder(o: PortalOrder) {
+  if (!canNotify() || Notification.permission !== 'granted') return;
+  const where = o.is_parcel ? 'Parcel' : o.table_label ?? 'Table';
+  const who = (o.guest_name ?? '').trim();
+  const items = (o.items ?? []).map((i) => `${i.qty}× ${i.name}`).join(', ');
+  const count = (o.items ?? []).reduce((a, i) => a + Number(i.qty || 0), 0);
+  const head = [who, `${count} item${count === 1 ? '' : 's'}`, inr(Number(o.total || 0))]
+    .filter(Boolean).join(' · ');
+  try {
+    new Notification(`New order · ${where} · #${o.order_no}`, {
+      body: `${head}\n${items}${o.notes ? `\nNote: ${o.notes}` : ''}`,
+      tag: o.id,                 // one notification per order, never duplicated
+      requireInteraction: true,  // stays up until someone at the counter looks
+    });
+  } catch { /* some browsers reject options; the chime still fired */ }
+}
+
 export function OrdersBoard() {
   const { restaurant, role } = usePartner();
   const [orders, setOrders] = useState<PortalOrder[] | null>(null);
@@ -39,7 +68,16 @@ export function OrdersBoard() {
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
   const [sound, setSound] = useState(() => localStorage.getItem(SOUND_KEY) !== 'off');
-  const prevCount = useRef(0);
+  // Ids that arrived while this board was open — highlighted until acted on.
+  const [justIn, setJustIn] = useState<Set<string>>(new Set());
+  const [notifyPerm, setNotifyPerm] = useState<string>(
+    () => (typeof window !== 'undefined' && 'Notification' in window ? Notification.permission : 'unsupported'),
+  );
+  // Identity, not count. The old check was `live.length > prevCount`, so an
+  // order arriving in the same window as another being served left the count
+  // unchanged and the counter got no alert at all — the exact "we don't get
+  // notified" complaint. Tracking ids catches every arrival.
+  const seen = useRef<Set<string> | null>(null);
 
   const load = async () => {
     try {
@@ -47,16 +85,21 @@ export function OrdersBoard() {
       const served = (await fetchLiveOrders(restaurant.id, ['served']))
         .filter((o) => new Date(o.placed_at).toDateString() === new Date().toDateString())
         .reverse();
-      if (live.length > prevCount.current) {
-        if (localStorage.getItem(SOUND_KEY) !== 'off') chime();
-        if (Notification?.permission === 'granted') {
-          const newest = live[live.length - 1];
-          new Notification('New order — ' + (newest?.table_label ?? 'table'), {
-            body: (newest?.items ?? []).map((i) => `${i.qty}× ${i.name}`).join(', ').slice(0, 90),
-          });
+
+      if (seen.current === null) {
+        // First load seeds the baseline: whatever is already on the board is
+        // not "new", so opening the page doesn't fire a burst of alerts.
+        seen.current = new Set(live.map((o) => o.id));
+      } else {
+        const fresh = live.filter((o) => !seen.current!.has(o.id));
+        if (fresh.length) {
+          if (localStorage.getItem(SOUND_KEY) !== 'off') chime();
+          fresh.forEach(notifyOrder);
+          setJustIn((prev) => new Set([...prev, ...fresh.map((o) => o.id)]));
         }
+        live.forEach((o) => seen.current!.add(o.id));
       }
-      prevCount.current = live.length;
+
       setOrders(live);
       setServedToday(served);
       setError('');
@@ -67,9 +110,6 @@ export function OrdersBoard() {
 
   useEffect(() => {
     load();
-    if ('Notification' in window && Notification.permission === 'default') {
-      Notification.requestPermission().catch(() => {});
-    }
     const channel = subscribeOrders(restaurant.id, () => load());
     const t = setInterval(load, 30000); // safety net alongside realtime
     return () => { channel.unsubscribe(); clearInterval(t); };
@@ -79,6 +119,7 @@ export function OrdersBoard() {
     const next = NEXT_STATUS[o.status];
     if (!next) return;
     setBusy(o.id);
+    setJustIn((prev) => { const n = new Set(prev); n.delete(o.id); return n; });
     try { await advanceOrder(o.id, next); await load(); }
     catch (e: any) { setError(e?.message ?? 'Update failed.'); }
     finally { setBusy(''); }
@@ -87,6 +128,7 @@ export function OrdersBoard() {
   const cancel = async (o: PortalOrder) => {
     if (!confirm(`Cancel order #${o.order_no}?`)) return;
     setBusy(o.id);
+    setJustIn((prev) => { const n = new Set(prev); n.delete(o.id); return n; });
     try { await advanceOrder(o.id, 'cancelled'); await load(); }
     catch (e: any) { setError(e?.message ?? 'Cancel failed.'); }
     finally { setBusy(''); }
@@ -94,6 +136,7 @@ export function OrdersBoard() {
 
   const quickPaid = async (o: PortalOrder, mode: 'cash' | 'upi_qr') => {
     setBusy(o.id);
+    setJustIn((prev) => { const n = new Set(prev); n.delete(o.id); return n; });
     try {
       // A diner-initiated pending payment just needs the one-tap confirm;
       // otherwise settle via a single-order bill.
@@ -129,17 +172,39 @@ export function OrdersBoard() {
             {orders.length ? `${orders.length} active` : 'All clear'}
           </h1>
         </div>
-        <button
-          className={sound ? 'chip active' : 'chip'}
-          onClick={() => {
-            const next = !sound;
-            setSound(next);
-            localStorage.setItem(SOUND_KEY, next ? 'on' : 'off');
-            if (next) chime();
-          }}
-        >
-          {sound ? '🔔 Sound on' : '🔕 Sound off'}
-        </button>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {/* Browsers routinely ignore a permission prompt fired on page load,
+              which left desktop alerts silently off. An explicit button is a
+              user gesture, so the prompt actually shows. */}
+          {notifyPerm !== 'granted' && (
+            <button
+              className="chip"
+              onClick={async () => {
+                if (!canNotify()) { setError('This browser cannot show desktop alerts.'); return; }
+                try {
+                  const p = await Notification.requestPermission();
+                  setNotifyPerm(p);
+                  if (p === 'denied') {
+                    setError('Alerts are blocked for this site — allow notifications in the browser’s site settings.');
+                  }
+                } catch { /* ignore */ }
+              }}
+            >
+              🔔 Enable alerts
+            </button>
+          )}
+          <button
+            className={sound ? 'chip active' : 'chip'}
+            onClick={() => {
+              const next = !sound;
+              setSound(next);
+              localStorage.setItem(SOUND_KEY, next ? 'on' : 'off');
+              if (next) chime();   // doubles as the gesture that unlocks audio
+            }}
+          >
+            {sound ? '🔔 Sound on' : '🔕 Sound off'}
+          </button>
+        </div>
       </div>
       {error && <p style={{ color: 'var(--error)', fontSize: 14, marginBottom: 10 }}>{error}</p>}
 
@@ -169,11 +234,23 @@ export function OrdersBoard() {
 
       <div className="menu-grid">
         {orders.map((o) => (
-          <div key={o.id} className="ticket glass" style={{ borderColor: o.status === 'placed' ? 'var(--gold)' : undefined }}>
+          <div
+            key={o.id}
+            className={justIn.has(o.id) ? 'ticket glass ticket-new' : 'ticket glass'}
+            style={{ borderColor: o.status === 'placed' ? 'var(--gold)' : undefined }}
+          >
             <div className="ticket-head">
               <strong>#{o.order_no} · {o.is_parcel ? '📦 Parcel' : o.table_label ?? 'Table'}</strong>
-              <span className={`status-chip status-${o.status}`}>{o.status}</span>
+              <span style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                {justIn.has(o.id) && <span className="new-badge">NEW</span>}
+                <span className={`status-chip status-${o.status}`}>{o.status}</span>
+              </span>
             </div>
+            {/* Who ordered — the counter needs a name to call out, and it was
+                only visible after opening the bill. */}
+            {(o.guest_name || '').trim() && (
+              <p className="dim" style={{ fontSize: 12.5, marginTop: 2 }}>{o.guest_name}</p>
+            )}
             <div className="ticket-items">
               {o.items.map((it, i) => (
                 <div key={i} style={{ display: 'flex', gap: 6, alignItems: 'center' }}>

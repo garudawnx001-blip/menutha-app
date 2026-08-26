@@ -55,6 +55,8 @@ export interface PortalOrder {
   notes?: string | null;
   placed_at: string;
   table_label?: string;
+  guest_name?: string | null;
+  guest_phone?: string | null;
   items: { name: string; qty: number; unit_price: number; is_veg?: boolean }[];
   paid?: boolean;
   /** Diner-initiated payment awaiting one-tap staff confirmation. */
@@ -64,7 +66,7 @@ export interface PortalOrder {
 export async function fetchLiveOrders(restaurantId: string, statuses: string[]): Promise<PortalOrder[]> {
   const { data, error } = await supabase
     .from('food_order')
-    .select('id, order_no, status, is_parcel, subtotal, packing_charge, gst_amount, total, notes, placed_at, dining_table(label), order_item(name, qty, unit_price, is_veg), payment(id, status, provider)')
+    .select('id, order_no, status, is_parcel, subtotal, packing_charge, gst_amount, total, notes, placed_at, guest_name, guest_phone, dining_table(label), order_item(name, qty, unit_price, is_veg), payment(id, status, provider)')
     .eq('restaurant_id', restaurantId)
     .in('status', statuses)
     .order('placed_at', { ascending: true });
