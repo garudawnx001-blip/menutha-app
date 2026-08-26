@@ -7,11 +7,11 @@ import { fetchMenu, subscribeMenu } from '../lib/api';
 import type { CartLine, MenuItem } from '../lib/types';
 import { calcBill, inr } from '../lib/types';
 import { useStore } from '../store';
-import { IdentityGate, ItemSheet, Spinner, VegMark, Wordmark } from '../components';
+import { IdentityGate, ItemSheet, Spinner, Stepper, VegMark, Wordmark } from '../components';
 
 export function Menu() {
   const nav = useNavigate();
-  const { session, cart, addLine, setGuest } = useStore();
+  const { session, cart, addLine, setQty, setGuest } = useStore();
   const [items, setItems] = useState<MenuItem[] | null>(null);
   const [failed, setFailed] = useState(false);
   // Filters persist while browsing (cart ↔ menu round-trips, reloads).
@@ -216,32 +216,73 @@ export function Menu() {
         <section key={cat}>
           <h2 className="cat-heading">{cat}</h2>
           <div className="menu-grid">
-            {dishes.map((d) => (
-              <button
-                key={d.id}
-                className="dish glass"
-                onClick={() => !session.orderingDisabled && setOpen(d)}
-              >
-                {d.photo_url ? (
-                  <img className="dish-photo" src={d.photo_url} alt="" loading="lazy" />
-                ) : (
-                  <span className="dish-photo placeholder" aria-hidden>🍛</span>
-                )}
-                <span style={{ flex: 1 }}>
-                  <span style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                    <VegMark veg={d.is_veg} />
-                    <h3>{d.name}</h3>
+            {dishes.map((d) => {
+              // One tap to add, exactly like a shopping app: a plain dish goes
+              // straight into the cart and the button becomes a qty stepper.
+              // Dishes with options still open the sheet — a choice has to be made.
+              const li = cart.findIndex(
+                (l) => l.menuItemId === d.id && l.optionIds.length === 0,
+              );
+              const qty = li >= 0 ? cart[li].qty : 0;
+              const quickAdd = () => {
+                addLine({
+                  menuItemId: d.id, name: d.name, price: d.price, qty: 1,
+                  isVeg: d.is_veg, optionIds: [], optionLabels: [], optionDelta: 0,
+                });
+                setToast(`${d.name} added`);
+                window.setTimeout(() => setToast(''), 1400);
+              };
+              return (
+                <div
+                  key={d.id}
+                  className="dish glass"
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => !session.orderingDisabled && setOpen(d)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      if (!session.orderingDisabled) setOpen(d);
+                    }
+                  }}
+                >
+                  {d.photo_url ? (
+                    <img className="dish-photo" src={d.photo_url} alt="" loading="lazy" />
+                  ) : (
+                    <span className="dish-photo placeholder" aria-hidden>🍛</span>
+                  )}
+                  <span style={{ flex: 1 }}>
+                    <span style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                      <VegMark veg={d.is_veg} />
+                      <h3>{d.name}</h3>
+                    </span>
+                    {d.description && <span className="desc">{d.description}</span>}
+                    <span style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
+                      <span className="price">{inr(d.price)}</span>
+                      {!session.orderingDisabled && (
+                        <span onClick={(e) => e.stopPropagation()}>
+                          {d.options.length ? (
+                            <button className="add-btn" onClick={() => setOpen(d)}>
+                              Choose
+                            </button>
+                          ) : qty > 0 ? (
+                            <Stepper qty={qty} onChange={(q) => setQty(li, q)} />
+                          ) : (
+                            <button
+                              className="add-btn"
+                              onClick={quickAdd}
+                              aria-label={`Add ${d.name}`}
+                            >
+                              Add
+                            </button>
+                          )}
+                        </span>
+                      )}
+                    </span>
                   </span>
-                  {d.description && <span className="desc">{d.description}</span>}
-                  <span style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span className="price">{inr(d.price)}</span>
-                    {!session.orderingDisabled && (
-                      <span className="add-hint">{d.options.length ? 'Customise +' : 'Add +'}</span>
-                    )}
-                  </span>
-                </span>
-              </button>
-            ))}
+                </div>
+              );
+            })}
           </div>
         </section>
       ))}
