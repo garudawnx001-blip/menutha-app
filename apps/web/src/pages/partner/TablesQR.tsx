@@ -7,11 +7,27 @@ import { fetchTables, createTable, removeTable, type PortalTable } from '../../l
 import { usePartner } from './PartnerShell';
 import { Spinner } from '../../components';
 
-const ORDER_BASE =
-  (import.meta.env.VITE_WEB_ORDER_URL as string | undefined) ??
-  'https://worktejachar.github.io/menutha-app/#';
+/** Where a scanned table QR should land. The portal and the diner app are the
+ *  same deployment, so the page's own origin is always right — and it cannot
+ *  drift the way a hardcoded fallback did.
+ *
+ *  It had drifted: VITE_WEB_ORDER_URL is not set in CI, so every QR printed or
+ *  copied from the portal encoded https://worktejachar.github.io/menutha-app/#
+ *  — a host with no GitHub Pages site at all, which is why scanning one showed
+ *  GitHub's own "There isn't a GitHub Pages site here" page. QRs generated in
+ *  the mobile app were unaffected; it passes the real domain in via app config.
+ *
+ *  Any trailing slash or leftover hash-router "#" is stripped so the path joins
+ *  cleanly. */
+const ORDER_BASE = (
+  (import.meta.env.VITE_WEB_ORDER_URL as string | undefined)
+  || (typeof window !== 'undefined' && window.location.origin)
+  || 'https://menutha.com'
+).replace(/\/*#?\/*$/, '');
 
-const qrLink = (token: string) => `${ORDER_BASE}/scan.html?t=${token}`;
+/** scan.html is a real file, so this answers HTTP 200 — phone QR scanners
+ *  refuse to open a 404, which /scan/<token> used to return. */
+const qrLink = (token: string) => `${ORDER_BASE}/scan.html?t=${encodeURIComponent(token)}`;
 
 function QrImg({ token, size = 132 }: { token: string; size?: number }) {
   const [src, setSrc] = useState('');

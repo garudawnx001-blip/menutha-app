@@ -74,6 +74,11 @@ jobs:
           grep -q "The menu is on the table" dist/index.html || { echo "root is not the marketing landing"; exit 1; }
           grep -q "id=\"root\"" dist/404.html || { echo "404 is not the SPA shell"; exit 1; }
           grep -q "id=\"root\"" dist/scan.html || { echo "scan.html is not the SPA shell"; exit 1; }
+          # A QR is printed once and lives on a table for months, so a wrong host
+          # in the bundle is expensive to discover. Fail the build instead.
+          if grep -rq "worktejachar.github.io" dist/assets/ 2>/dev/null; then
+            echo "a github.io host leaked into the bundle - QR links would 404"; exit 1;
+          fi
           echo "CNAME: $(cat dist/CNAME)"
           ls -la dist
 
