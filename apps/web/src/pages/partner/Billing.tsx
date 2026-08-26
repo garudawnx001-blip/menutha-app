@@ -157,8 +157,6 @@ export function Billing() {
     return () => clearTimeout(t);
   }, [printing, fmt]);
 
-  }, [printing]);
-
   if (orders === null) return <Spinner label="Loading unpaid orders…" />;
 
   return (
