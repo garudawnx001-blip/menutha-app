@@ -23,6 +23,8 @@ export function Billing() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [printing, setPrinting] = useState(false);
+  // Which table has its per-person list expanded.
+  const [splitting, setSplitting] = useState<string | null>(null);
 
   const canDiscount = role === 'owner' || role === 'manager';
 
@@ -67,6 +69,40 @@ export function Billing() {
     });
     return 'upi://pay?' + p.toString();
   };
+
+  /** One-tap billing. Previously the only route was: find the table, tap
+   *  "Select all", scroll past the list, tap "Generate bill" — two taps plus a
+   *  scroll for the commonest action in the whole product. billNow takes the
+   *  orders straight to a bill, bypassing the selection step entirely.
+   *  The checkboxes remain for the rare arbitrary subset. */
+  const billNow = async (list: PortalOrder[]) => {
+    if (!list.length || busy) return;
+    setBusy(true); setError('');
+    try {
+      const b = await createBill(restaurant.id, list.map((o) => o.id), 0);
+      setSelected(new Set(list.map((o) => o.id)));
+      setDiscount('');
+      setBill({ ...b, orders: list });
+      const uri = billUpiUri(b.total, b.bill_no);
+      setBillQr(uri
+        ? await QRCode.toDataURL(uri, { margin: 1, width: 380, color: { dark: '#1C1A15', light: '#FFFDF8' } }).catch(() => '')
+        : '');
+    } catch (e: any) { setError(e?.message ?? 'Could not create the bill.'); }
+    finally { setBusy(false); }
+  };
+
+  /** Orders at a table grouped by who ordered, for per-person billing. */
+  const byDiner = (list: PortalOrder[]) => {
+    const g = new Map<string, PortalOrder[]>();
+    for (const o of list) {
+      const key = (o.guest_name ?? '').trim() || 'Guest';
+      if (!g.has(key)) g.set(key, []);
+      g.get(key)!.push(o);
+    }
+    return [...g.entries()];
+  };
+
+  const sumOf = (list: PortalOrder[]) => list.reduce((a, o) => a + Number(o.total || 0), 0);
 
   const generate = async () => {
     if (!chosen.length || busy) return;
@@ -119,19 +155,51 @@ export function Billing() {
         </div>
       )}
 
-      {byTable.map(([tableName, list]) => (
+      {byTable.map(([tableName, list]) => {
+        const diners = byDiner(list);
+        return (
         <section key={tableName}>
-          <h2 className="cat-heading" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-            {tableName}
-            <button className="chip" onClick={() => {
-              const next = new Set(selected);
-              const allIn = list.every((o) => next.has(o.id));
-              list.forEach((o) => (allIn ? next.delete(o.id) : next.add(o.id)));
-              setSelected(next);
-            }}>
-              {list.every((o) => selected.has(o.id)) ? 'Unselect all' : 'Select all'}
+          <h2 className="cat-heading" style={{ marginBottom: 8 }}>{tableName}</h2>
+
+          {/* The two things staff actually want, as full-width primary actions
+              rather than a small "Select all" chip followed by a scroll. Both
+              go straight to a finished bill in one tap. */}
+          <div className="bill-actions">
+            <button className="btn btn-primary" disabled={busy}
+              onClick={() => billNow(list)}>
+              🧾 Bill whole table · {inr(sumOf(list))}
             </button>
-          </h2>
+            {diners.length > 1 && (
+              <button className="btn btn-ghost" disabled={busy}
+                onClick={() => setSplitting((s) => (s === tableName ? null : tableName))}
+                aria-expanded={splitting === tableName}>
+                👥 Split by person ({diners.length})
+              </button>
+            )}
+          </div>
+
+          {splitting === tableName && diners.length > 1 && (
+            <div className="glass" style={{ padding: 12, marginBottom: 10 }}>
+              <p className="overline" style={{ marginBottom: 8 }}>Bill one person</p>
+              {diners.map(([who, theirs]) => (
+                <div key={who} className="row-item">
+                  <span style={{ minWidth: 0 }}>
+                    <strong style={{ fontSize: 14 }}>{who}</strong>
+                    <span className="dim" style={{ display: 'block', fontSize: 12 }}>
+                      {theirs.length} order{theirs.length === 1 ? '' : 's'}
+                    </span>
+                  </span>
+                  <button className="btn btn-primary" style={{ padding: '8px 14px', fontSize: 13 }}
+                    disabled={busy} onClick={() => billNow(theirs)}>
+                    Bill {inr(sumOf(theirs))}
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <details className="pick-some">
+            <summary>Or pick individual orders</summary>
           <div className="glass" style={{ padding: '4px 16px' }}>
             {list.map((o) => (
               <label key={o.id} className="row-item" style={{ cursor: 'pointer' }}>
@@ -151,8 +219,10 @@ export function Billing() {
               </label>
             ))}
           </div>
+          </details>
         </section>
-      ))}
+      );
+      })}
 
       {chosen.length > 0 && !bill && (
         <div className="glass-strong" style={{ padding: 16, marginTop: 16 }}>

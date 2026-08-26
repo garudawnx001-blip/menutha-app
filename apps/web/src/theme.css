@@ -608,12 +608,6 @@ input.code-input::placeholder { color: var(--text-dim); }
 .row-item:last-child { border-bottom: none; }
 
 /* Print: only the printable sheet */
-@media print {
-  body * { visibility: hidden; }
-  .printable, .printable * { visibility: visible; }
-  .printable { position: absolute; inset: 0; padding: 24px; background: #fff; }
-  .portal-nav, .cartbar-wrap { display: none !important; }
-}
 
 /* ── Diet filter chips (Veg green / Non-veg red selected states) ─────────── */
 .diet-chip { gap: 7px; }
@@ -926,4 +920,81 @@ input.code-input::placeholder { color: var(--text-dim); }
 .tsf-items {
   display: block; font-size: 12.5px; color: var(--text-muted);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* ── Billing: the two actions staff actually want ───────────────────────────
+   Billing a table used to mean "Select all" then a scroll then "Generate
+   bill". These go straight to a finished bill in one tap; the checkbox list
+   is demoted into a <details> for the rare arbitrary subset. */
+.bill-actions {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+@media (min-width: 560px) {
+  .bill-actions { grid-template-columns: 2fr 1fr; }
+}
+.bill-actions .btn { padding: 13px 16px; font-size: 14.5px; }
+
+.pick-some { margin-top: 10px; }
+.pick-some > summary {
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text-muted);
+  padding: 6px 2px;
+  list-style: none;
+}
+.pick-some > summary::-webkit-details-marker { display: none; }
+.pick-some > summary::before { content: '▸ '; }
+.pick-some[open] > summary::before { content: '▾ '; }
+.pick-some > summary:hover { color: var(--text); }
+
+/* ── Print ──────────────────────────────────────────────────────────────────
+   The printable node was absolutely positioned at inset:0, which on a second
+   page left content clipped and the margins uneven. Static flow with real
+   page margins prints a clean document that tears off straight, and
+   print-color-adjust keeps the QR and accent bands from being stripped. */
+@page {
+  size: A4;
+  margin: 14mm 12mm;
+}
+@media print {
+  html, body {
+    background: #fff !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+  body * { visibility: hidden; }
+  .printable, .printable * { visibility: visible; }
+  .printable {
+    position: static !important;
+    inset: auto !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    background: #fff !important;
+    color: #000 !important;
+    font-size: 12px;
+    line-height: 1.45;
+  }
+  .printable * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  /* Never split a bill row, a total or a QR block across pages. */
+  .printable .bill-row,
+  .printable img,
+  .printable .qr-card { break-inside: avoid; page-break-inside: avoid; }
+  .printable table { width: 100%; border-collapse: collapse; }
+  .printable td, .printable th { padding: 3px 0; vertical-align: top; }
+  /* Money columns line up on the decimal, which is what makes a bill look
+     professional rather than hand-made. */
+  .printable td:last-child, .printable th:last-child,
+  .printable .bill-row > span:last-child {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+  .portal-nav, .cartbar-wrap, .btn, .chip, .seg, .growth-chart { display: none !important; }
 }
