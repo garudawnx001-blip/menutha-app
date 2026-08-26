@@ -6,9 +6,11 @@ import { fetchGrowth, type GrowthPeriod, type GrowthPoint } from '../../lib/port
 import { inr } from '../../lib/types';
 
 const PERIODS: { key: GrowthPeriod; label: string }[] = [
+  { key: 'day', label: 'Today' },
   { key: 'week', label: 'This week' },
   { key: 'month', label: '30 days' },
   { key: 'year', label: '12 months' },
+  { key: 'custom', label: 'Custom range' },
 ];
 
 /** Compact money for axis labels — ₹1,24,500 is unreadable at 11px. */
@@ -49,6 +51,10 @@ function Bars({ points, metric }: { points: GrowthPoint[]; metric: 'revenue' | '
 
 export function Growth({ restaurantId }: { restaurantId: string }) {
   const [period, setPeriod] = useState<GrowthPeriod>('week');
+  // Default the custom range to the last 7 days so the pickers open populated.
+  const iso = (d: Date) => d.toISOString().slice(0, 10);
+  const [from, setFrom] = useState(() => { const d = new Date(); d.setDate(d.getDate() - 6); return iso(d); });
+  const [to, setTo] = useState(() => iso(new Date()));
   const [metric, setMetric] = useState<'revenue' | 'orders'>('revenue');
   const [points, setPoints] = useState<GrowthPoint[] | null>(null);
   const [error, setError] = useState('');
@@ -56,11 +62,11 @@ export function Growth({ restaurantId }: { restaurantId: string }) {
   useEffect(() => {
     let alive = true;
     setPoints(null); setError('');
-    fetchGrowth(restaurantId, period)
+    fetchGrowth(restaurantId, period, from, to)
       .then((p) => alive && setPoints(p))
       .catch((e: any) => alive && setError(e?.message ?? 'Could not load growth.'));
     return () => { alive = false; };
-  }, [restaurantId, period]);
+  }, [restaurantId, period, from, to]);
 
   const total = (points ?? []).reduce((a, p) => a + p.revenue, 0);
   const count = (points ?? []).reduce((a, p) => a + p.orders, 0);
@@ -92,11 +98,31 @@ export function Growth({ restaurantId }: { restaurantId: string }) {
             )}
           </p>
         </div>
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-          {PERIODS.map((p) => (
-            <button key={p.key} className={period === p.key ? 'chip active' : 'chip'}
-              onClick={() => setPeriod(p.key)}>{p.label}</button>
-          ))}
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+          {/* A dropdown rather than a chip row: five options no longer fit on a
+              phone without wrapping into a second line of clutter. */}
+          <select
+            className="code-input"
+            style={{ padding: '8px 10px', fontSize: 13, width: 'auto' }}
+            value={period}
+            onChange={(e) => setPeriod(e.target.value as GrowthPeriod)}
+            aria-label="Reporting period"
+          >
+            {PERIODS.map((p) => <option key={p.key} value={p.key}>{p.label}</option>)}
+          </select>
+          {period === 'custom' && (
+            <>
+              {/* Native date inputs: a real calendar on every platform, and no
+                  date-picker dependency in the bundle. */}
+              <input type="date" className="code-input" aria-label="From date"
+                style={{ padding: '7px 8px', fontSize: 12.5, width: 'auto' }}
+                value={from} max={to} onChange={(e) => setFrom(e.target.value)} />
+              <span className="dim" style={{ fontSize: 12 }}>to</span>
+              <input type="date" className="code-input" aria-label="To date"
+                style={{ padding: '7px 8px', fontSize: 12.5, width: 'auto' }}
+                value={to} min={from} max={iso(new Date())} onChange={(e) => setTo(e.target.value)} />
+            </>
+          )}
         </div>
       </div>
 

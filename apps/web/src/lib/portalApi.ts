@@ -287,20 +287,44 @@ export async function deleteCategory(id: string) {
 
 // ── Growth ─────────────────────────────────────────────────────────────────
 
-export type GrowthPeriod = 'week' | 'month' | 'year';
+export type GrowthPeriod = 'day' | 'week' | 'month' | 'year' | 'custom';
 
 export interface GrowthPoint { label: string; revenue: number; orders: number }
 
-/** Revenue and order counts bucketed for the growth charts. Cancelled orders
- *  are excluded — they are not sales. Buckets are built in the browser's local
- *  timezone so "today" means the restaurant's today, not UTC's. */
-export async function fetchGrowth(restaurantId: string, period: GrowthPeriod): Promise<GrowthPoint[]> {
+/** Revenue and order counts bucketed for the growth charts.
+ *
+ *  Cancelled orders are excluded — they are not sales. Buckets are built in the
+ *  browser's local timezone so "today" means the restaurant's today, not UTC's.
+ *  Nothing is ever deleted or aggregated away: every bucket is derived from the
+ *  order rows themselves, so any historical range stays queryable for as long
+ *  as the orders exist.
+ *
+ *  `from`/`to` (ISO yyyy-mm-dd) drive the custom range; otherwise the period
+ *  name picks the window.
+ */
+export async function fetchGrowth(
+  restaurantId: string,
+  period: GrowthPeriod,
+  from?: string,
+  to?: string,
+): Promise<GrowthPoint[]> {
   const now = new Date();
-  const start = new Date(now);
-  if (period === 'week') start.setDate(now.getDate() - 6);
-  else if (period === 'month') start.setDate(now.getDate() - 29);
-  else start.setMonth(now.getMonth() - 11, 1);
-  start.setHours(0, 0, 0, 0);
+  let start = new Date(now);
+  let end = new Date(now);
+
+  if (period === 'custom' && from && to) {
+    start = new Date(from + 'T00:00:00');
+    end = new Date(to + 'T23:59:59');
+  } else if (period === 'day') {
+    start.setHours(0, 0, 0, 0);
+  } else if (period === 'week') {
+    start.setDate(now.getDate() - 6);
+  } else if (period === 'month') {
+    start.setDate(now.getDate() - 29);
+  } else {
+    start.setMonth(now.getMonth() - 11, 1);
+  }
+  if (period !== 'custom') start.setHours(0, 0, 0, 0);
 
   const { data, error } = await supabase
     .from('food_order')
@@ -308,29 +332,42 @@ export async function fetchGrowth(restaurantId: string, period: GrowthPeriod): P
     .eq('restaurant_id', restaurantId)
     .neq('status', 'cancelled')
     .gte('placed_at', start.toISOString())
+    .lte('placed_at', end.toISOString())
     .order('placed_at');
   if (error) throw error;
 
-  // Pre-seed every bucket so quiet days render as gaps in the trend rather
-  // than disappearing and making the chart lie about the shape of the week.
   const buckets = new Map<string, GrowthPoint>();
+  const hourKey = (d: Date) => `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}-${d.getHours()}`;
   const dayKey = (d: Date) => `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
   const monKey = (d: Date) => `${d.getFullYear()}-${d.getMonth() + 1}`;
   const DAY = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
   const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-  if (period === 'year') {
-    for (let i = 0; i < 12; i++) {
-      const d = new Date(start.getFullYear(), start.getMonth() + i, 1);
-      buckets.set(monKey(d), { label: MON[d.getMonth()], revenue: 0, orders: 0 });
+  // Pre-seed every bucket so quiet stretches render as gaps in the trend
+  // rather than disappearing and making the chart lie about its shape.
+  const spanDays = Math.ceil((end.getTime() - start.getTime()) / 86400000) + 1;
+  let mode: 'hour' | 'day' | 'month';
+  if (period === 'day') mode = 'hour';
+  else if (period === 'year' || spanDays > 92) mode = 'month';
+  else mode = 'day';
+
+  if (mode === 'hour') {
+    for (let h = 0; h < 24; h++) {
+      const d = new Date(start); d.setHours(h);
+      buckets.set(hourKey(d), { label: `${h}`, revenue: 0, orders: 0 });
+    }
+  } else if (mode === 'month') {
+    const cur = new Date(start.getFullYear(), start.getMonth(), 1);
+    while (cur <= end) {
+      buckets.set(monKey(cur), { label: MON[cur.getMonth()], revenue: 0, orders: 0 });
+      cur.setMonth(cur.getMonth() + 1);
     }
   } else {
-    const days = period === 'week' ? 7 : 30;
-    for (let i = 0; i < days; i++) {
-      const d = new Date(start);
-      d.setDate(start.getDate() + i);
+    for (let i = 0; i < spanDays; i++) {
+      const d = new Date(start); d.setDate(start.getDate() + i);
+      if (d > end) break;
       buckets.set(dayKey(d), {
-        label: period === 'week' ? DAY[d.getDay()] : String(d.getDate()),
+        label: spanDays <= 7 ? DAY[d.getDay()] : String(d.getDate()),
         revenue: 0, orders: 0,
       });
     }
@@ -338,7 +375,8 @@ export async function fetchGrowth(restaurantId: string, period: GrowthPeriod): P
 
   for (const row of (data ?? []) as { placed_at: string; total: number }[]) {
     const d = new Date(row.placed_at);
-    const b = buckets.get(period === 'year' ? monKey(d) : dayKey(d));
+    const key = mode === 'hour' ? hourKey(d) : mode === 'month' ? monKey(d) : dayKey(d);
+    const b = buckets.get(key);
     if (!b) continue;
     b.revenue += Number(row.total || 0);
     b.orders += 1;
