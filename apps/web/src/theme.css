@@ -666,7 +666,10 @@ input.code-input::placeholder { color: var(--text-dim); }
 
 /* Diet filter row — its own row now (was crammed in the search bar). Force the
    selected states so they always read: All=saffron, Veg=green, Non-veg=red. */
-.diet-row { margin: 2px 0 2px; }
+/* margin-block, not the shorthand: `margin: 2px 0` also resets margin-inline
+   to 0, which cancelled .chip-row's -2px and left this row 2px right of the
+   dish cards while the category row above it lined up correctly. */
+.diet-row { margin-block: 2px; }
 .diet-chip { padding: 9px 16px; }
 .diet-chip.diet-all.active { background: var(--saffron) !important; border-color: var(--saffron) !important; color: #fffdf8 !important; }
 .diet-chip.diet-veg.active { background: rgba(31,138,84,0.14) !important; border-color: var(--veg) !important; color: #14663d !important; box-shadow: 0 4px 12px rgba(31,138,84,0.18); }
