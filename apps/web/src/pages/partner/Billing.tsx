@@ -13,6 +13,16 @@ interface BillDraft {
   orders: PortalOrder[];
 }
 
+   *  Everything still goes through the browser's own print dialog, so any
+   *  installed printer — laser, inkjet or thermal — works unchanged. */
+const PRINT_FORMATS = {
+  a4:   { label: 'A4 sheet',  page: 'size: A4; margin: 12mm;',        cls: 'fmt-a4' },
+  mm80: { label: '80mm roll', page: 'size: 80mm auto; margin: 3mm;',  cls: 'fmt-80' },
+  mm58: { label: '58mm roll', page: 'size: 58mm auto; margin: 2mm;',  cls: 'fmt-58' },
+} as const;
+type PrintFmt = keyof typeof PRINT_FORMATS;
+
+
 export function Billing() {
   const { restaurant, role } = usePartner();
   const [orders, setOrders] = useState<PortalOrder[] | null>(null);
@@ -25,6 +35,7 @@ export function Billing() {
   const [printing, setPrinting] = useState(false);
   // Which table has its per-person list expanded.
   const [splitting, setSplitting] = useState<string | null>(null);
+  const [fmt, setFmt] = useState<PrintFmt>('a4');
 
   const canDiscount = role === 'owner' || role === 'manager';
 
@@ -129,12 +140,23 @@ export function Billing() {
     } catch (e: any) { setError(e?.message ?? 'Could not mark the bill paid.'); }
     finally { setBusy(false); }
   };
-
+  /** Paper formats a restaurant actually owns. @page accepts only one active
+   *  size per document, so the chosen one is written into a dedicated <style>
+   *  immediately before printing rather than shipped as three dead rules.
   useEffect(() => {
-    if (printing) {
-      const t = setTimeout(() => { window.print(); setPrinting(false); }, 300);
-      return () => clearTimeout(t);
+    if (!printing) return;
+    const id = 'menutha-print-format';
+    let tag = document.getElementById(id) as HTMLStyleElement | null;
+    if (!tag) {
+      tag = document.createElement('style');
+      tag.id = id;
+      document.head.appendChild(tag);
     }
+    tag.textContent = `@page { ${PRINT_FORMATS[fmt].page} }`;
+    const t = setTimeout(() => { window.print(); setPrinting(false); }, 300);
+    return () => clearTimeout(t);
+  }, [printing, fmt]);
+
   }, [printing]);
 
   if (orders === null) return <Spinner label="Loading unpaid orders…" />;
@@ -250,7 +272,15 @@ export function Billing() {
         <div className="glass-strong" style={{ padding: 16, marginTop: 16, borderColor: 'var(--primary)' }}>
           <div className="topbar" style={{ padding: 0 }}>
             <strong>Bill #{bill.bill_no}</strong>
-            <button className="chip" onClick={() => setPrinting(true)}>🖨 Print GST bill</button>
+            <span style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+              <select className="code-input" style={{ padding: "6px 8px", fontSize: 12.5, width: "auto" }}
+                value={fmt} onChange={(e) => setFmt(e.target.value as PrintFmt)} aria-label="Paper size">
+                {(Object.keys(PRINT_FORMATS) as PrintFmt[]).map((k) => (
+                  <option key={k} value={k}>{PRINT_FORMATS[k].label}</option>
+                ))}
+              </select>
+              <button className="chip" onClick={() => setPrinting(true)}>🖨 Print bill</button>
+            </span>
           </div>
           <div className="bill-row total"><span>To collect</span><span>{inr(bill.total)}</span></div>
 
@@ -282,10 +312,26 @@ export function Billing() {
       )}
 
       {printing && bill && (
-        <div className="printable" style={{ fontFamily: 'Helvetica, Arial, sans-serif', fontSize: 13 }}>
-          <h2 style={{ fontFamily: 'Georgia, serif' }}>{restaurant.name}</h2>
-          <p>{restaurant.address ?? ''} {restaurant.city ?? ''}</p>
-          {restaurant.gstin && <p>GSTIN: {restaurant.gstin}</p>}
+        <div className={`printable ${PRINT_FORMATS[fmt].cls}`} style={{ fontFamily: 'Helvetica, Arial, sans-serif', fontSize: 13 }}>
+          {/* Branded header. The bill is the one thing a diner takes away, so
+              it carries the restaurant's own identity — logo, address, GSTIN,
+              phone — not just a name. All editable in Settings. */}
+          {(restaurant as any).logo_url && (
+            <img className="bill-logo" src={(restaurant as any).logo_url} alt=""
+              style={{ maxHeight: 54, maxWidth: '60%', objectFit: 'contain', margin: '0 auto 6px', display: 'block' }} />
+          )}
+          <h2 style={{ fontFamily: 'Georgia, serif', textAlign: 'center', margin: 0 }}>{restaurant.name}</h2>
+          {((restaurant as any).address || restaurant.city) && (
+            <p style={{ textAlign: 'center', margin: '2px 0' }}>
+              {(restaurant as any).address ?? ''} {restaurant.city ?? ''}
+            </p>
+          )}
+          {(restaurant as any).phone && (
+            <p style={{ textAlign: 'center', margin: '2px 0' }}>Ph: {(restaurant as any).phone}</p>
+          )}
+          {restaurant.gstin && (
+            <p style={{ textAlign: 'center', margin: '2px 0' }}>GSTIN: {restaurant.gstin}</p>
+          )}
           <hr style={{ margin: '10px 0' }} />
           <p><strong>TAX INVOICE — Bill #{bill.bill_no}</strong> · {new Date().toLocaleString('en-IN')}</p>
           <table style={{ width: '100%', marginTop: 8, borderCollapse: 'collapse' }}>
@@ -314,7 +360,14 @@ export function Billing() {
               </div>
             </div>
           )}
-          <p style={{ marginTop: 14, fontSize: 11, color: '#666' }}>SAC 996331 · Thank you — powered by Menutha</p>
+          {(restaurant as any).bill_footer && (
+            <p style={{ marginTop: 12, textAlign: 'center', fontSize: 12.5, fontWeight: 600 }}>
+              {(restaurant as any).bill_footer}
+            </p>
+          )}
+          <p style={{ marginTop: 10, fontSize: 11, color: '#666', textAlign: 'center' }}>
+            SAC 996331 · powered by Menutha
+          </p>
         </div>
       )}
     </div>

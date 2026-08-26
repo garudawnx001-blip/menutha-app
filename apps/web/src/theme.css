@@ -998,3 +998,33 @@ input.code-input::placeholder { color: var(--text-dim); }
   }
   .portal-nav, .cartbar-wrap, .btn, .chip, .seg, .growth-chart { display: none !important; }
 }
+
+/* ── Bill paper formats ─────────────────────────────────────────────────────
+   Restaurants own whatever printer they own: A4 laser, or an 80mm/58mm
+   thermal roll. The @page size itself is injected at print time (only one can
+   be active per document); these rules retune the typography so a bill is
+   readable rather than merely scaled down. */
+@media print {
+  .printable.fmt-80,
+  .printable.fmt-58 {
+    /* Thermal rolls are monospace-friendly and unforgiving of wide columns. */
+    font-family: "Courier New", Courier, monospace !important;
+    line-height: 1.35;
+  }
+  .printable.fmt-80 { width: 74mm; font-size: 10.5px; }
+  .printable.fmt-58 { width: 54mm; font-size: 9px; }
+
+  /* A logo eats precious roll length; cap it hard on narrow paper. */
+  .printable.fmt-80 .bill-logo { max-height: 34px !important; }
+  .printable.fmt-58 .bill-logo { max-height: 26px !important; }
+
+  /* The pay QR is the one thing worth its space, but not at A4 size. */
+  .printable.fmt-80 img[alt=""] { max-width: 34mm; height: auto; }
+  .printable.fmt-58 img[alt=""] { max-width: 26mm; height: auto; }
+
+  /* Long dish names must wrap rather than push the price column off the roll. */
+  .printable.fmt-80 td:first-child,
+  .printable.fmt-58 td:first-child { word-break: break-word; padding-right: 4px; }
+  .printable.fmt-80 hr,
+  .printable.fmt-58 hr { border: 0; border-top: 1px dashed #000; }
+}

@@ -12,6 +12,9 @@ export function Settings() {
   const [form, setForm] = useState({
     name: restaurant.name ?? '',
     address: (restaurant as any).address ?? '',
+    phone: (restaurant as any).phone ?? '',
+    gstin: (restaurant as any).gstin ?? '',
+    bill_footer: (restaurant as any).bill_footer ?? '',
     city: restaurant.city ?? '',
     cuisine_tags: restaurant.cuisine_tags ?? '',
     open_time: restaurant.open_time ?? '',
@@ -35,6 +38,9 @@ export function Settings() {
       await updateRestaurant(restaurant.id, {
         name: form.name.trim() || restaurant.name,
         address: form.address.trim() || null,
+        phone: form.phone.trim() || null,
+        gstin: form.gstin.trim().toUpperCase() || null,
+        bill_footer: form.bill_footer.trim() || null,
         city: form.city.trim() || null,
         cuisine_tags: form.cuisine_tags.trim() || null,
         open_time: form.open_time || null,
@@ -84,6 +90,26 @@ export function Settings() {
         </F>
         <F label="Address">
           <input className="code-input" value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} />
+        </F>
+        {/* What appears on the printed bill. A tax invoice needs the
+            restaurant's own identity on it, not just a name — these all render
+            in the bill header, with the logo above them. */}
+        <div style={{ display: 'flex', gap: 10 }}>
+          <F label="Phone (on bill)">
+            <input className="code-input" inputMode="tel" placeholder="98765 43210"
+              value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
+          </F>
+          <F label="GSTIN (on bill)">
+            <input className="code-input" placeholder="29ABCDE1234F1Z5"
+              value={form.gstin} onChange={(e) => setForm({ ...form, gstin: e.target.value })} />
+          </F>
+        </div>
+        <F label="Bill footer message">
+          <input className="code-input" placeholder="Thank you — please visit again!"
+            value={form.bill_footer} onChange={(e) => setForm({ ...form, bill_footer: e.target.value })} />
+          <span className="dim" style={{ fontSize: 12 }}>
+            Printed at the bottom of every bill. Leave blank for none.
+          </span>
         </F>
         <div style={{ display: 'flex', gap: 10 }}>
           <div style={{ flex: 1 }}>
