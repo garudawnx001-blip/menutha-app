@@ -60,17 +60,43 @@ jobs:
           #     /restaurants, /track/<id>, /r/<slug>) load the ordering app.
           #   * index.html := the marketing landing -> the public homepage.
           cp dist/index.html dist/app.html          # keep the SPA entry addressable
+          # scan.html is a REAL file, so /scan.html?t=<token> answers HTTP 200.
+          # Printed table QRs point here: many phone QR scanners refuse to open a
+          # URL that returns 404 — which is exactly what /scan/<token> did.
+          cp dist/index.html dist/scan.html         # QR target -> always 200
           cp dist/index.html dist/404.html          # unmatched paths -> ordering app
           cp dist/home/index.html dist/index.html   # premium marketing at /
           test -f dist/index.html || { echo "no index.html"; exit 1; }
           test -f dist/404.html   || { echo "no 404.html";   exit 1; }
+          test -f dist/scan.html  || { echo "no scan.html";  exit 1; }
           test -f dist/CNAME      || { echo "no CNAME";       exit 1; }
           test -f dist/site.css   || { echo "no site.css";    exit 1; }
           grep -q "The menu is on the table" dist/index.html || { echo "root is not the marketing landing"; exit 1; }
           grep -q "id=\"root\"" dist/404.html || { echo "404 is not the SPA shell"; exit 1; }
+          grep -q "id=\"root\"" dist/scan.html || { echo "scan.html is not the SPA shell"; exit 1; }
           echo "CNAME: $(cat dist/CNAME)"
           ls -la dist
 
+
+      - name: Materialize /scan/<token>/ so already-printed QRs answer 200
+        working-directory: apps/web
+        run: |
+          # Pages returns HTTP 404 (via 404.html) for any path that isn't a real
+          # file. Phone QR scanners commonly refuse to open a 404, so tables whose
+          # codes were printed with the old /scan/<token> URL appeared "dead".
+          # Tokens are anon-readable, so emit a real page for every existing one.
+          SB=https://xnhcziciilylzcaupqoq.supabase.co
+          KEY=sb_publishable_zmrlV7bkDZ_cJiIHxd0Slg_0H192fIe
+          toks=$(curl -sS --max-time 45 "$SB/rest/v1/dining_table?select=qr_token&limit=5000" \
+            -H "apikey: $KEY" -H "Authorization: Bearer $KEY" \
+            | grep -oE '"qr_token":"[A-Za-z0-9_-]+"' | cut -d'"' -f4 | sort -u || true)
+          n=0
+          for t in $toks; do
+            mkdir -p "dist/scan/$t" && cp dist/app.html "dist/scan/$t/index.html" && n=$((n+1))
+          done
+          echo "materialized $n /scan/<token>/ pages"
+          # Non-fatal: new tables created after this deploy still resolve, because
+          # freshly printed QRs use /scan.html?t=<token>, which is always a real file.
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:

@@ -11,7 +11,7 @@ const ORDER_BASE =
   (import.meta.env.VITE_WEB_ORDER_URL as string | undefined) ??
   'https://worktejachar.github.io/menutha-app/#';
 
-const qrLink = (token: string) => `${ORDER_BASE}/scan/${token}`;
+const qrLink = (token: string) => `${ORDER_BASE}/scan.html?t=${token}`;
 
 function QrImg({ token, size = 132 }: { token: string; size?: number }) {
   const [src, setSrc] = useState('');
