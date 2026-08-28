@@ -404,3 +404,27 @@ export async function adjustOrderTimer(orderId: string, deltaMinutes: number) {
   });
   if (error) throw error;
 }
+
+/** Persist a new category order. Writes sort_order from array position, so the
+ *  list the owner sees is the list diners get. */
+export async function reorderCategories(ids: string[]) {
+  await Promise.all(
+    ids.map((id, i) =>
+      supabase.from('menu_category').update({ sort_order: i }).eq('id', id),
+    ),
+  );
+}
+
+/** Delete a category, moving any dishes in it to Uncategorised first.
+ *
+ *  Previously delete was blocked whenever a category held dishes, which made
+ *  seeded categories permanently undeletable — exactly the ones a restaurant
+ *  most wants gone. Detaching rather than refusing keeps the dishes (they are
+ *  the valuable thing) while letting the category go. */
+export async function deleteCategoryWithDishes(id: string) {
+  const { error: detachErr } = await supabase
+    .from('menu_item').update({ category_id: null }).eq('category_id', id);
+  if (detachErr) throw detachErr;
+  const { error } = await supabase.from('menu_category').delete().eq('id', id);
+  if (error) throw error;
+}

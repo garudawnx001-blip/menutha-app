@@ -1056,3 +1056,14 @@ input.code-input::placeholder { color: var(--text-dim); }
   text-align: left; min-width: 0;
 }
 .ticket-open:hover { color: var(--primary); }
+
+/* Category management: drag handle plus ▲▼ nudges. Native HTML5 drag is
+   unreliable on touch, and a restaurant runs this on a phone — so the
+   buttons are the dependable path and dragging is the nicety. */
+.cat-row { align-items: center; }
+.cat-row .cat-grip { cursor: grab; color: var(--text-muted); font-size: 15px; user-select: none; }
+.cat-row.dragging { opacity: 0.5; }
+.cat-nudge {
+  padding: 1px 7px; font-size: 10px; line-height: 1.4; min-height: 0;
+}
+.cat-nudge:disabled { opacity: 0.35; cursor: default; }

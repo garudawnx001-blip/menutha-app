@@ -6,7 +6,7 @@ import { NavLink } from 'react-router-dom';
 import {
   fetchMenuAdmin, upsertCategory, saveDish, deleteDish, uploadImage,
   type PortalCategory, type PortalDish,
-  deleteCategory,
+  deleteCategory, deleteCategoryWithDishes, reorderCategories,
 } from '../../lib/portalApi';
 import { downloadTemplate, exportMenu, parseWorkbook, publishPlan, type ImportPlan } from '../../lib/excelMenu';
 import { inr } from '../../lib/types';
@@ -35,6 +35,7 @@ export function MenuManager() {
   const [error, setError] = useState('');
   const [newCat, setNewCat] = useState('');
   const [editCats, setEditCats] = useState(false);
+  const [dragCat, setDragCat] = useState<string | null>(null);
 
   // Excel import state
   const fileRef = useRef<HTMLInputElement>(null);
@@ -56,6 +57,22 @@ export function MenuManager() {
     () => (activeCat === 'all' ? items : items.filter((i) => i.category_id === activeCat)),
     [items, activeCat],
   );
+
+  /** Move a category to a new position and persist the order.
+   *
+   *  Reorders local state first so the list responds instantly, then writes
+   *  sort_order. A reload would make every drag feel laggy on a phone. */
+  const moveCatTo = async (id: string, to: number) => {
+    const from = cats.findIndex((c) => c.id === id);
+    if (from < 0 || to < 0 || to >= cats.length || from === to) return;
+    const next = [...cats];
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved);
+    setCats(next);
+    setDragCat(null);
+    try { await reorderCategories(next.map((c) => c.id)); }
+    catch (err: any) { setError(`Could not save the new order: ${err?.message ?? 'unknown error'}`); load(); }
+  };
 
   const save = async () => {
     if (!draft || busy) return;
@@ -191,11 +208,34 @@ export function MenuManager() {
 
       {editCats && (
         <div className="glass" style={{ padding: 16, marginBottom: 12 }}>
-          <p className="overline" style={{ marginBottom: 10 }}>Categories</p>
-          {cats.map((c) => {
+          <p className="overline" style={{ marginBottom: 4 }}>Categories</p>
+          <p className="dim" style={{ fontSize: 12, marginBottom: 10 }}>
+            Drag to reorder, or use ▲▼ — the order here is the order diners see.
+            Renaming and deleting works on every category, including the ones
+            that came with your account.
+          </p>
+          {cats.map((c, idx) => {
             const used = items.filter((d) => d.category_id === c.id).length;
             return (
-              <div key={c.id} className="row-item" style={{ gap: 10 }}>
+              <div
+                key={c.id}
+                className={dragCat === c.id ? 'row-item cat-row dragging' : 'row-item cat-row'}
+                style={{ gap: 8 }}
+                draggable
+                onDragStart={() => setDragCat(c.id)}
+                onDragEnd={() => setDragCat(null)}
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={(e) => { e.preventDefault(); if (dragCat) moveCatTo(dragCat, idx); }}
+              >
+                <span className="cat-grip" aria-hidden title="Drag to reorder">⠿</span>
+                <span style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                  <button className="chip cat-nudge" disabled={idx === 0}
+                    aria-label={`Move ${c.name} up`}
+                    onClick={() => moveCatTo(c.id, idx - 1)}>▲</button>
+                  <button className="chip cat-nudge" disabled={idx === cats.length - 1}
+                    aria-label={`Move ${c.name} down`}
+                    onClick={() => moveCatTo(c.id, idx + 1)}>▼</button>
+                </span>
                 <input
                   className="code-input"
                   style={{ flex: 1, minWidth: 0, padding: '8px 10px', fontSize: 14 }}
@@ -212,14 +252,19 @@ export function MenuManager() {
                 </span>
                 <button
                   className="chip"
-                  // Deleting a category with dishes in it would leave them
-                  // unreachable behind the diner's category filter.
-                  disabled={used > 0}
-                  title={used > 0 ? 'Move or delete its dishes first' : 'Delete this category'}
+                  title="Delete this category"
                   onClick={async () => {
-                    if (!confirm(`Delete the "${c.name}" category?`)) return;
+                    // Dishes are the valuable thing, categories are labels. So a
+                    // category with dishes in it is still deletable — its dishes
+                    // move to Uncategorised rather than the delete being refused,
+                    // which is what made seeded categories permanent.
+                    const msg = used > 0
+                      ? `Delete "${c.name}"?\n\n${used} dish${used === 1 ? '' : 'es'} will move to Uncategorised — nothing is deleted from your menu.`
+                      : `Delete the "${c.name}" category?`;
+                    if (!confirm(msg)) return;
                     try {
-                      await deleteCategory(c.id);
+                      if (used > 0) await deleteCategoryWithDishes(c.id);
+                      else await deleteCategory(c.id);
                       if (activeCat === c.id) setActiveCat('all');
                       load();
                     } catch (err: any) { setError(`Delete failed: ${err?.message ?? 'unknown error'}`); }
