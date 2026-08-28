@@ -1004,7 +1004,16 @@ input.code-input::placeholder { color: var(--text-dim); }
      document could not adapt, so the owner had to declare the paper twice and
      could get it wrong. */
   size: auto;
-  margin: 8mm;
+  /* 4mm, not 8mm, because this margin is charged to EVERY paper size and a
+     40mm label only has 40mm to give. At 8mm a label was left with 24mm of
+     content for a card that measures 36mm, so every small-format card was
+     guaranteed to be cut — simulated against the real rules across A4, Letter,
+     100x150, 50x50 and 40x40.
+     Breathing room on big paper is added back as padding on .printable below,
+     where it can be conditional. Margin cannot be: making @page margin depend
+     on a width media query is circular, since the margin decides the width the
+     query then reads. */
+  margin: 4mm;
 }
 @media print {
   html, body {
@@ -1358,4 +1367,21 @@ input.code-input::placeholder { color: var(--text-dim); }
   .portal-rest { display: flex; flex-direction: column; position: static; background: none; border: 0; box-shadow: none; padding: 0; }
   .portal-rest .portal-link:last-child { margin-top: 12px; }
   .portal-more { display: none; }
+}
+
+/* Breathing room, added where there is room to spare. Sheet paper gets a
+   comfortable inner margin; label stock and rolls get none, because on a 40mm
+   square every millimetre spent on white space is taken from the QR — the one
+   element that has to work. */
+@media print and (min-width: 120mm) {
+  .printable { padding: 6mm !important; }
+}
+
+/* Smallest labels: the code and the table number, sized to actually fit.
+   A 40mm label with a 4mm margin leaves 32mm; a 30mm QR plus a caption did not
+   fit in that, which is how a card ends up taller than its own paper. */
+@media print and (max-width: 46mm) {
+  .qr-sheet .qr-svg { width: 24mm !important; height: 24mm !important; }
+  .qr-sheet .qr-card { padding: 0; }
+  .qr-sheet .qr-table { font-size: 8px; margin: 0.8mm 0 0; padding: 0.3mm 1.5mm; }
 }
