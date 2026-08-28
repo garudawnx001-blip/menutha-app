@@ -12,7 +12,7 @@ import type { CartLine, MenuItem } from '../lib/types';
 import { inr } from '../lib/types';
 import { useStore } from '../store';
 import { IdentityGate, ItemSheet, LanguagePicker, SendingIn, Spinner, Stepper, VegMark, Wordmark } from '../components';
-import { useT } from '../lib/i18n';
+import { useT, translateCategory } from '../lib/i18n';
 import { TableSoFar } from './TableSoFar';
 
 export function Menu() {
@@ -154,13 +154,24 @@ export function Menu() {
     );
   }, [items, query, diet, activeCat]);
 
+  /** Sections in the order the restaurant arranged their categories.
+   *
+   *  A Map keeps insertion order, and dishes arrive sorted by menu_item
+   *  sort_order — so sections used to appear in whatever order their first
+   *  dish happened to fall in. Dragging categories in the portal reordered the
+   *  chips and nothing else, which is not what "arrange your menu" means:
+   *  Starters have to come before Desserts on the page a diner scrolls, not
+   *  only in the filter row. Sorted by the category's own sort_order, with the
+   *  dish order inside each section left alone. */
   const grouped = useMemo(() => {
-    const g = new Map<string, MenuItem[]>();
+    const g = new Map<string, { sort: number; items: MenuItem[] }>();
     for (const i of visible) {
-      if (!g.has(i.category)) g.set(i.category, []);
-      g.get(i.category)!.push(i);
+      if (!g.has(i.category)) g.set(i.category, { sort: i.category_sort ?? 99, items: [] });
+      g.get(i.category)!.items.push(i);
     }
-    return [...g.entries()];
+    return [...g.entries()]
+      .sort((a, b) => a[1].sort - b[1].sort)
+      .map(([cat, v]) => [cat, v.items] as [string, MenuItem[]]);
   }, [visible]);
 
   if (!session) return null;
@@ -271,9 +282,10 @@ export function Menu() {
               className={activeCat === c ? 'chip active' : 'chip'}
               onClick={() => setActiveCat(c)}
             >
-              {/* Only the synthetic "All" chip is ours to translate — every other
-                  chip is a category name the restaurant typed. */}
-              {c === 'All' ? t('menu.all') : c}
+              {/* "All" is ours. Every other chip is the restaurant's category
+                  name — rendered in the diner's language when it is one of the
+                  common section names, and exactly as typed when it is not. */}
+              {c === 'All' ? t('menu.all') : translateCategory(c)}
             </button>
           ))}
         </div>
@@ -299,7 +311,7 @@ export function Menu() {
 
       {grouped.map(([cat, dishes]) => (
         <section key={cat}>
-          <h2 className="cat-heading">{cat}</h2>
+          <h2 className="cat-heading">{translateCategory(cat)}</h2>
           <div className="menu-grid">
             {dishes.map((d) => {
               // One tap orders the dish outright — no cart, nothing to submit

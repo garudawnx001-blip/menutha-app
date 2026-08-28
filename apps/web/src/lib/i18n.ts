@@ -467,3 +467,62 @@ export function useT(): (key: string) => string {
   }, []);
   return (key: string) => translate(lang, key);
 }
+
+// ── Menu section names ─────────────────────────────────────────────────────
+// A category name is the restaurant's own data, so it is never rewritten
+// blindly. But the seeded ones — and the handful of section names almost every
+// Indian restaurant uses — are effectively UI chrome to a diner, and leaving
+// "Starters" in English above a Kannada menu is the same half-translated feel
+// the rest of this round removed.
+//
+// Matched on a normalised key, so "Main Course", "main course" and
+// "Main  Course" all resolve. Anything the restaurant actually invented misses
+// the table and is shown exactly as typed — which is the correct default.
+const CATEGORY_NAMES: Record<string, { kn: string; hi: string }> = {
+  starters:          { kn: 'ಸ್ಟಾರ್ಟರ್ಸ್', hi: 'स्टार्टर' },
+  vegstarters:       { kn: 'ಸಸ್ಯಾಹಾರಿ ಸ್ಟಾರ್ಟರ್ಸ್', hi: 'शाकाहारी स्टार्टर' },
+  chickenstarters:   { kn: 'ಚಿಕನ್ ಸ್ಟಾರ್ಟರ್ಸ್', hi: 'चिकन स्टार्टर' },
+  eggstarters:       { kn: 'ಮೊಟ್ಟೆ ಸ್ಟಾರ್ಟರ್ಸ್', hi: 'अंडा स्टार्टर' },
+  fishstarters:      { kn: 'ಮೀನು ಸ್ಟಾರ್ಟರ್ಸ್', hi: 'मछली स्टार्टर' },
+  tandooristarters:  { kn: 'ತಂದೂರಿ ಸ್ಟಾರ್ಟರ್ಸ್', hi: 'तंदूरी स्टार्टर' },
+  maincourse:        { kn: 'ಮುಖ್ಯ ಖಾದ್ಯ', hi: 'मुख्य व्यंजन' },
+  mains:             { kn: 'ಮುಖ್ಯ ಖಾದ್ಯ', hi: 'मुख्य व्यंजन' },
+  curries:           { kn: 'ಸಾರುಗಳು', hi: 'करी' },
+  vegcurries:        { kn: 'ಸಸ್ಯಾಹಾರಿ ಸಾರುಗಳು', hi: 'शाकाहारी करी' },
+  chickencurries:    { kn: 'ಚಿಕನ್ ಸಾರುಗಳು', hi: 'चिकन करी' },
+  eggcurries:        { kn: 'ಮೊಟ್ಟೆ ಸಾರುಗಳು', hi: 'अंडा करी' },
+  rice:              { kn: 'ಅನ್ನ', hi: 'चावल' },
+  vegrice:           { kn: 'ಸಸ್ಯಾಹಾರಿ ಅನ್ನ', hi: 'शाकाहारी चावल' },
+  nonvegrice:        { kn: 'ಮಾಂಸಾಹಾರಿ ಅನ್ನ', hi: 'मांसाहारी चावल' },
+  biriyani:          { kn: 'ಬಿರಿಯಾನಿ', hi: 'बिरयानी' },
+  biryani:           { kn: 'ಬಿರಿಯಾನಿ', hi: 'बिरयानी' },
+  breads:            { kn: 'ರೊಟ್ಟಿಗಳು', hi: 'रोटी' },
+  indianbread:       { kn: 'ಭಾರತೀಯ ರೊಟ್ಟಿ', hi: 'भारतीय रोटी' },
+  breadsrice:        { kn: 'ರೊಟ್ಟಿ ಮತ್ತು ಅನ್ನ', hi: 'रोटी और चावल' },
+  chineseitems:      { kn: 'ಚೈನೀಸ್ ಖಾದ್ಯಗಳು', hi: 'चाइनीज़ व्यंजन' },
+  chinese:           { kn: 'ಚೈನೀಸ್', hi: 'चाइनीज़' },
+  tandoori:          { kn: 'ತಂದೂರಿ', hi: 'तंदूरी' },
+  soups:             { kn: 'ಸೂಪ್‌ಗಳು', hi: 'सूप' },
+  salads:            { kn: 'ಸಲಾಡ್‌ಗಳು', hi: 'सलाद' },
+  snacks:            { kn: 'ತಿಂಡಿಗಳು', hi: 'नाश्ता' },
+  desserts:          { kn: 'ಸಿಹಿತಿಂಡಿಗಳು', hi: 'मिठाइयाँ' },
+  icecream:          { kn: 'ಐಸ್‌ಕ್ರೀಮ್', hi: 'आइसक्रीम' },
+  beverages:         { kn: 'ಪಾನೀಯಗಳು', hi: 'पेय' },
+  drinks:            { kn: 'ಪಾನೀಯಗಳು', hi: 'पेय' },
+  seafood:           { kn: 'ಸಮುದ್ರಾಹಾರ', hi: 'समुद्री भोजन' },
+  sides:             { kn: 'ಜೊತೆಗಿನ ಖಾದ್ಯ', hi: 'साइड डिश' },
+  extraitems:        { kn: 'ಹೆಚ್ಚುವರಿ ಖಾದ್ಯಗಳು', hi: 'अतिरिक्त व्यंजन' },
+  combos:            { kn: 'ಕಾಂಬೊಗಳು', hi: 'कॉम्बो' },
+  thali:             { kn: 'ಥಾಲಿ', hi: 'थाली' },
+  uncategorised:     { kn: 'ವರ್ಗೀಕರಿಸದ', hi: 'अवर्गीकृत' },
+  menu:              { kn: 'ಮೆನು', hi: 'मेन्यू' },
+};
+
+const catKey = (s: string) => s.toLowerCase().replace(/&/g, '').replace(/[^a-z0-9]+/g, '');
+
+/** A menu section name in the diner's language, when we recognise it. */
+export function translateCategory(name: string, lang: Lang = getLang()): string {
+  if (lang === 'en') return name;
+  const hit = CATEGORY_NAMES[catKey(name)];
+  return hit ? hit[lang as 'kn' | 'hi'] ?? name : name;
+}
