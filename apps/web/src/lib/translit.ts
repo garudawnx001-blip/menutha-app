@@ -136,6 +136,28 @@ const WORDS: Record<string, [string, string]> = {
   grilled: ['ಗ್ರಿಲ್ಡ್', 'ग्रिल्ड'], boiled: ['ಬಾಯ್ಲ್ಡ್', 'बॉइल्ड'],
   omelette: ['ಆಮ್ಲೆಟ್', 'ऑमलेट'], bread: ['ಬ್ರೆಡ್', 'ब्रेड'], toast: ['ಟೋಸ್ಟ್', 'टोस्ट'],
   jeera: ['ಜೀರಾ', 'जीरा'], garlic: ['ಗಾರ್ಲಿಕ್', 'गार्लिक'], mint: ['ಮಿಂಟ್', 'मिंट'],
+  // Regional and dish words the rules cannot recover. "Hyderabadi" is the
+  // clearest case: the letters are h-y-d, but the sound is "hai", so scanning
+  // produced ಹ್ಯ್ಡೆರಬಡಿ — two viramas stacked, and not readable. The rest are
+  // vowel-length calls that spelling simply does not carry.
+  hyderabadi: ['ಹೈದರಾಬಾದಿ', 'हैदराबादी'], hyderabad: ['ಹೈದರಾಬಾದ್', 'हैदराबाद'],
+  makhani: ['ಮಖಾನಿ', 'मखनी'], nihari: ['ನಿಹಾರಿ', 'निहारी'], nalli: ['ನಲ್ಲಿ', 'नल्ली'],
+  kesar: ['ಕೇಸರ್', 'केसर'], pista: ['ಪಿಸ್ತಾ', 'पिस्ता'], kulfi: ['ಕುಲ್ಫಿ', 'कुल्फी'],
+  dum: ['ದಮ್', 'दम'], chaas: ['ಚಾಸ್', 'छाछ'], angara: ['ಅಂಗಾರಾ', 'अंगारा'],
+  malai: ['ಮಲೈ', 'मलाई'], kadai: ['ಕಡಾಯಿ', 'कड़ाही'], korma: ['ಕೋರ್ಮಾ', 'कोरमा'],
+  rogan: ['ರೋಗನ್', 'रोगन'], josh: ['ಜೋಶ್', 'जोश'], afghani: ['ಅಫ್ಗಾನಿ', 'अफ़गानी'],
+  achari: ['ಅಚಾರಿ', 'अचारी'], lababdar: ['ಲಬಾಬ್ದಾರ್', 'लबाबदार'],
+  amritsari: ['ಅಮೃತಸರಿ', 'अमृतसरी'], chettinad: ['ಚೆಟ್ಟಿನಾಡ್', 'चेट्टिनाड'],
+  mangalore: ['ಮಂಗಳೂರು', 'मंगलौर'], mangalorean: ['ಮಂಗಳೂರಿನ', 'मंगलौरी'],
+  andhra: ['ಆಂಧ್ರ', 'आंध्र'], punjabi: ['ಪಂಜಾಬಿ', 'पंजाबी'], kaju: ['ಕಾಜು', 'काजू'],
+  palak: ['ಪಾಲಕ್', 'पालक'], aloo: ['ಆಲೂ', 'आलू'], gosht: ['ಗೋಷ್ತ್', 'गोश्त'],
+  keema: ['ಕೀಮಾ', 'कीमा'], seekh: ['ಸೀಖ್', 'सीख'], reshmi: ['ರೇಶ್ಮಿ', 'रेशमी'],
+  hara: ['ಹರಾ', 'हरा'], bhara: ['ಭರಾ', 'भरा'], lachha: ['ಲಚ್ಛಾ', 'लच्छा'],
+  rumali: ['ರುಮಾಲಿ', 'रुमाली'], kulcha: ['ಕುಲ್ಚಾ', 'कुल्चा'], bhatura: ['ಭಟೂರಾ', 'भटूरा'],
+  chole: ['ಛೋಲೆ', 'छोले'], rajma: ['ರಾಜ್ಮಾ', 'राजमा'], tadka: ['ತಡ್ಕಾ', 'तड़का'],
+  gassi: ['ಗಸ್ಸಿ', 'गस्सी'], kori: ['ಕೋರಿ', 'कोरी'],
+  neer: ['ನೀರ್', 'नीर'], bangude: ['ಬಂಗುಡೆ', 'बांगुडे'], kane: ['ಕಾಣೆ', 'काणे'],
+  rava: ['ರವಾ', 'रवा'],
 };
 
 /**
