@@ -1070,12 +1070,9 @@ input.code-input::placeholder { color: var(--text-dim); }
 }
 .ticket-open:hover { color: var(--primary); }
 
-/* Category management: drag handle plus ▲▼ nudges. Native HTML5 drag is
-   unreliable on touch, and a restaurant runs this on a phone — so the
-   buttons are the dependable path and dragging is the nicety. */
+/* Category management: a real drag plus ▲▼ nudges. The arrows stay because a
+   thumb on a moving list is fiddly, and they are the accessible path. */
 .cat-row { align-items: center; }
-.cat-row .cat-grip { cursor: grab; color: var(--text-muted); font-size: 15px; user-select: none; }
-.cat-row.dragging { opacity: 0.5; }
 .cat-nudge {
   padding: 1px 7px; font-size: 10px; line-height: 1.4; min-height: 0;
 }
@@ -1268,3 +1265,30 @@ input.code-input::placeholder { color: var(--text-dim); }
   .portal-main { max-width: 1600px; }
 }
 
+
+/* ── Drag to arrange: pointer-driven, so it works on a phone ───────────────
+   The row being dragged follows the finger with no transition (it must track
+   exactly), while the rows making room animate into place. Touch-action is
+   pinned on the grip only, so the list still scrolls normally everywhere
+   else — taking it off the whole row would trap the page. */
+.cat-row { position: relative; }
+.cat-row.sliding { transition: transform 180ms cubic-bezier(0.2, 0.9, 0.3, 1); }
+.cat-row.dragging {
+  z-index: 5;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.18);
+  border-color: var(--accent);
+  background: var(--surface);
+  transition: none;
+}
+.cat-row .cat-grip {
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  padding: 6px 4px;
+  border-radius: 6px;
+  color: var(--text-muted);
+  font-size: 15px;
+  line-height: 1;
+}
+.cat-row .cat-grip:active { cursor: grabbing; background: var(--surface-2, rgba(0,0,0,0.04)); }
+@media (prefers-reduced-motion: reduce) { .cat-row.sliding { transition: none; } }

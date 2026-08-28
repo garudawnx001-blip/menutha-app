@@ -36,7 +36,62 @@ export function MenuManager() {
   const [error, setError] = useState('');
   const [newCat, setNewCat] = useState('');
   const [editCats, setEditCats] = useState(false);
-  const [dragCat, setDragCat] = useState<string | null>(null);
+  // ── Drag to arrange, on pointer events ────────────────────────────────────
+  // HTML5 drag-and-drop was the wrong primitive here. It is unreliable on
+  // touch — which is how a restaurant actually uses this, on a phone behind
+  // the counter — it gives no live preview, and its only feedback was the row
+  // going faintly transparent. Pointer events cover mouse, touch and pen with
+  // one code path, so the row can follow the finger, the others can slide out
+  // of the way, and the drop target is visible the whole time.
+  //
+  // No library: this is one measured row height and some arithmetic.
+  const [drag, setDrag] = useState<
+    { id: string; from: number; to: number; dy: number } | null
+  >(null);
+  const dragRef = useRef<{ id: string; from: number; startY: number; h: number } | null>(null);
+  const catCount = useRef(0);
+  catCount.current = cats.length;
+
+  const onGripDown = (e: React.PointerEvent, id: string, idx: number) => {
+    const row = (e.currentTarget as HTMLElement).closest('.cat-row') as HTMLElement | null;
+    const h = row?.getBoundingClientRect().height ?? 48;
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    dragRef.current = { id, from: idx, startY: e.clientY, h };
+    setDrag({ id, from: idx, to: idx, dy: 0 });
+  };
+
+  const onGripMove = (e: React.PointerEvent) => {
+    const d = dragRef.current;
+    if (!d) return;
+    const dy = e.clientY - d.startY;
+    const to = Math.max(0, Math.min(catCount.current - 1, d.from + Math.round(dy / d.h)));
+    setDrag({ id: d.id, from: d.from, to, dy });
+
+    // Auto-scroll when the finger nears an edge, or a long list can only be
+    // reordered as far as the screen is tall.
+    const M = 90;
+    if (e.clientY < M) window.scrollBy({ top: -12, behavior: 'auto' });
+    else if (e.clientY > window.innerHeight - M) window.scrollBy({ top: 12, behavior: 'auto' });
+  };
+
+  const onGripUp = () => {
+    const d = dragRef.current;
+    const cur = drag;
+    dragRef.current = null;
+    setDrag(null);
+    if (d && cur && cur.to !== d.from) moveCatTo(d.id, cur.to);
+  };
+
+  /** How far a row slides to make room for the one being dragged. */
+  const rowShift = (idx: number) => {
+    if (!drag || !dragRef.current) return 0;
+    const h = dragRef.current.h;
+    if (idx === drag.from) return drag.dy;
+    if (drag.to > drag.from && idx > drag.from && idx <= drag.to) return -h;
+    if (drag.to < drag.from && idx < drag.from && idx >= drag.to) return h;
+    return 0;
+  };
+
   const [dragDish, setDragDish] = useState<string | null>(null);
 
   // Bulk photos
@@ -76,7 +131,6 @@ export function MenuManager() {
     const [moved] = next.splice(from, 1);
     next.splice(to, 0, moved);
     setCats(next);
-    setDragCat(null);
     try { await reorderCategories(next.map((c) => c.id)); }
     catch (err: any) { setError(`Could not save the new order: ${err?.message ?? 'unknown error'}`); load(); }
   };
@@ -309,15 +363,23 @@ export function MenuManager() {
             return (
               <div
                 key={c.id}
-                className={dragCat === c.id ? 'row-item cat-row dragging' : 'row-item cat-row'}
-                style={{ gap: 8 }}
-                draggable
-                onDragStart={() => setDragCat(c.id)}
-                onDragEnd={() => setDragCat(null)}
-                onDragOver={(e) => e.preventDefault()}
-                onDrop={(e) => { e.preventDefault(); if (dragCat) moveCatTo(dragCat, idx); }}
+                className={
+                  'row-item cat-row'
+                  + (drag?.id === c.id ? ' dragging' : '')
+                  + (drag && drag.id !== c.id ? ' sliding' : '')
+                }
+                style={{ gap: 8, transform: `translateY(${rowShift(idx)}px)` }}
               >
-                <span className="cat-grip" aria-hidden title="Drag to reorder">⠿</span>
+                <span
+                  className="cat-grip"
+                  title="Drag to reorder"
+                  role="button"
+                  aria-label={`Reorder ${c.name}`}
+                  onPointerDown={(e) => onGripDown(e, c.id, idx)}
+                  onPointerMove={onGripMove}
+                  onPointerUp={onGripUp}
+                  onPointerCancel={onGripUp}
+                >⠿</span>
                 <span style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                   <button className="chip cat-nudge" disabled={idx === 0}
                     aria-label={`Move ${c.name} up`}
