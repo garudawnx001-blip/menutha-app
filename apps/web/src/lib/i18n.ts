@@ -26,6 +26,13 @@ type Dict = Record<string, string>;
 
 const EN: Dict = {
   'menu.search': 'Search dishes',
+  'bill.scanToPay': 'Scan to pay',
+  'bill.scanAnyApp': 'Open any UPI app and scan — this is the most reliable way to pay.',
+  'bill.upiId': 'UPI ID',
+  'bill.amount': 'Amount',
+  'bill.copied': 'Copied ✓',
+  'bill.openUpiApp': 'Or open a UPI app',
+  'bill.intentNote': 'Some apps block payment links opened from a browser. If that happens, scan the QR above or paste the UPI ID.',
   'track.live': 'Your order is live',
   'track.servedEnjoy': 'Served — enjoy!',
   'track.orderNo': 'Order',
@@ -109,6 +116,13 @@ const EN: Dict = {
 
 const KN: Dict = {
   'menu.search': 'ಖಾದ್ಯ ಹುಡುಕಿ',
+  'bill.scanToPay': 'ಸ್ಕ್ಯಾನ್ ಮಾಡಿ ಪಾವತಿಸಿ',
+  'bill.scanAnyApp': 'ಯಾವುದೇ UPI ಆ್ಯಪ್ ತೆರೆದು ಸ್ಕ್ಯಾನ್ ಮಾಡಿ — ಇದು ಅತ್ಯಂತ ವಿಶ್ವಾಸಾರ್ಹ ವಿಧಾನ.',
+  'bill.upiId': 'UPI ಐಡಿ',
+  'bill.amount': 'ಮೊತ್ತ',
+  'bill.copied': 'ನಕಲಿಸಲಾಗಿದೆ ✓',
+  'bill.openUpiApp': 'ಅಥವಾ UPI ಆ್ಯಪ್ ತೆರೆಯಿರಿ',
+  'bill.intentNote': 'ಕೆಲವು ಆ್ಯಪ್‌ಗಳು ಬ್ರೌಸರ್‌ನಿಂದ ತೆರೆದ ಪಾವತಿ ಲಿಂಕ್‌ಗಳನ್ನು ತಡೆಯುತ್ತವೆ. ಹಾಗಾದರೆ ಮೇಲಿನ QR ಸ್ಕ್ಯಾನ್ ಮಾಡಿ ಅಥವಾ UPI ಐಡಿ ಅಂಟಿಸಿ.',
   'track.live': 'ನಿಮ್ಮ ಆರ್ಡರ್ ಸಕ್ರಿಯವಾಗಿದೆ',
   'track.servedEnjoy': 'ಬಡಿಸಲಾಗಿದೆ — ಸವಿಯಿರಿ!',
   'track.orderNo': 'ಆರ್ಡರ್',
@@ -192,6 +206,13 @@ const KN: Dict = {
 
 const HI: Dict = {
   'menu.search': 'व्यंजन खोजें',
+  'bill.scanToPay': 'स्कैन करके भुगतान करें',
+  'bill.scanAnyApp': 'कोई भी UPI ऐप खोलकर स्कैन करें — यह सबसे भरोसेमंद तरीका है।',
+  'bill.upiId': 'UPI आईडी',
+  'bill.amount': 'राशि',
+  'bill.copied': 'कॉपी हो गया ✓',
+  'bill.openUpiApp': 'या UPI ऐप खोलें',
+  'bill.intentNote': 'कुछ ऐप ब्राउज़र से खोले गए भुगतान लिंक रोक देते हैं। ऐसा हो तो ऊपर का QR स्कैन करें या UPI आईडी पेस्ट करें।',
   'track.live': 'आपका ऑर्डर चालू है',
   'track.servedEnjoy': 'परोसा गया — आनंद लें!',
   'track.orderNo': 'ऑर्डर',

@@ -52,6 +52,7 @@ export function Bill() {
   const [mode, setMode] = useState<'combined' | 'split'>('combined');
   const [vpa, setVpa] = useState<string | null>(null);
   const [payQr, setPayQr] = useState('');
+  const [copied, setCopied] = useState<'vpa' | 'amt' | ''>('');
   const timer = useRef<ReturnType<typeof setInterval>>();
 
   // The restaurant's UPI ID isn't part of the cached scan session, so read it
@@ -225,27 +226,64 @@ export function Bill() {
             </>
           )}
 
-          {/* Scan-to-pay for exactly what's on screen */}
+          {/* Pay panel.
+           *
+           *  The QR leads, deliberately. PhonePe and GPay apply risk controls to
+           *  upi:// INTENT links: a real merchant intent carries a merchant
+           *  category code, a transaction reference and often a signature, none
+           *  of which a personal/P2P VPA can supply. An intent at a P2P VPA
+           *  launched from a web page is therefore refused — "declined for
+           *  security reasons" — while scanning the SAME VPA works, because a
+           *  scan is a user-initiated transfer rather than an untrusted
+           *  app-to-app handoff.
+           *
+           *  So: scan first, then a copyable UPI ID and amount (which is what
+           *  PhonePe's own message tells people to fall back to), and the intent
+           *  button last, labelled as "may not work on every app" rather than
+           *  presented as the happy path. */}
           {payUri ? (
             <div className="glass" style={{ padding: 16, marginTop: 16 }}>
-              <p className="overline" style={{ marginBottom: 6 }}>
+              <p className="overline" style={{ marginBottom: 10, textAlign: 'center' }}>
                 {t('bill.pay')} {inr(payAmount)} — {payLabel}
               </p>
-              <div style={{ display: 'flex', gap: 14, alignItems: 'center', flexWrap: 'wrap' }}>
-                {payQr && (
-                  <img src={payQr} width={132} height={132} alt="UPI payment QR"
-                    style={{ borderRadius: 12, border: '1px solid var(--line-strong)' }} />
-                )}
-                <div style={{ flex: 1, minWidth: 180 }}>
-                  <p className="muted" style={{ fontSize: 13.5 }}>
-                    Scan with any UPI app, or tap below — pays{' '}
-                    <strong>{session.restaurant.name}</strong> directly, no fees.
+
+              {payQr && (
+                <div style={{ textAlign: 'center' }}>
+                  <img src={payQr} width={190} height={190} alt="UPI payment QR"
+                    style={{ borderRadius: 12, border: '1px solid var(--line-strong)', margin: '0 auto' }} />
+                  <p style={{ fontWeight: 700, fontSize: 14, marginTop: 8 }}>
+                    {t('bill.scanToPay')}
                   </p>
-                  <a className="btn btn-primary btn-block" style={{ marginTop: 10 }} href={payUri}>
-                    Pay {inr(payAmount)} via UPI
-                  </a>
+                  <p className="muted" style={{ fontSize: 12.5, marginTop: 2 }}>
+                    {t('bill.scanAnyApp')}
+                  </p>
+                </div>
+              )}
+
+              {/* Copyable fallback — exactly what the payment apps suggest. */}
+              <div style={{ marginTop: 14, borderTop: '1px dashed var(--line)', paddingTop: 12 }}>
+                <div className="bill-row" style={{ fontSize: 13.5 }}>
+                  <span className="dim">{t('bill.upiId')}</span>
+                  <button className="chip" style={{ maxWidth: '62%', overflow: 'hidden', textOverflow: 'ellipsis' }}
+                    onClick={() => { navigator.clipboard?.writeText(vpa ?? ''); setCopied('vpa'); }}>
+                    {copied === 'vpa' ? t('bill.copied') : vpa}
+                  </button>
+                </div>
+                <div className="bill-row" style={{ fontSize: 13.5 }}>
+                  <span className="dim">{t('bill.amount')}</span>
+                  <button className="chip"
+                    onClick={() => { navigator.clipboard?.writeText(payAmount.toFixed(2)); setCopied('amt'); }}>
+                    {copied === 'amt' ? t('bill.copied') : payAmount.toFixed(2)}
+                  </button>
                 </div>
               </div>
+
+              <a className="btn btn-ghost btn-block" style={{ marginTop: 12 }} href={payUri}>
+                {t('bill.openUpiApp')}
+              </a>
+              <p className="dim" style={{ fontSize: 11.5, textAlign: 'center', marginTop: 6 }}>
+                {t('bill.intentNote')}
+              </p>
             </div>
           ) : null}
 

@@ -172,6 +172,9 @@ export function Settings() {
           Indian GST convention: SGST + CGST are charged as equal halves (2.5% + 2.5% = 5% for
           restaurants). Both appear as separate lines on every diner bill, receipt and printed bill —
           total GST is {(Number(form.sgst_pct) || 0) + (Number(form.cgst_pct) || 0)}%.
+          {' '}<strong>0 is a valid setting</strong> and is saved as zero; a 0% line simply doesn’t
+          appear on the bill. Changes apply to <strong>new orders</strong> — orders already placed
+          keep the rates they were priced at, so an existing bill still shows the old charges.
         </p>
 
         <h3 style={{ fontWeight: 700, marginBottom: 10 }}>Payments — direct to you</h3>
