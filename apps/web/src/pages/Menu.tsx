@@ -12,13 +12,15 @@ import type { CartLine, MenuItem } from '../lib/types';
 import { inr } from '../lib/types';
 import { useStore } from '../store';
 import { IdentityGate, ItemSheet, LanguagePicker, SendingIn, Spinner, Stepper, VegMark, Wordmark } from '../components';
-import { useT, translateCategory, translateTableLabel } from '../lib/i18n';
+import { useT, useLang, translateCategory, translateTableLabel } from '../lib/i18n';
+import { dishName } from '../lib/translit';
 import { TableSoFar } from './TableSoFar';
 
 export function Menu() {
   const nav = useNavigate();
   const { session, setGuest } = useStore();
   const t = useT();
+  const lang = useLang();
   const [items, setItems] = useState<MenuItem[] | null>(null);
   const [failed, setFailed] = useState(false);
   // Filters persist while browsing (cart ↔ menu round-trips, reloads).
@@ -150,9 +152,15 @@ export function Menu() {
       (i) =>
         (diet === 'all' || (diet === 'veg' ? i.is_veg : !i.is_veg)) &&
         (activeCat === 'All' || i.category === activeCat) &&
-        (!q || i.name.toLowerCase().includes(q) || (i.description ?? '').toLowerCase().includes(q)),
+        // Match the name the diner can actually SEE as well as the English one:
+        // someone reading a Kannada menu will type Kannada into the search box,
+        // and matching only the stored English name would return nothing.
+        (!q
+          || i.name.toLowerCase().includes(q)
+          || dishName(i, lang).toLowerCase().includes(q)
+          || (i.description ?? '').toLowerCase().includes(q)),
     );
-  }, [items, query, diet, activeCat]);
+  }, [items, query, diet, activeCat, lang]);
 
   /** Sections in the order the restaurant arranged their categories.
    *
@@ -324,7 +332,7 @@ export function Menu() {
               const quickOrder = () => orderNow({
                 menuItemId: d.id, name: d.name, price: d.price, qty: 1,
                 isVeg: d.is_veg, optionIds: [], optionLabels: [], optionDelta: 0,
-              }, d.name);
+              }, dishName(d, lang));
               return (
                 <div
                   key={d.id}
@@ -347,7 +355,7 @@ export function Menu() {
                   <span style={{ flex: 1 }}>
                     <span style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                       <VegMark veg={d.is_veg} />
-                      <h3>{d.name}</h3>
+                      <h3>{dishName(d, lang)}</h3>
                     </span>
                     {d.description && <span className="desc">{d.description}</span>}
                     <span style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
@@ -365,7 +373,7 @@ export function Menu() {
                               className="add-btn"
                               onClick={quickOrder}
                               disabled={placing.has(d.id)}
-                              aria-label={`Order ${d.name}`}
+                              aria-label={`${t('menu.add')} ${dishName(d, lang)}`}
                             >
                               {placing.has(d.id) ? "…" : t("menu.add")}
                             </button>
@@ -389,7 +397,9 @@ export function Menu() {
             // The sheet exists to settle a choice, so confirming it places the
             // order there and then — same as a one-tap dish.
             setOpen(null);
-            orderNow(line, `${line.qty} × ${line.name}`);
+            // The line carries the English name to the kitchen; the diner is
+            // told what they ordered in their own language.
+            orderNow(line, `${line.qty} × ${dishName(open, lang)}`);
           }}
         />
       )}

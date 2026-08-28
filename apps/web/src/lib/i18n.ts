@@ -485,6 +485,19 @@ export function translate(l: Lang, key: string): string {
 
 /** Re-renders the calling component when the language changes. Kept here so a
  *  component only ever imports one thing to become translatable. */
+/** The diner's current language, re-rendering the caller when they change it.
+ *  Needed wherever a value depends on the language but is not a dictionary
+ *  lookup — dish names, table labels — where useT alone would not re-render. */
+export function useLang(): Lang {
+  const [lang, setL] = useState<Lang>(getLang);
+  useEffect(() => {
+    const on = () => setL(getLang());
+    window.addEventListener('menutha:lang', on);
+    return () => window.removeEventListener('menutha:lang', on);
+  }, []);
+  return lang;
+}
+
 export function useT(): (key: string) => string {
   const [lang, setL] = useState<Lang>(getLang);
   useEffect(() => {

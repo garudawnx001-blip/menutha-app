@@ -107,16 +107,30 @@ export async function advanceOrder(orderId: string, next: string) {
 export interface PortalCategory { id: string; name: string; sort_order: number }
 export interface PortalDish {
   id: string; category_id: string | null; name: string; description: string | null;
+  /** Owner-supplied Kannada / Hindi names. Blank means the diner sees a
+   *  transliteration of the English name — see lib/translit.ts. */
+  name_kn?: string | null; name_hi?: string | null;
   price: number; is_veg: boolean; is_available: boolean; photo_url: string | null; sort_order: number;
 }
 
+const ADMIN_COLS = 'id, category_id, name, description, price, is_veg, is_available, photo_url, sort_order';
+const ADMIN_COLS_I18N = ADMIN_COLS.replace('name,', 'name, name_kn, name_hi,');
+
 export async function fetchMenuAdmin(restaurantId: string) {
-  const [{ data: cats, error: e1 }, { data: items, error: e2 }] = await Promise.all([
+  const dishes = (cols: string) =>
+    supabase.from('menu_item').select(cols).eq('restaurant_id', restaurantId).order('sort_order');
+
+  // Same reason as fetchMenu: PostgREST 400s on a column that does not exist,
+  // so asking for the translated names before the migration lands would take
+  // out the whole menu screen. Try, then fall back — this keeps the deploy and
+  // the migration independent of each other rather than ordered.
+  let [{ data: cats, error: e1 }, { data: items, error: e2 }] = await Promise.all([
     supabase.from('menu_category').select('id, name, sort_order').eq('restaurant_id', restaurantId).order('sort_order'),
-    supabase.from('menu_item').select('id, category_id, name, description, price, is_veg, is_available, photo_url, sort_order').eq('restaurant_id', restaurantId).order('sort_order'),
+    dishes(ADMIN_COLS_I18N),
   ]);
+  if (e2) ({ data: items, error: e2 } = await dishes(ADMIN_COLS));
   if (e1 || e2) throw e1 ?? e2;
-  return { categories: (cats ?? []) as PortalCategory[], items: (items ?? []) as PortalDish[] };
+  return { categories: (cats ?? []) as PortalCategory[], items: (items ?? []) as unknown as PortalDish[] };
 }
 
 export async function upsertCategory(restaurantId: string, name: string, id?: string) {
@@ -127,10 +141,18 @@ export async function upsertCategory(restaurantId: string, name: string, id?: st
 }
 
 export async function saveDish(restaurantId: string, dish: Partial<PortalDish> & { name: string; price: number }, id?: string) {
-  const payload = { ...dish, restaurant_id: restaurantId };
-  const { error } = id
-    ? await supabase.from('menu_item').update(payload).eq('id', id)
-    : await supabase.from('menu_item').insert(payload);
+  const payload: Record<string, unknown> = { ...dish, restaurant_id: restaurantId };
+  const write = (p: Record<string, unknown>) =>
+    id ? supabase.from('menu_item').update(p).eq('id', id) : supabase.from('menu_item').insert(p);
+
+  let { error } = await write(payload);
+  if (error) {
+    // Before the name_kn/name_hi migration reaches a database, writing them is
+    // a 400 — and a failed save loses the owner's typing. Retry without them so
+    // the dish itself still saves; the translated names simply wait.
+    const { name_kn, name_hi, ...rest } = payload;
+    if (name_kn !== undefined || name_hi !== undefined) ({ error } = await write(rest));
+  }
   if (error) throw error;
 }
 

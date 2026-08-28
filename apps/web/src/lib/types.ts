@@ -33,6 +33,9 @@ export interface MenuOption {
 export interface MenuItem {
   id: string;
   name: string;
+  /** Restaurant-supplied names. Blank falls back to transliteration; see translit.ts. */
+  name_kn?: string | null;
+  name_hi?: string | null;
   description?: string | null;
   price: number;
   is_veg: boolean;

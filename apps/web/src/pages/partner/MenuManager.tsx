@@ -13,15 +13,18 @@ import { downloadTemplate, exportMenu, parseWorkbook, publishPlan, type ImportPl
 import { inr } from '../../lib/types';
 import { usePartner } from './PartnerShell';
 import { Spinner, VegMark } from '../../components';
+import { transliterate } from '../../lib/translit';
 
 interface DishDraft {
   id?: string; name: string; price: string; category_id: string | null;
   description: string; is_veg: boolean; is_available: boolean; photo_url: string | null;
+  name_kn: string; name_hi: string;
 }
 
 const emptyDraft = (categoryId: string | null): DishDraft => ({
   name: '', price: '', category_id: categoryId, description: '',
   is_veg: true, is_available: true, photo_url: null,
+  name_kn: '', name_hi: '',
 });
 
 export function MenuManager() {
@@ -185,6 +188,10 @@ export function MenuManager() {
     try {
       await saveDish(restaurant.id, {
         name: draft.name.trim(), price,
+        // Empty means "no override": the diner then sees a transliteration, and
+        // storing '' instead of null would make a blank field look deliberate.
+        name_kn: draft.name_kn.trim() || null,
+        name_hi: draft.name_hi.trim() || null,
         category_id: draft.category_id, description: draft.description.trim() || null,
         is_veg: draft.is_veg, is_available: draft.is_available, photo_url: draft.photo_url,
       } as any, draft.id);
@@ -502,6 +509,7 @@ export function MenuManager() {
                 id: d.id, name: d.name, price: String(d.price), category_id: d.category_id,
                 description: d.description ?? '', is_veg: d.is_veg, is_available: d.is_available,
                 photo_url: d.photo_url,
+                name_kn: d.name_kn ?? '', name_hi: d.name_hi ?? '',
               })}>Edit</button>
             </div>
           </div>
@@ -522,6 +530,52 @@ export function MenuManager() {
             </h2>
             <p className="overline" style={{ marginBottom: 6 }}>Name</p>
             <input className="code-input" value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
+
+            {/* Kannada and Hindi names.
+                These are optional on purpose. A diner reading Kannada always
+                sees a Kannada name — if you leave this blank they see the
+                English name written in Kannada letters, which is what the
+                greyed-out line under each box shows. Fill it in only where that
+                automatic version is wrong, so nobody has to retype a menu. */}
+            <div style={{ display: 'flex', gap: 10, marginTop: 12, flexWrap: 'wrap' }}>
+              {([
+                ['name_kn', 'Kannada name', 'kn'],
+                ['name_hi', 'Hindi name', 'hi'],
+              ] as const).map(([field, label, script]) => {
+                const auto = transliterate(draft.name.trim(), script);
+                const value = draft[field];
+                return (
+                  <div key={field} style={{ flex: '1 1 220px', minWidth: 0 }}>
+                    <p className="overline" style={{ marginBottom: 6 }}>{label} <span className="dim">— optional</span></p>
+                    <input
+                      className="code-input"
+                      value={value}
+                      placeholder={auto || '—'}
+                      onChange={(e) => setDraft({ ...draft, [field]: e.target.value })}
+                    />
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
+                      <span className="dim" style={{ fontSize: 12, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {value.trim()
+                          ? 'Diners see your version'
+                          : auto ? `Diners see: ${auto}` : 'Type a name above first'}
+                      </span>
+                      {!value.trim() && auto && (
+                        <button
+                          type="button"
+                          className="chip"
+                          style={{ fontSize: 11, padding: '3px 9px' }}
+                          title="Copy the automatic version into the box so you can correct it"
+                          onClick={() => setDraft({ ...draft, [field]: auto })}
+                        >
+                          Edit this
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
             <div style={{ display: 'flex', gap: 10, marginTop: 12 }}>
               <div style={{ flex: 1 }}>
                 <p className="overline" style={{ marginBottom: 6 }}>Price (₹)</p>

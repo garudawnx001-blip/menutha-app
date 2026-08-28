@@ -99,22 +99,39 @@ export async function startParcelSession(restaurant: Restaurant): Promise<Sessio
   };
 }
 
+const MENU_COLS =
+  'id, name, description, price, is_veg, photo_url, sort_order, menu_item_option(id, name, choice, price_delta), menu_category(name, sort_order)';
+const MENU_COLS_I18N = MENU_COLS.replace('id, name,', 'id, name, name_kn, name_hi,');
+
 export async function fetchMenu(session: Session): Promise<MenuItem[]> {
   if (session.demo) return demoMenu;
-  const { data, error } = await supabase
+  // Ask for the translated names, and fall back to the original column set if
+  // the database does not have them yet. Selecting an absent column is a 400
+  // from PostgREST, which would empty the menu for every diner — so the deploy
+  // must not depend on the migration having landed first. Once the columns
+  // exist everywhere this can collapse back to a single select.
+  let { data, error } = await supabase
     .from('menu_item')
-    .select(
-      'id, name, description, price, is_veg, photo_url, sort_order, menu_item_option(id, name, choice, price_delta), menu_category(name, sort_order)',
-    )
+    .select(MENU_COLS_I18N)
     .eq('restaurant_id', session.restaurant.id)
     .eq('is_available', true)
     .order('sort_order');
+  if (error) {
+    ({ data, error } = await supabase
+      .from('menu_item')
+      .select(MENU_COLS)
+      .eq('restaurant_id', session.restaurant.id)
+      .eq('is_available', true)
+      .order('sort_order'));
+  }
   if (error) throw error;
   return (data ?? []).map((row: any) => {
     const cat = Array.isArray(row.menu_category) ? row.menu_category[0] : row.menu_category;
     return {
       id: row.id,
       name: row.name,
+      name_kn: row.name_kn ?? null,
+      name_hi: row.name_hi ?? null,
       description: row.description,
       price: Number(row.price),
       is_veg: !!row.is_veg,

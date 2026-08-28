@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import type { CartLine, MenuItem } from './lib/types';
 import { inr } from './lib/types';
 import { LANGS, getLang, setLang, translate, type Lang } from './lib/i18n';
+import { dishName } from './lib/translit';
 
 export function VegMark({ veg }: { veg: boolean }) {
   return (
@@ -157,7 +158,7 @@ export function ItemSheet({
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
           <VegMark veg={item.is_veg} />
           <div style={{ flex: 1 }}>
-            <h2 className="display" style={{ fontSize: 24, lineHeight: 1.2 }}>{item.name}</h2>
+            <h2 className="display" style={{ fontSize: 24, lineHeight: 1.2 }}>{dishName(item, getLang())}</h2>
             {item.description && (
               <p className="muted" style={{ fontSize: 14, marginTop: 6 }}>{item.description}</p>
             )}
