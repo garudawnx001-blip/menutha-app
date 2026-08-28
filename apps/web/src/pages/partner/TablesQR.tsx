@@ -48,13 +48,54 @@ function accentFor(label: string) {
   return CARD_ACCENTS[h % CARD_ACCENTS.length];
 }
 
+/** QR as inline SVG, not a raster PNG.
+ *
+ *  toDataURL produces a fixed-pixel bitmap. Scaled onto a 40mm label at a
+ *  thermal printer's 203–300 dpi it visibly blurs, and the client saw exactly
+ *  that. An SVG has no resolution: the printer rasterises it at whatever DPI it
+ *  actually has, so the same markup is crisp on a 40mm label and an A4 sheet.
+ *
+ *  errorCorrectionLevel 'H' costs a little density but survives a smudged or
+ *  partly-worn label, which is the realistic failure on a table card. */
+/** Paper a restaurant actually feeds into its printer.
+ *
+ *  @page takes ONE size per document, so the chosen one is written into a
+ *  dedicated <style> immediately before printing. Each format gets its own
+ *  layout rather than one design scaled down: on a 40mm square there is room
+ *  for a QR and a table number and nothing else, and pretending otherwise is
+ *  how you get the unreadable output the client photographed. */
+const CARD_FORMATS = {
+  a4:     { label: 'A4 sheet',      page: 'size: A4; margin: 10mm;',            cls: 'cf-a4' },
+  l100x150: { label: '100 × 150 mm', page: 'size: 100mm 150mm; margin: 5mm;',  cls: 'cf-100' },
+  l50:    { label: '50 × 50 mm',    page: 'size: 50mm 50mm; margin: 2mm;',      cls: 'cf-50' },
+  l40:    { label: '40 × 40 mm',    page: 'size: 40mm 40mm; margin: 1.5mm;',    cls: 'cf-40' },
+} as const;
+type CardFmt = keyof typeof CARD_FORMATS;
+
 function QrImg({ token, size = 132 }: { token: string; size?: number }) {
-  const [src, setSrc] = useState('');
+  const [svg, setSvg] = useState('');
   useEffect(() => {
-    QRCode.toDataURL(qrLink(token), { margin: 1, width: size * 2, color: { dark: '#1C1A15', light: '#FFFDF8' } })
-      .then(setSrc).catch(() => {});
-  }, [token, size]);
-  return src ? <img src={src} width={size} height={size} alt="Table QR code" style={{ borderRadius: 10 }} /> : null;
+    let alive = true;
+    QRCode.toString(qrLink(token), {
+      type: 'svg',
+      margin: 1,
+      errorCorrectionLevel: 'H',
+      color: { dark: '#1C1A15', light: '#FFFDF8' },
+    })
+      .then((s: string) => alive && setSvg(s))
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [token]);
+  if (!svg) return null;
+  return (
+    <span
+      className="qr-svg"
+      style={{ display: 'inline-block', width: size, height: size, lineHeight: 0 }}
+      aria-label="Table QR code"
+      role="img"
+      dangerouslySetInnerHTML={{ __html: svg }}
+    />
+  );
 }
 
 export function TablesQR() {
@@ -63,6 +104,7 @@ export function TablesQR() {
   const [label, setLabel] = useState('');
   const [section, setSection] = useState('');
   const [printTables, setPrintTables] = useState<PortalTable[] | null>(null);
+  const [cardFmt, setCardFmt] = useState<CardFmt>('a4');
   const [error, setError] = useState('');
 
   const load = () => fetchTables(restaurant.id).then(setTables).catch((e) => setError(e.message));
@@ -92,11 +134,16 @@ export function TablesQR() {
   };
 
   useEffect(() => {
-    if (printTables) {
-      const t = setTimeout(() => { window.print(); setPrintTables(null); }, 350);
-      return () => clearTimeout(t);
-    }
-  }, [printTables]);
+    if (!printTables) return;
+    // @page allows one active size per document, so write the chosen one just
+    // before printing rather than shipping four dead rules.
+    const id = 'menutha-card-format';
+    let tag = document.getElementById(id) as HTMLStyleElement | null;
+    if (!tag) { tag = document.createElement('style'); tag.id = id; document.head.appendChild(tag); }
+    tag.textContent = `@page { ${CARD_FORMATS[cardFmt].page} }`;
+    const t = setTimeout(() => { window.print(); setPrintTables(null); }, 350);
+    return () => clearTimeout(t);
+  }, [printTables, cardFmt]);
 
   if (!tables) return <Spinner label="Loading tables…" />;
 
@@ -107,7 +154,17 @@ export function TablesQR() {
           <p className="overline">Tables & QR</p>
           <h1 className="display" style={{ fontSize: 26 }}>{tables.length} QR codes</h1>
         </div>
-        <button className="chip" onClick={() => setPrintTables(tables)}>🖨 Print all QR cards</button>
+        <span style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+          {/* Label printers take 40mm and 50mm squares and 100×150 portrait;
+              each needs its own layout, not A4 shrunk down. */}
+          <select className="code-input" style={{ padding: '6px 8px', fontSize: 12.5, width: 'auto' }}
+            value={cardFmt} onChange={(e) => setCardFmt(e.target.value as CardFmt)} aria-label="Card size">
+            {(Object.keys(CARD_FORMATS) as CardFmt[]).map((k) => (
+              <option key={k} value={k}>{CARD_FORMATS[k].label}</option>
+            ))}
+          </select>
+          <button className="chip" onClick={() => setPrintTables(tables)}>🖨 Print all QR cards</button>
+        </span>
       </div>
       {error && <p style={{ color: 'var(--error)', fontSize: 14, marginBottom: 10 }}>{error}</p>}
 
@@ -153,7 +210,7 @@ export function TablesQR() {
 
       {printTables && (
         <div className="printable">
-          <div className="qr-sheet">
+          <div className={`qr-sheet ${CARD_FORMATS[cardFmt].cls}`}>
             {printTables.map((t) => (
               <div key={t.id} className="qr-card" style={{ ['--card-accent' as any]: accentFor(t.label) }}>
                 <p className="qr-eyebrow">Scan · Order · Relax</p>
