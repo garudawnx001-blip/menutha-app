@@ -1164,3 +1164,31 @@ input.code-input::placeholder { color: var(--text-dim); }
   /* Never split a bill across pages mid-total. */
   .printable tr, .printable .bill-row { break-inside: avoid; page-break-inside: avoid; }
 }
+
+/* ── Menu manager: dish rows, thumbnails, wide edit sheet ─────────────── */
+
+/* A menu is judged on its photos, so show whether each dish has one right in
+   the list. The placeholder is a real slot rather than nothing, so a row with
+   no photo lines up with the rows that have one. */
+.dish-thumb {
+  width: 40px; height: 40px; flex: 0 0 40px;
+  border-radius: 9px; object-fit: cover;
+  background: var(--surface-2, rgba(255,255,255,0.05));
+  border: 1px solid var(--hairline, rgba(255,255,255,0.09));
+}
+.dish-thumb.empty {
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 17px; opacity: 0.45;
+}
+
+.dish-row { cursor: grab; }
+.dish-row.dragging { opacity: 0.45; cursor: grabbing; }
+.dish-row:active { cursor: grabbing; }
+/* Buttons inside a draggable row must stay clickable, not start a drag. */
+.dish-row button, .dish-row img { cursor: pointer; }
+
+/* The edit sheet was sized for a name and a price. It now holds a photo,
+   description, category and toggles, so give it room on anything wider than a
+   phone — on a phone it keeps the full-width sheet behaviour. */
+.sheet-wide { max-width: 620px; }
+@media (max-width: 640px) { .sheet-wide { max-width: none; } }

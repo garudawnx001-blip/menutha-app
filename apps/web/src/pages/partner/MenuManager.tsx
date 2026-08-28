@@ -7,6 +7,7 @@ import {
   fetchMenuAdmin, upsertCategory, saveDish, deleteDish, uploadImage,
   type PortalCategory, type PortalDish,
   deleteCategory, deleteCategoryWithDishes, reorderCategories,
+  bulkUploadDishImages, reorderDishes, type BulkImageResult,
 } from '../../lib/portalApi';
 import { downloadTemplate, exportMenu, parseWorkbook, publishPlan, type ImportPlan } from '../../lib/excelMenu';
 import { inr } from '../../lib/types';
@@ -36,6 +37,12 @@ export function MenuManager() {
   const [newCat, setNewCat] = useState('');
   const [editCats, setEditCats] = useState(false);
   const [dragCat, setDragCat] = useState<string | null>(null);
+  const [dragDish, setDragDish] = useState<string | null>(null);
+
+  // Bulk photos
+  const photoRef = useRef<HTMLInputElement>(null);
+  const [bulk, setBulk] = useState<BulkImageResult | null>(null);
+  const [bulkBusy, setBulkBusy] = useState(0);
 
   // Excel import state
   const fileRef = useRef<HTMLInputElement>(null);
@@ -72,6 +79,47 @@ export function MenuManager() {
     setDragCat(null);
     try { await reorderCategories(next.map((c) => c.id)); }
     catch (err: any) { setError(`Could not save the new order: ${err?.message ?? 'unknown error'}`); load(); }
+  };
+
+  /** Move a dish within the list currently on screen.
+   *
+   *  When a category filter is on, only those dishes are visible, so the new
+   *  order is spliced back into the slots the filtered dishes already occupy
+   *  globally. Reordering inside a category therefore never disturbs the
+   *  dishes around it. */
+  const moveDishTo = async (id: string, to: number) => {
+    const from = visible.findIndex((d) => d.id === id);
+    if (from < 0 || to < 0 || to >= visible.length || from === to) return;
+
+    const slice = [...visible];
+    const [moved] = slice.splice(from, 1);
+    slice.splice(to, 0, moved);
+
+    const slots = items.reduce<number[]>((acc, it, i) => {
+      if (visible.some((v) => v.id === it.id)) acc.push(i);
+      return acc;
+    }, []);
+    const next = [...items];
+    slots.forEach((slot, i) => { next[slot] = slice[i]; });
+
+    setItems(next);
+    setDragDish(null);
+    try { await reorderDishes(next.map((d) => d.id)); }
+    catch (err: any) { setError(`Could not save the new order: ${err?.message ?? 'unknown error'}`); load(); }
+  };
+
+  /** Attach a whole folder of photos at once, matching each file to the dish
+   *  whose name it resembles. Reports what did not match rather than dropping
+   *  it — a photo that silently went nowhere is the worst outcome here. */
+  const onBulkPhotos = async (files: FileList | null) => {
+    if (!files?.length) return;
+    setError(''); setBulk(null); setBulkBusy(files.length);
+    try {
+      const res = await bulkUploadDishImages(Array.from(files), items);
+      setBulk(res);
+      if (res.matched.length) await load();
+    } catch (e: any) { setError(e?.message ?? 'Bulk upload failed.'); }
+    finally { setBulkBusy(0); if (photoRef.current) photoRef.current.value = ''; }
   };
 
   const save = async () => {
@@ -141,6 +189,14 @@ export function MenuManager() {
           ) : (
             <NavLink className="chip" to="/partner/plan">⬆ Excel import — Growth plan →</NavLink>
           )}
+          <button className="chip" disabled={!items.length || bulkBusy > 0}
+            title={items.length ? 'Select many photos at once — each is matched to the dish it is named after'
+                                : 'Add a dish first'}
+            onClick={() => photoRef.current?.click()}>
+            {bulkBusy > 0 ? `Uploading ${bulkBusy} photo${bulkBusy === 1 ? '' : 's'}…` : '🖼 Bulk photos'}
+          </button>
+          <input ref={photoRef} type="file" accept="image/*" multiple hidden
+            onChange={(e) => onBulkPhotos(e.target.files)} />
           <button className="btn btn-primary" style={{ padding: '10px 16px', fontSize: 14 }}
             onClick={() => setDraft(emptyDraft(activeCat === 'all' ? cats[0]?.id ?? null : activeCat))}>
             + Add dish
@@ -148,6 +204,40 @@ export function MenuManager() {
         </div>
       </div>
       {error && <p style={{ color: 'var(--error)', fontSize: 14, marginBottom: 10 }}>{error}</p>}
+
+      {bulk && (
+        <div className="glass" style={{ padding: 16, marginBottom: 12 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'flex-start' }}>
+            <strong>
+              {bulk.matched.length} photo{bulk.matched.length === 1 ? '' : 's'} attached
+            </strong>
+            <button className="chip" onClick={() => setBulk(null)}>Dismiss</button>
+          </div>
+          {bulk.matched.length > 0 && (
+            <p className="muted" style={{ fontSize: 13.5, marginTop: 6 }}>
+              {bulk.matched.map((m) => m.dish).join(', ')}
+            </p>
+          )}
+          {bulk.unmatched.length > 0 && (
+            <>
+              <p style={{ fontSize: 14, marginTop: 10, color: 'var(--gold)' }}>
+                {bulk.unmatched.length} file{bulk.unmatched.length === 1 ? '' : 's'} matched no dish — nothing was
+                uploaded for {bulk.unmatched.length === 1 ? 'it' : 'them'}:
+              </p>
+              <p className="muted" style={{ fontSize: 13.5, marginTop: 4 }}>{bulk.unmatched.join(', ')}</p>
+              <p className="dim" style={{ fontSize: 12.5, marginTop: 6 }}>
+                Rename the file after the dish — “Paneer Tikka.jpg”, “paneer-tikka.jpg” and “paneertikka.JPG” all
+                match a dish called Paneer Tikka. Then upload again.
+              </p>
+            </>
+          )}
+          {bulk.failed.length > 0 && (
+            <p style={{ fontSize: 13.5, marginTop: 10, color: 'var(--error)' }}>
+              Failed: {bulk.failed.map((f) => `${f.file} (${f.reason})`).join('; ')}
+            </p>
+          )}
+        </div>
+      )}
 
       {importErrors.length > 0 && (
         <div className="glass" style={{ padding: 14, marginBottom: 12, borderColor: 'rgba(197,64,47,0.5)' }}>
@@ -295,13 +385,37 @@ export function MenuManager() {
 
       <div className="glass" style={{ padding: '4px 16px' }}>
         {visible.length === 0 && <p className="muted" style={{ padding: '16px 0' }}>No dishes here yet.</p>}
-        {visible.map((d) => (
-          <div key={d.id} className="row-item">
+        {visible.map((d, i) => (
+          <div
+            key={d.id}
+            className={`row-item dish-row${dragDish === d.id ? ' dragging' : ''}`}
+            draggable
+            onDragStart={() => setDragDish(d.id)}
+            onDragEnd={() => setDragDish(null)}
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={(e) => { e.preventDefault(); if (dragDish && dragDish !== d.id) moveDishTo(dragDish, i); }}
+          >
             <div style={{ display: 'flex', gap: 10, alignItems: 'center', minWidth: 0 }}>
-              <VegMark veg={d.is_veg} />
+              {/* Arrows as well as drag: dragging is unreliable on a phone, and
+                  this menu is arranged from behind the counter. */}
+              <span className="cat-nudge" aria-hidden>
+                <button className="chip" disabled={i === 0} title="Move up"
+                  onClick={() => moveDishTo(d.id, i - 1)}>▲</button>
+                <button className="chip" disabled={i === visible.length - 1} title="Move down"
+                  onClick={() => moveDishTo(d.id, i + 1)}>▼</button>
+              </span>
+              {d.photo_url
+                ? <img className="dish-thumb" src={d.photo_url} alt="" loading="lazy" />
+                : <span className="dish-thumb empty" aria-hidden>🍽</span>}
               <div style={{ minWidth: 0 }}>
-                <p style={{ fontWeight: 600, fontSize: 14.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.name}</p>
-                <p className="dim" style={{ fontSize: 12.5 }}>{inr(d.price)}</p>
+                <p style={{ fontWeight: 600, fontSize: 14.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'flex', gap: 6, alignItems: 'center' }}>
+                  <VegMark veg={d.is_veg} />{d.name}
+                </p>
+                <p className="dim" style={{ fontSize: 12.5 }}>
+                  {inr(d.price)}
+                  {d.category_id && <> · {cats.find((c) => c.id === d.category_id)?.name ?? 'Uncategorised'}</>}
+                  {!d.photo_url && <> · no photo</>}
+                </p>
               </div>
             </div>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
@@ -320,11 +434,17 @@ export function MenuManager() {
             </div>
           </div>
         ))}
+        {visible.length > 1 && (
+          <p className="dim" style={{ fontSize: 12.5, padding: '4px 0 12px' }}>
+            Drag a dish, or use ▲▼, to set the order diners see.
+            {activeCat !== 'all' && ' Within a category, the rest of the menu stays put.'}
+          </p>
+        )}
       </div>
 
       {draft && (
         <div className="modal-scrim" onClick={() => setDraft(null)}>
-          <div className="sheet" onClick={(e) => e.stopPropagation()}>
+          <div className="sheet sheet-wide" onClick={(e) => e.stopPropagation()}>
             <h2 className="display" style={{ fontSize: 22, marginBottom: 12 }}>
               {draft.id ? 'Edit dish' : 'New dish'}
             </h2>
@@ -346,7 +466,7 @@ export function MenuManager() {
               </div>
             </div>
             <p className="overline" style={{ margin: '12px 0 6px' }}>Description</p>
-            <textarea className="notes" value={draft.description}
+            <textarea className="notes" rows={4} placeholder="What is in it, how spicy, portion size — diners read this before ordering." value={draft.description}
               onChange={(e) => setDraft({ ...draft, description: e.target.value })} />
             <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
               <button className={draft.is_veg ? 'chip active' : 'chip'} onClick={() => setDraft({ ...draft, is_veg: true })}>

@@ -428,3 +428,56 @@ export async function deleteCategoryWithDishes(id: string) {
   const { error } = await supabase.from('menu_category').delete().eq('id', id);
   if (error) throw error;
 }
+
+// ── Bulk dish images ───────────────────────────────────────────────────────
+
+/** Normalise a name or filename to something matchable.
+ *  "Paneer Tikka" and "paneer-tikka.jpg" both become "paneertikka", so the
+ *  owner can shoot photos, name them roughly after the dish, and drop the lot
+ *  in at once. */
+const matchKey = (s: string) =>
+  s.replace(/\.[a-z0-9]+$/i, '')       // drop extension
+   .toLowerCase()
+   .replace(/[^a-z0-9]+/g, '');        // drop spaces, dashes, underscores
+
+export interface BulkImageResult {
+  matched: { file: string; dish: string }[];
+  unmatched: string[];
+  failed: { file: string; reason: string }[];
+}
+
+/** Upload many dish photos at once, attaching each to the dish whose name it
+ *  matches. Uploading and matching are separate concerns: a file that matches
+ *  nothing is reported rather than silently dropped, because a photo that
+ *  quietly went nowhere is worse than one that says it did not land. */
+export async function bulkUploadDishImages(
+  files: File[],
+  dishes: { id: string; name: string; photo_url?: string | null }[],
+): Promise<BulkImageResult> {
+  const byKey = new Map<string, { id: string; name: string }>();
+  for (const d of dishes) byKey.set(matchKey(d.name), { id: d.id, name: d.name });
+
+  const out: BulkImageResult = { matched: [], unmatched: [], failed: [] };
+
+  for (const f of files) {
+    const dish = byKey.get(matchKey(f.name));
+    if (!dish) { out.unmatched.push(f.name); continue; }
+    try {
+      const url = await uploadImage('dishes', f);
+      const { error } = await supabase
+        .from('menu_item').update({ photo_url: url }).eq('id', dish.id);
+      if (error) throw error;
+      out.matched.push({ file: f.name, dish: dish.name });
+    } catch (e: any) {
+      out.failed.push({ file: f.name, reason: e?.message ?? 'upload failed' });
+    }
+  }
+  return out;
+}
+
+/** Persist a new dish order within a category. */
+export async function reorderDishes(ids: string[]) {
+  await Promise.all(
+    ids.map((id, i) => supabase.from('menu_item').update({ sort_order: i }).eq('id', id)),
+  );
+}
