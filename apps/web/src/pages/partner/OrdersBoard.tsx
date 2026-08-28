@@ -16,6 +16,18 @@ import { Growth } from './Growth';
 import { Spinner, VegMark } from '../../components';
 
 const LIVE = ['placed', 'accepted', 'preparing', 'ready'];
+
+/** One burst of taps is one ticket.
+ *
+ *  With the cart gone a diner orders dish by dish, so a single sitting arrives
+ *  as several rows seconds apart. To the kitchen that is one order, and four
+ *  cards for one table is how a pass gets missed. The same window already
+ *  collapses the push notification, so the board and the phone agree.
+ *
+ *  Grouped for DISPLAY only — the rows stay separate underneath. Merging them
+ *  would fight per-order tax rounding, which is what guarantees the table total
+ *  and the sum of the per-person totals agree to the paisa. */
+const GROUP_WINDOW_MS = 90 * 1000;
 const SOUND_KEY = 'menutha-portal:sound';
 
 /** One AudioContext for the page. A fresh one per chime leaks contexts —
@@ -172,18 +184,18 @@ export function OrdersBoard() {
   };
 
   /** Pull the countdown to zero. Staff-side only — the diner is not told. */
-  const readyNow = async (o: PortalOrder) => {
-    setBusy(o.id);
-    setJustIn((prev) => { const n = new Set(prev); n.delete(o.id); return n; });
-    try { await markOrderReadyNow(o.id); await load(); }
+  const readyNow = async (all: PortalOrder[]) => {
+    setBusy(all[0].id);
+    setJustIn((prev) => { const n = new Set(prev); all.forEach((x) => n.delete(x.id)); return n; });
+    try { for (const x of all) await markOrderReadyNow(x.id); await load(); }
     catch (e: any) { setError(e?.message ?? 'Could not update the timer.'); }
     finally { setBusy(''); }
   };
 
   /** Nudge one order's deadline without touching the restaurant default. */
-  const nudge = async (o: PortalOrder, mins: number) => {
-    setBusy(o.id);
-    try { await adjustOrderTimer(o.id, mins); await load(); }
+  const nudge = async (all: PortalOrder[], mins: number) => {
+    setBusy(all[0].id);
+    try { for (const x of all) await adjustOrderTimer(x.id, mins); await load(); }
     catch (e: any) { setError(e?.message ?? 'Could not adjust the timer.'); }
     finally { setBusy(''); }
   };
@@ -193,14 +205,37 @@ export function OrdersBoard() {
   // but the real check is in the database — a hidden button is not a
   // permission, and both RPCs refuse anyone below manager.
   const canEdit = role === 'owner' || role === 'manager';
-  const [editing, setEditing] = useState<PortalOrder | null>(null);
+  const [editing, setEditing] = useState<PortalOrder[] | null>(null);
 
-  const cancel = async (o: PortalOrder) => {
-    if (!confirm(`Cancel order #${o.order_no}?`)) return;
-    setBusy(o.id);
-    setJustIn((prev) => { const n = new Set(prev); n.delete(o.id); return n; });
-    try { await staffCancelOrder(o.id); setEditing(null); await load(); }
-    catch (e: any) { setError(e?.message ?? 'Cancel failed.'); }
+  /** Collapse each table+diner's burst of orders into one ticket. */
+  const tickets = React.useMemo(() => {
+    const out: { o: PortalOrder; sibs: PortalOrder[] }[] = [];
+    const keyOf = (r: PortalOrder) =>
+      `${r.is_parcel ? 'parcel' : r.table_label ?? ''}|${r.guest_phone ?? ''}`;
+    for (const ord of orders ?? []) {
+      const g = out.find((x) => {
+        if (keyOf(x.o) !== keyOf(ord)) return false;
+        const last = x.sibs.length ? x.sibs[x.sibs.length - 1] : x.o;
+        return new Date(ord.placed_at).getTime() - new Date(last.placed_at).getTime() <= GROUP_WINDOW_MS;
+      });
+      if (g) g.sibs.push(ord); else out.push({ o: ord, sibs: [] });
+    }
+    return out;
+  }, [orders]);
+
+  /** Cancel everything on this ticket. A ticket is what the kitchen sees, so
+   *  cancelling half of one and leaving the rest on the pass is not a state
+   *  anybody asked for. */
+  const cancel = async (all: PortalOrder[]) => {
+    const nos = all.map((x) => `#${x.order_no}`).join(', ');
+    if (!confirm(`Cancel ${all.length === 1 ? 'order' : `all ${all.length} orders on this ticket`} ${nos}?`)) return;
+    setBusy(all[0].id);
+    setJustIn((prev) => { const n = new Set(prev); all.forEach((x) => n.delete(x.id)); return n; });
+    try {
+      for (const x of all) await staffCancelOrder(x.id);
+      setEditing(null);
+      await load();
+    } catch (e: any) { setError(e?.message ?? 'Cancel failed.'); }
     finally { setBusy(''); }
   };
 
@@ -208,26 +243,37 @@ export function OrdersBoard() {
    *  cancels the order. The total is recomputed server-side from the item rows
    *  at their original prices, so a menu price change never rewrites a bill
    *  the diner has already been quoted. */
-  const setItemQty = async (o: PortalOrder, itemId: string, qty: number) => {
-    setBusy(o.id);
+  const setItemQty = async (orderId: string, itemId: string, qty: number) => {
+    setBusy(orderId);
     try {
-      await staffUpdateOrderItem(o.id, itemId, qty);
+      await staffUpdateOrderItem(orderId, itemId, qty);
       const fresh = await load();
-      setEditing((cur) => (cur ? (fresh ?? []).find((x) => x.id === cur.id) ?? null : null));
+      // Re-resolve the whole ticket: removing a line can cancel its order,
+      // which drops it out of the board entirely.
+      setEditing((cur) => {
+        if (!cur) return null;
+        const ids = new Set(cur.map((x) => x.id));
+        const next = (fresh ?? []).filter((x) => ids.has(x.id));
+        return next.length ? next : null;
+      });
     } catch (e: any) { setError(e?.message ?? 'Could not change that item.'); }
     finally { setBusy(''); }
   };
 
-  const quickPaid = async (o: PortalOrder, mode: 'cash' | 'upi_qr') => {
-    setBusy(o.id);
-    setJustIn((prev) => { const n = new Set(prev); n.delete(o.id); return n; });
+  /** Settle everything on this ticket as one bill. Taking payment for the
+   *  first of three orders placed seconds apart and leaving the rest open is a
+   *  short till at the end of the shift. */
+  const quickPaid = async (all: PortalOrder[], mode: 'cash' | 'upi_qr') => {
+    setBusy(all[0].id);
+    setJustIn((prev) => { const n = new Set(prev); all.forEach((x) => n.delete(x.id)); return n; });
     try {
-      // A diner-initiated pending payment just needs the one-tap confirm;
-      // otherwise settle via a single-order bill.
-      if (o.pendingPayment) {
-        await confirmPayment(o.pendingPayment.id);
-      } else {
-        const bill = await createBill(restaurant.id, [o.id], 0);
+      // Diner-initiated pending payments just need the one-tap confirm.
+      const pending = all.filter((x) => x.pendingPayment);
+      for (const x of pending) await confirmPayment(x.pendingPayment!.id);
+
+      const rest = all.filter((x) => !x.pendingPayment && !x.paid);
+      if (rest.length) {
+        const bill = await createBill(restaurant.id, rest.map((x) => x.id), 0);
         await payBill(bill.id, mode);
       }
       await load();
@@ -321,10 +367,28 @@ export function OrdersBoard() {
       )}
 
       <div className="menu-grid">
-        {orders.map((o) => (
+        {tickets.map(({ o, sibs }) => {
+          const all = [o, ...sibs];
+          const groupTotal = all.reduce((a, x) => a + Number(x.total || 0), 0);
+          // Merge identical dishes across the burst: "2× Idli" beats two lines
+          // of "1× Idli" on a pass that is being read at a glance.
+          const merged = (() => {
+            const m = new Map<string, { name: string; qty: number; is_veg?: boolean }>();
+            for (const x of all) {
+              for (const it of x.items ?? []) {
+                const k = `${it.name}|${it.is_veg ? 1 : 0}`;
+                const cur = m.get(k);
+                if (cur) cur.qty += Number(it.qty || 0);
+                else m.set(k, { name: it.name, qty: Number(it.qty || 0), is_veg: it.is_veg });
+              }
+            }
+            return [...m.values()];
+          })();
+          const notes = all.map((x) => x.notes).filter(Boolean) as string[];
+          return (
           <div
             key={o.id}
-            className={justIn.has(o.id) ? 'ticket glass ticket-new' : 'ticket glass'}
+            className={all.some((x) => justIn.has(x.id)) ? 'ticket glass ticket-new' : 'ticket glass'}
             style={{ borderColor: o.status === 'placed' ? 'var(--gold)' : undefined }}
           >
             <div className="ticket-head">
@@ -337,10 +401,10 @@ export function OrdersBoard() {
                 title="Open this table's bill"
                 onClick={() => nav(`/partner/billing?table=${encodeURIComponent(o.table_label ?? '')}&order=${o.id}`)}
               >
-                #{o.order_no} · {o.is_parcel ? '📦 Parcel' : o.table_label ?? 'Table'} ›
+                #{o.order_no}{sibs.length ? `+${sibs.length}` : ''} · {o.is_parcel ? '📦 Parcel' : o.table_label ?? 'Table'} ›
               </button>
               <span style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                {justIn.has(o.id) && <span className="new-badge">NEW</span>}
+                {all.some((x) => justIn.has(x.id)) && <span className="new-badge">NEW</span>}
                 <span className={`status-chip status-${o.status}`}>{o.status}</span>
               </span>
             </div>
@@ -350,17 +414,22 @@ export function OrdersBoard() {
               <p className="dim" style={{ fontSize: 12.5, marginTop: 2 }}>{o.guest_name}</p>
             )}
             <div className="ticket-items">
-              {o.items.map((it, i) => (
+              {merged.map((it, i) => (
                 <div key={i} style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                   <VegMark veg={!!it.is_veg} />
                   <span>{it.qty}× {it.name}</span>
                 </div>
               ))}
-              {o.notes && <p style={{ marginTop: 4, fontStyle: 'italic' }}>“{o.notes}”</p>}
+              {notes.map((n, i) => <p key={i} style={{ marginTop: 4, fontStyle: 'italic' }}>“{n}”</p>)}
+              {sibs.length > 0 && (
+                <p className="dim" style={{ fontSize: 12, marginTop: 6 }}>
+                  {all.length} orders within 90s — one ticket ({all.map((x) => `#${x.order_no}`).join(', ')})
+                </p>
+              )}
             </div>
             <div className="ticket-head">
-              <span style={{ fontWeight: 700 }}>{inr(o.total)}</span>
-              <span className={o.paid ? 'badge open' : 'badge'}>{o.paid ? 'Paid' : 'Unpaid'}</span>
+              <span style={{ fontWeight: 700 }}>{inr(groupTotal)}</span>
+              <span className={all.every((x) => x.paid) ? 'badge open' : 'badge'}>{all.every((x) => x.paid) ? 'Paid' : 'Unpaid'}</span>
             </div>
             {/* Prep timer replaces the accept/preparing/ready/served workflow.
                 The order starts its own countdown the moment it lands, so
@@ -374,9 +443,9 @@ export function OrdersBoard() {
                 <>
                   <button className="chip" disabled={busy === o.id}
                     title="Give this order 5 more minutes"
-                    onClick={() => nudge(o, 5)}>+5m</button>
+                    onClick={() => nudge(all, 5)}>+5m</button>
                   <button className="btn btn-primary" style={{ padding: '9px 14px', fontSize: 13.5, flex: 1 }}
-                    disabled={busy === o.id} onClick={() => readyNow(o)}>
+                    disabled={busy === o.id} onClick={() => readyNow(all)}>
                     Ready now
                   </button>
                 </>
@@ -384,11 +453,11 @@ export function OrdersBoard() {
               {canEdit && (
                 <>
                   <button className="chip" disabled={busy === o.id}
-                    onClick={() => setEditing(o)} title="Change what is on this order">
+                    onClick={() => setEditing(all)} title="Change what is on this ticket">
                     Edit
                   </button>
                   <button className="chip" disabled={busy === o.id}
-                    onClick={() => cancel(o)} title="Cancel this order">✕</button>
+                    onClick={() => cancel(all)} title="Cancel this ticket">✕</button>
                 </>
               )}
             </div>
@@ -397,15 +466,15 @@ export function OrdersBoard() {
                 recorded a payment or requested one — the "confusing Paid
                 option". They are now under an explicit heading that says what
                 pressing them does, and the table-level route is signposted. */}
-            {!o.paid && (
+            {!all.every((x) => x.paid) && (
               <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px dashed var(--line)' }}>
-                {o.pendingPayment ? (
+                {all.some((x) => x.pendingPayment) ? (
                   <>
                     <p className="overline" style={{ marginBottom: 6 }}>
-                      Diner says they paid by {o.pendingPayment.provider === 'cash' ? 'cash' : 'UPI'}
+                      Diner says they paid by {all.find((x) => x.pendingPayment)!.pendingPayment!.provider === 'cash' ? 'cash' : 'UPI'}
                     </p>
                     <button className="btn btn-primary btn-block" style={{ padding: '10px 12px', fontSize: 13 }}
-                      disabled={busy === o.id} onClick={() => quickPaid(o, 'cash')}>
+                      disabled={busy === o.id} onClick={() => quickPaid(all, 'cash')}>
                       Confirm we received it ✓
                     </button>
                   </>
@@ -414,19 +483,20 @@ export function OrdersBoard() {
                     <p className="overline" style={{ marginBottom: 6 }}>Record payment received</p>
                     <div style={{ display: 'flex', gap: 8 }}>
                       <button className="btn btn-ghost" style={{ padding: '10px 12px', fontSize: 13, flex: 1 }}
-                        disabled={busy === o.id} onClick={() => quickPaid(o, 'cash')}>Cash</button>
+                        disabled={busy === o.id} onClick={() => quickPaid(all, 'cash')}>Cash</button>
                       <button className="btn btn-ghost" style={{ padding: '10px 12px', fontSize: 13, flex: 1 }}
-                        disabled={busy === o.id} onClick={() => quickPaid(o, 'upi_qr')}>UPI</button>
+                        disabled={busy === o.id} onClick={() => quickPaid(all, 'upi_qr')}>UPI</button>
                     </div>
                     <p className="dim" style={{ fontSize: 11.5, marginTop: 6 }}>
-                      Settles this one order. To bill a whole table together, use Billing.
+                      Settles this ticket. To bill a whole table together, use Billing.
                     </p>
                   </>
                 )}
               </div>
             )}
           </div>
-        ))}
+          );
+        })}
       </div>
 
       {servedToday.length > 0 && (
@@ -504,37 +574,46 @@ export function OrdersBoard() {
         <div className="modal-scrim" onClick={() => setEditing(null)}>
           <div className="sheet" onClick={(e) => e.stopPropagation()}>
             <h2 className="display" style={{ fontSize: 22 }}>
-              Edit order #{editing.order_no}
+              Edit {editing.length === 1
+                ? `order #${editing[0].order_no}`
+                : `ticket (${editing.map((x) => `#${x.order_no}`).join(', ')})`}
             </h2>
             <p className="muted" style={{ fontSize: 13.5, marginTop: 4 }}>
-              {editing.is_parcel ? '📦 Parcel' : editing.table_label ?? 'Table'}
-              {(editing.guest_name || '').trim() ? ` · ${editing.guest_name}` : ''}
+              {editing[0].is_parcel ? '📦 Parcel' : editing[0].table_label ?? 'Table'}
+              {(editing[0].guest_name || '').trim() ? ` · ${editing[0].guest_name}` : ''}
             </p>
 
+            {/* Every line on the ticket, whichever order it came in on. The
+                line is what the kitchen and the diner argue about; which of
+                three rows two seconds apart it belongs to is bookkeeping. */}
             <div style={{ marginTop: 14 }}>
-              {editing.items.map((it) => (
+              {editing.flatMap((ord) => ord.items.map((it) => (
                 <div key={it.id} className="row-item">
                   <span style={{ display: 'flex', gap: 8, alignItems: 'center', minWidth: 0 }}>
                     <VegMark veg={!!it.is_veg} />
                     <span style={{ minWidth: 0 }}>
                       <p style={{ fontWeight: 600, fontSize: 14 }}>{it.name}</p>
-                      <p className="dim" style={{ fontSize: 12.5 }}>{inr(it.unit_price)} each</p>
+                      <p className="dim" style={{ fontSize: 12.5 }}>
+                        {inr(it.unit_price)} each
+                        {editing.length > 1 && ` · #${ord.order_no}`}
+                      </p>
                     </span>
                   </span>
                   <span style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                    <button className="chip" disabled={busy === editing.id}
+                    <button className="chip" disabled={busy === ord.id}
                       title={it.qty === 1 ? 'Remove this item' : 'One fewer'}
-                      onClick={() => setItemQty(editing, it.id, it.qty - 1)}>−</button>
+                      onClick={() => setItemQty(ord.id, it.id, it.qty - 1)}>−</button>
                     <span style={{ minWidth: 22, textAlign: 'center', fontWeight: 700 }}>{it.qty}</span>
-                    <button className="chip" disabled={busy === editing.id}
-                      onClick={() => setItemQty(editing, it.id, it.qty + 1)}>+</button>
+                    <button className="chip" disabled={busy === ord.id}
+                      onClick={() => setItemQty(ord.id, it.id, it.qty + 1)}>+</button>
                   </span>
                 </div>
-              ))}
+              )))}
             </div>
 
             <div className="bill-row" style={{ marginTop: 12, fontWeight: 700 }}>
-              <span>Order total</span><span>{inr(editing.total)}</span>
+              <span>{editing.length === 1 ? 'Order total' : 'Ticket total'}</span>
+              <span>{inr(editing.reduce((a, x) => a + Number(x.total || 0), 0))}</span>
             </div>
             <p className="dim" style={{ fontSize: 12.5, marginTop: 6 }}>
               To add something new, ask the diner to order it — it joins the same
@@ -545,9 +624,9 @@ export function OrdersBoard() {
               <button className="btn btn-ghost" style={{ flex: 1 }} onClick={() => setEditing(null)}>
                 Done
               </button>
-              <button className="chip" disabled={busy === editing.id}
+              <button className="chip" disabled={!!busy}
                 style={{ color: 'var(--error)' }} onClick={() => cancel(editing)}>
-                Cancel order
+                {editing.length === 1 ? 'Cancel order' : 'Cancel ticket'}
               </button>
             </div>
           </div>
