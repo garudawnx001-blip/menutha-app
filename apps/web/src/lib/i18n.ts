@@ -26,6 +26,8 @@ type Dict = Record<string, string>;
 
 const EN: Dict = {
   'menu.search': 'Search dishes',
+  'bill.cameraHint': 'Use your phone camera to scan — a saved or gallery image is limited to ₹2,000.',
+  'bill.capNote': 'This bill is over ₹2,000. UPI apps cap one-tap links to personal UPI IDs at ₹2,000 — please scan the QR above with your camera instead.',
   'bill.scanToPay': 'Scan to pay',
   'bill.scanAnyApp': 'Open any UPI app and scan — this is the most reliable way to pay.',
   'bill.upiId': 'UPI ID',
@@ -116,6 +118,8 @@ const EN: Dict = {
 
 const KN: Dict = {
   'menu.search': 'ಖಾದ್ಯ ಹುಡುಕಿ',
+  'bill.cameraHint': 'ಫೋನ್ ಕ್ಯಾಮೆರಾದಿಂದ ಸ್ಕ್ಯಾನ್ ಮಾಡಿ — ಗ್ಯಾಲರಿ ಚಿತ್ರಕ್ಕೆ ₹2,000 ಮಿತಿ ಇದೆ.',
+  'bill.capNote': 'ಈ ಬಿಲ್ ₹2,000 ಕ್ಕಿಂತ ಹೆಚ್ಚು. ವೈಯಕ್ತಿಕ UPI ಐಡಿಗೆ ಒಂದೇ ಟ್ಯಾಪ್ ಲಿಂಕ್‌ಗೆ ₹2,000 ಮಿತಿ ಇದೆ — ದಯವಿಟ್ಟು ಮೇಲಿನ QR ಅನ್ನು ಕ್ಯಾಮೆರಾದಿಂದ ಸ್ಕ್ಯಾನ್ ಮಾಡಿ.',
   'bill.scanToPay': 'ಸ್ಕ್ಯಾನ್ ಮಾಡಿ ಪಾವತಿಸಿ',
   'bill.scanAnyApp': 'ಯಾವುದೇ UPI ಆ್ಯಪ್ ತೆರೆದು ಸ್ಕ್ಯಾನ್ ಮಾಡಿ — ಇದು ಅತ್ಯಂತ ವಿಶ್ವಾಸಾರ್ಹ ವಿಧಾನ.',
   'bill.upiId': 'UPI ಐಡಿ',
@@ -206,6 +210,8 @@ const KN: Dict = {
 
 const HI: Dict = {
   'menu.search': 'व्यंजन खोजें',
+  'bill.cameraHint': 'फ़ोन कैमरे से स्कैन करें — गैलरी की तस्वीर पर ₹2,000 की सीमा है।',
+  'bill.capNote': 'यह बिल ₹2,000 से अधिक है। UPI ऐप निजी UPI आईडी पर वन-टैप लिंक को ₹2,000 तक सीमित रखते हैं — कृपया ऊपर का QR कैमरे से स्कैन करें।',
   'bill.scanToPay': 'स्कैन करके भुगतान करें',
   'bill.scanAnyApp': 'कोई भी UPI ऐप खोलकर स्कैन करें — यह सबसे भरोसेमंद तरीका है।',
   'bill.upiId': 'UPI आईडी',

@@ -15,6 +15,18 @@ import { useStore } from '../store';
 import { Spinner, Wordmark } from '../components';
 import { useT } from '../lib/i18n';
 
+/** UPI apps cap one-tap (intent) payments to PERSONAL VPAs — commonly at
+ *  ₹2,000 for PhonePe. It is the app's risk policy for person-to-person
+ *  payments to a payee that isn't a verified merchant, not an NPCI rule and
+ *  not something our link can opt out of: a merchant intent is identified by
+ *  the VPA's own class, resolved by the PSP, so no combination of parameters
+ *  turns a personal VPA into a merchant one.
+ *
+ *  Scanning with the phone's CAMERA is treated differently from a link or a
+ *  gallery image and clears the cap in practice, which is why the QR is the
+ *  primary path here and the intent button steps back above the threshold. */
+const UPI_P2P_INTENT_CAP = 2000;
+
 function TotalsBlock({ b, sgstPct, cgstPct }: {
   b: { subtotal: number; packing_charge: number; service_charge?: number; sgst_amount?: number; cgst_amount?: number; gst_amount: number; total: number };
   sgstPct?: number | null; cgstPct?: number | null;
@@ -255,7 +267,7 @@ export function Bill() {
                     {t('bill.scanToPay')}
                   </p>
                   <p className="muted" style={{ fontSize: 12.5, marginTop: 2 }}>
-                    {t('bill.scanAnyApp')}
+                    {t('bill.scanAnyApp')}<br />{t('bill.cameraHint')}
                   </p>
                 </div>
               )}
@@ -282,7 +294,7 @@ export function Bill() {
                 {t('bill.openUpiApp')}
               </a>
               <p className="dim" style={{ fontSize: 11.5, textAlign: 'center', marginTop: 6 }}>
-                {t('bill.intentNote')}
+                {payAmount > UPI_P2P_INTENT_CAP ? t('bill.capNote') : t('bill.intentNote')}
               </p>
             </div>
           ) : null}
