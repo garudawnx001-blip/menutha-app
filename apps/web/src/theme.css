@@ -488,6 +488,13 @@ textarea.notes:focus { border-color: var(--primary); }
 
 .topbar {
   display: flex; align-items: center; justify-content: space-between;
+  gap: 10px;
+  /* A page title on the left and an action group on the right, with nothing
+     telling them what to do once they stop fitting side by side — they just
+     compress: buttons lose their padding, long restaurant names collide with
+     the controls. Wrapping costs nothing while the row fits and degrades
+     honestly when it doesn't. */
+  flex-wrap: wrap;
   padding: 14px 0 4px;
 }
 .badge {
@@ -583,6 +590,17 @@ input.code-input::placeholder { color: var(--text-dim); }
     overflow-x: auto; scrollbar-width: none;
   }
   .portal-nav::-webkit-scrollbar { display: none; }
+  /* Same failure as the category chips, on the primary navigation: this bar
+     scrolls horizontally with its scrollbar hidden, so an owner on a narrow
+     phone (8 sections + Sign out) gets no signal that the last items exist.
+     Fading the right edge makes a partially-covered item read as "there is
+     more this way", where a cleanly clipped one reads as "that's all there
+     is". This is an affordance patch, not the fix — the real answer is fewer
+     top-level items on a phone, which belongs with the IA alignment work. */
+  .portal-nav {
+    -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 30px), transparent 100%);
+    mask-image: linear-gradient(to right, #000 calc(100% - 30px), transparent 100%);
+  }
   .portal-brand { display: none; }
   .portal-link { flex-direction: column; gap: 3px; padding: 6px 10px; font-size: 10.5px; min-width: 64px; align-items: center; }
   .portal-link .portal-link-label { white-space: nowrap; }
@@ -1292,3 +1310,23 @@ input.code-input::placeholder { color: var(--text-dim); }
 }
 .cat-row .cat-grip:active { cursor: grabbing; background: var(--surface-2, rgba(0,0,0,0.04)); }
 @media (prefers-reduced-motion: reduce) { .cat-row.sliding { transition: none; } }
+
+/* ── Chip rows wrap once there is room ─────────────────────────────────────
+   Measured on /partner/menu at 1024px wide: scrollWidth 1892 against
+   clientWidth 767, with NINE buttons past the right edge — including "Edit
+   categories", a primary control that was simply invisible on a PC. A
+   horizontal scroller with no scrollbar (scrollbar-width: none, for good
+   reasons on touch) gives a mouse user no affordance at all: nothing suggests
+   there is anything to the right.
+
+   On a phone the scroller is right — chips are swiped, and wrapping a long
+   category list would push the menu itself below the fold. So the behaviour
+   splits at the point where a pointer becomes likely and the width exists to
+   wrap into: scroll on phones, wrap on desktop. */
+@media (min-width: 900px) {
+  .chip-row {
+    flex-wrap: wrap;
+    overflow-x: visible;
+    row-gap: 8px;
+  }
+}

@@ -251,6 +251,19 @@ export function MenuManager() {
           </button>
           <input ref={photoRef} type="file" accept="image/*" multiple hidden
             onChange={(e) => onBulkPhotos(e.target.files)} />
+          {/* Category editing lives with the other menu ACTIONS, not among the
+              category FILTER chips below. As the last chip after every category
+              it was the first control pushed offscreen: at 1024px wide with the
+              client's 19 categories it sat ~1100px past the right edge of a
+              scroller that deliberately hides its scrollbar, so a mouse user got
+              no hint it existed. Desktop now wraps the chips, but a phone still
+              scrolls them — and a primary control should not be nineteen swipes
+              away on either surface. */}
+          <button className={editCats ? 'chip active' : 'chip'}
+            title="Rename, reorder or delete menu categories"
+            onClick={() => setEditCats(!editCats)}>
+            {editCats ? '✕ Done editing categories' : '✎ Edit categories'}
+          </button>
           <button className="btn btn-primary" style={{ padding: '10px 16px', fontSize: 14 }}
             onClick={() => setDraft(emptyDraft(activeCat === 'all' ? cats[0]?.id ?? null : activeCat))}>
             + Add dish
@@ -345,9 +358,6 @@ export function MenuManager() {
             {c.name}
           </button>
         ))}
-        <button className={editCats ? 'chip active' : 'chip'} onClick={() => setEditCats(!editCats)}>
-          {editCats ? '✕ Done' : '✎ Edit categories'}
-        </button>
       </div>
 
       {editCats && (
