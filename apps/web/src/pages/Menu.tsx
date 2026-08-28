@@ -44,7 +44,12 @@ export function Menu() {
   // stepper reverts to "Order", and ordering again is correct: the kitchen
   // already has the first one.
   const [openOrders, setOpenOrders] = useState<OpenOrder[]>([]);
-  const [placing, setPlacing] = useState<string | null>(null);
+  // A SET, not one id. Ordering dish by dish means tapping three in quick
+  // succession is the normal case, not an edge case — a single in-flight id
+  // would have greyed out every other button while the first order was in
+  // flight, which is exactly the flow this change exists to enable. Only a
+  // second tap on the SAME dish is suppressed, so nothing is ordered twice.
+  const [placing, setPlacing] = useState<Set<string>>(new Set());
 
   const refreshOpen = React.useCallback(() => {
     if (!session || session.demo) return Promise.resolve();
@@ -76,8 +81,8 @@ export function Menu() {
   };
 
   const orderNow = async (line: CartLine, label: string) => {
-    if (!session || placing) return;
-    setPlacing(line.menuItemId);
+    if (!session || placing.has(line.menuItemId)) return;
+    setPlacing((p) => new Set(p).add(line.menuItemId));
     try {
       await placeOrder(session, [line]);
       flash(`${label} ${t('menu.ordered')}`);
@@ -85,7 +90,7 @@ export function Menu() {
     } catch (e: any) {
       flash(e?.message ?? t('menu.orderFailed'), 3200);
     } finally {
-      setPlacing(null);
+      setPlacing((p) => { const n = new Set(p); n.delete(line.menuItemId); return n; });
     }
   };
 
@@ -347,10 +352,10 @@ export function Menu() {
                             <button
                               className="add-btn"
                               onClick={quickOrder}
-                              disabled={placing === d.id}
+                              disabled={placing.has(d.id)}
                               aria-label={`Order ${d.name}`}
                             >
-                              {placing === d.id ? '…' : t('menu.order')}
+                              {placing.has(d.id) ? "…" : t("menu.order")}
                             </button>
                           )}
                         </span>
