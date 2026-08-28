@@ -26,6 +26,10 @@ type Dict = Record<string, string>;
 
 const EN: Dict = {
   'menu.search': 'Search dishes',
+  'bill.didYouPay': 'Did you pay',
+  'bill.didYouPayBody': 'Tell the counter so they can check and close your table. They still confirm it on their side.',
+  'bill.yesPaid': 'Yes, I’ve paid',
+  'bill.notYet': 'Not yet',
   'track.approx': 'About',
   'track.minutes': 'minutes',
   'track.anyMoment': 'Should be with you any moment.',
@@ -125,6 +129,10 @@ const EN: Dict = {
 
 const KN: Dict = {
   'menu.search': 'ಖಾದ್ಯ ಹುಡುಕಿ',
+  'bill.didYouPay': 'ನೀವು ಪಾವತಿಸಿದಿರಾ',
+  'bill.didYouPayBody': 'ಕೌಂಟರ್‌ಗೆ ತಿಳಿಸಿ, ಅವರು ಪರಿಶೀಲಿಸಿ ನಿಮ್ಮ ಟೇಬಲ್ ಮುಚ್ಚುತ್ತಾರೆ. ಅವರು ತಮ್ಮ ಕಡೆ ದೃಢಪಡಿಸುತ್ತಾರೆ.',
+  'bill.yesPaid': 'ಹೌದು, ಪಾವತಿಸಿದ್ದೇನೆ',
+  'bill.notYet': 'ಇನ್ನೂ ಇಲ್ಲ',
   'track.approx': 'ಸುಮಾರು',
   'track.minutes': 'ನಿಮಿಷ',
   'track.anyMoment': 'ಯಾವ ಕ್ಷಣದಲ್ಲಾದರೂ ಬರಲಿದೆ.',
@@ -224,6 +232,10 @@ const KN: Dict = {
 
 const HI: Dict = {
   'menu.search': 'व्यंजन खोजें',
+  'bill.didYouPay': 'क्या आपने भुगतान किया',
+  'bill.didYouPayBody': 'काउंटर को बताएँ ताकि वे जाँचकर आपकी टेबल बंद कर सकें। पुष्टि वे अपनी ओर से करेंगे।',
+  'bill.yesPaid': 'हाँ, मैंने भुगतान किया',
+  'bill.notYet': 'अभी नहीं',
   'track.approx': 'लगभग',
   'track.minutes': 'मिनट',
   'track.anyMoment': 'किसी भी क्षण आ जाएगा।',

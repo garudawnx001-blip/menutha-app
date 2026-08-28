@@ -3,6 +3,7 @@
  *  (advance buttons still shown: waiters marking Served is normal floor work,
  *  and the RPC enforces staff membership server-side). */
 import React, { useEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { subscribeOrders } from '../../lib/realtimeWeb';
 import {
   fetchLiveOrders, advanceOrder, NEXT_STATUS, markOrderReadyNow, adjustOrderTimer,
@@ -100,6 +101,7 @@ function Countdown({ readyAt }: { readyAt?: string | null }) {
 
 export function OrdersBoard() {
   const { restaurant, role } = usePartner();
+  const nav = useNavigate();
   const [orders, setOrders] = useState<PortalOrder[] | null>(null);
   const [servedToday, setServedToday] = useState<PortalOrder[]>([]);
   const [busy, setBusy] = useState('');
@@ -299,7 +301,17 @@ export function OrdersBoard() {
             style={{ borderColor: o.status === 'placed' ? 'var(--gold)' : undefined }}
           >
             <div className="ticket-head">
-              <strong>#{o.order_no} · {o.is_parcel ? '📦 Parcel' : o.table_label ?? 'Table'}</strong>
+              {/* Tapping the ticket header opens Billing already focused on
+                  this table — settling is the commonest thing staff do next,
+                  and it was three screens away. The buttons below stop the
+                  click so a tap on "Ready now" never navigates. */}
+              <button
+                className="ticket-open"
+                title="Open this table's bill"
+                onClick={() => nav(`/partner/billing?table=${encodeURIComponent(o.table_label ?? '')}&order=${o.id}`)}
+              >
+                #{o.order_no} · {o.is_parcel ? '📦 Parcel' : o.table_label ?? 'Table'} ›
+              </button>
               <span style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                 {justIn.has(o.id) && <span className="new-badge">NEW</span>}
                 <span className={`status-chip status-${o.status}`}>{o.status}</span>

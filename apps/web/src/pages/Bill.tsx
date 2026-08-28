@@ -69,6 +69,10 @@ export function Bill() {
   const [copied, setCopied] = useState<'vpa' | 'amt' | ''>('');
   const [claiming, setClaiming] = useState(false);
   const [claimed, setClaimed] = useState(false);
+  // True from the moment the diner leaves for their UPI app until they answer
+  // the prompt on return. Nothing is claimed without an explicit yes.
+  const [awaitingReturn, setAwaitingReturn] = useState(false);
+  const [askPaid, setAskPaid] = useState(false);
   const timer = useRef<ReturnType<typeof setInterval>>();
 
   // The restaurant's UPI ID isn't part of the cached scan session, so read it
@@ -124,6 +128,46 @@ export function Bill() {
       margin: 1, width: 380, color: { dark: '#1C1A15', light: '#FFFDF8' },
     }).then(setPayQr).catch(() => setPayQr(''));
   }, [vpa, bill, mode, session?.guest?.phone]);
+
+  /** Ask once, on the way back from the UPI app.
+   *
+   *  The diner has no reason to hunt for an "I've paid" button — they think
+   *  they're finished. Catching the moment the tab regains focus is the only
+   *  point where the question is natural. Deliberately a PROMPT, never an
+   *  automatic claim: returning to the tab is not evidence a payment
+   *  succeeded, and a false "paid" on the counter's screen is worse than no
+   *  signal at all. */
+  useEffect(() => {
+    if (!awaitingReturn || claimed) return;
+    const onBack = () => {
+      if (document.visibilityState === 'visible') {
+        setAwaitingReturn(false);
+        setAskPaid(true);
+      }
+    };
+    document.addEventListener('visibilitychange', onBack);
+    window.addEventListener('focus', onBack);
+    return () => {
+      document.removeEventListener('visibilitychange', onBack);
+      window.removeEventListener('focus', onBack);
+    };
+  }, [awaitingReturn, claimed]);
+
+  /** Record the claim and let staff know. Never blocks the diner — they have
+   *  already paid in their own app, so a failure here is ours to absorb. */
+  const sendClaim = async () => {
+    if (claiming || claimed) return;
+    setClaiming(true);
+    try {
+      await claimTablePaid(session!, payAmount);
+    } catch {
+      /* swallowed on purpose — see above */
+    } finally {
+      setClaimed(true);
+      setClaiming(false);
+      setAskPaid(false);
+    }
+  };
 
   if (!session) return null;
   if (!bill && !failed) return <Spinner label={t('bill.loading')} />;
@@ -309,7 +353,17 @@ export function Bill() {
                   a personal VPA above the cap — a button that gets refused
                   teaches the diner the product is broken. */}
               {!capped && (
-                <a className="btn btn-ghost btn-block" style={{ marginTop: 12 }} href={payUri}>
+                <a
+                  className="btn btn-ghost btn-block"
+                  style={{ marginTop: 12 }}
+                  href={payUri}
+                  onClick={() => {
+                    // Leaving for the UPI app. Arm the return prompt so the
+                    // diner is asked once, on the way back, instead of having
+                    // to hunt for a button they have no reason to look for.
+                    setAwaitingReturn(true);
+                  }}
+                >
                   {t('bill.openUpiApp')}
                 </a>
               )}
@@ -325,20 +379,7 @@ export function Bill() {
                 className="btn btn-primary btn-block"
                 style={{ marginTop: 10 }}
                 disabled={claiming || claimed}
-                onClick={async () => {
-                  if (claiming || claimed) return;
-                  setClaiming(true);
-                  try {
-                    await claimTablePaid(session, payAmount);
-                    setClaimed(true);
-                  } catch {
-                    /* Never block the diner: they have already paid in their
-                       UPI app. Staff can still settle from their side. */
-                    setClaimed(true);
-                  } finally {
-                    setClaiming(false);
-                  }
-                }}
+                onClick={sendClaim}
               >
                 {claimed ? t('bill.claimSent') : claiming ? '…' : t('bill.iHavePaid')}
               </button>
@@ -360,6 +401,29 @@ export function Bill() {
             <button className="btn btn-primary" style={{ flex: 1 }} onClick={() => window.print()}>{t('bill.save')}</button>
           </div>
         </>
+      )}
+
+      {/* Asked once, on return from the UPI app. A prompt rather than an
+          automatic claim: coming back to the tab does not prove a payment
+          went through, and a false "paid" on the counter's screen is worse
+          than no signal at all. */}
+      {askPaid && !claimed && (
+        <div className="modal-scrim" onClick={() => setAskPaid(false)}>
+          <div className="sheet" onClick={(e) => e.stopPropagation()}>
+            <h2 className="display" style={{ fontSize: 22, marginBottom: 6 }}>
+              {t('bill.didYouPay')} {inr(payAmount)}?
+            </h2>
+            <p className="muted" style={{ fontSize: 13.5 }}>{t('bill.didYouPayBody')}</p>
+            <button className="btn btn-primary btn-block" style={{ marginTop: 14 }}
+              disabled={claiming} onClick={sendClaim}>
+              {claiming ? '…' : t('bill.yesPaid')}
+            </button>
+            <button className="btn btn-ghost btn-block" style={{ marginTop: 8 }}
+              onClick={() => setAskPaid(false)}>
+              {t('bill.notYet')}
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );

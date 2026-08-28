@@ -1047,3 +1047,12 @@ input.code-input::placeholder { color: var(--text-dim); }
   border-color: var(--primary);
   color: var(--primary);
 }
+
+/* Ticket header doubles as "open this table's bill" — settling is the
+   commonest next action and it used to be three screens away. */
+.ticket-open {
+  background: none; border: 0; padding: 0; cursor: pointer;
+  font: inherit; font-weight: 700; color: var(--text);
+  text-align: left; min-width: 0;
+}
+.ticket-open:hover { color: var(--primary); }

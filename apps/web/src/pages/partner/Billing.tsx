@@ -2,6 +2,7 @@
  *  orders, discount (manager+), 5% GST recompute, printable GST bill,
  *  mark paid (Cash / UPI received). */
 import React, { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import QRCode from 'qrcode';
 import { fetchLiveOrders, createBill, payBill, type PortalOrder } from '../../lib/portalApi';
 import { inr } from '../../lib/types';
@@ -38,6 +39,10 @@ export function Billing() {
   const [printing, setPrinting] = useState(false);
   // Which table has its per-person list expanded.
   const [splitting, setSplitting] = useState<string | null>(null);
+  // Opened from a ticket on the Orders board: focus that table straight away
+  // so settling is one tap from the notification, not a hunt.
+  const [params] = useSearchParams();
+  const focusTable = params.get('table');
   const [fmt, setFmt] = useState<PrintFmt>('a4');
 
   const canDiscount = role === 'owner' || role === 'manager';
@@ -57,8 +62,14 @@ export function Billing() {
       if (!g.has(key)) g.set(key, []);
       g.get(key)!.push(o);
     }
-    return [...g.entries()];
-  }, [orders]);
+    // A table opened from the Orders board sorts to the top, so the thing
+    // staff just tapped is the thing they see.
+    const rows = [...g.entries()];
+    if (focusTable) {
+      rows.sort((a, b) => (b[0] === focusTable ? 1 : 0) - (a[0] === focusTable ? 1 : 0));
+    }
+    return rows;
+  }, [orders, focusTable]);
 
   const chosen = (orders ?? []).filter((o) => selected.has(o.id));
   const subtotal = chosen.reduce((a, o) => a + o.subtotal + o.packing_charge, 0);
