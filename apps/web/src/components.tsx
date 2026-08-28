@@ -34,11 +34,11 @@ export function Stepper({
 }) {
   return (
     <span className="stepper">
-      <button aria-label="Decrease quantity" onClick={() => onChange(Math.max(min, qty - 1))}>
+      <button aria-label={translate(getLang(), 'common.decreaseQty')} onClick={() => onChange(Math.max(min, qty - 1))}>
         −
       </button>
       <span>{qty}</span>
-      <button aria-label="Increase quantity" onClick={() => onChange(qty + 1)}>
+      <button aria-label={translate(getLang(), 'common.increaseQty')} onClick={() => onChange(qty + 1)}>
         +
       </button>
     </span>
@@ -83,30 +83,31 @@ export function IdentityGate({
       <div className="sheet" onClick={(e) => e.stopPropagation()}>
         <span className="live-dot" aria-hidden style={{ marginBottom: 10 }} />
         <h2 className="display" style={{ fontSize: 25, lineHeight: 1.2 }}>
-          Welcome{restaurantName ? ` to ${restaurantName}` : ''} 👋
+          {translate(getLang(), 'gate.welcome')}{restaurantName ? ` ${restaurantName}` : ''} 👋
         </h2>
         <p className="muted" style={{ fontSize: 14, marginTop: 8 }}>
-          {tableLabel ? `You're at ${tableLabel}. ` : ''}Tell us who's ordering so the
-          kitchen knows whose dish is whose and your bill stays yours. No OTP, no account.
+          {tableLabel ? `${translate(getLang(), 'gate.youreAt')} ${tableLabel}. ` : ''}
+          {translate(getLang(), 'gate.why')}
         </p>
 
         <label className="overline" style={{ display: 'block', marginTop: 18 }}>{translate(getLang(), 'gate.name')}</label>
         <input
           style={field} value={name} onChange={(e) => setName(e.target.value)}
-          placeholder="e.g. Aarav" autoComplete="given-name" aria-label="Your name"
+          placeholder={translate(getLang(), 'gate.namePlaceholder')} autoComplete="given-name"
+          aria-label={translate(getLang(), 'gate.name')}
           onKeyDown={(e) => e.key === 'Enter' && submit()}
         />
 
         <label className="overline" style={{ display: 'block', marginTop: 14 }}>{translate(getLang(), 'gate.phone')}</label>
         <input
           style={field} value={phone} onChange={(e) => setPhone(e.target.value)}
-          placeholder="10-digit mobile" inputMode="numeric" autoComplete="tel"
-          aria-label="Mobile number" maxLength={14}
+          placeholder={translate(getLang(), 'gate.phonePlaceholder')} inputMode="numeric" autoComplete="tel"
+          aria-label={translate(getLang(), 'gate.phone')} maxLength={14}
           onKeyDown={(e) => e.key === 'Enter' && submit()}
         />
         {phone.length > 0 && !validPhone && (
           <p style={{ color: 'var(--error)', fontSize: 13, marginTop: 6 }}>
-            Enter a valid 10-digit Indian mobile number.
+            {translate(getLang(), 'gate.phoneInvalid')}
           </p>
         )}
 
@@ -117,7 +118,7 @@ export function IdentityGate({
           {translate(getLang(), 'gate.start')} →
         </button>
         <p className="dim" style={{ fontSize: 11.5, textAlign: 'center', marginTop: 10 }}>
-          We use this only to route your order and bill at this restaurant.
+          {translate(getLang(), 'gate.privacy')}
         </p>
       </div>
     </div>
@@ -161,7 +162,7 @@ export function ItemSheet({
               <p className="muted" style={{ fontSize: 14, marginTop: 6 }}>{item.description}</p>
             )}
           </div>
-          <button className="chip" aria-label="Close" onClick={onClose}>✕</button>
+          <button className="chip" aria-label={translate(getLang(), 'sheet.close')} onClick={onClose}>✕</button>
         </div>
 
         {groups.map(([name, opts]) => (
@@ -179,7 +180,7 @@ export function ItemSheet({
                 >
                   <span style={{ fontWeight: 600, fontSize: 14.5 }}>{o.choice}</span>
                   <span className="muted" style={{ fontSize: 13.5 }}>
-                    {o.price_delta > 0 ? `+ ${inr(o.price_delta)}` : 'Free'}
+                    {o.price_delta > 0 ? `+ ${inr(o.price_delta)}` : translate(getLang(), 'sheet.free')}
                   </span>
                 </button>
               );
@@ -236,7 +237,7 @@ export function LanguagePicker() {
         className="chip"
         aria-haspopup="listbox"
         aria-expanded={open}
-        aria-label="Change language"
+        aria-label={translate(getLang(), 'common.changeLanguage')}
         onClick={() => setOpen((o) => !o)}
       >
         {current.native}

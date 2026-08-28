@@ -80,10 +80,10 @@ export function Menu() {
     setPlacing(line.menuItemId);
     try {
       await placeOrder(session, [line]);
-      flash(`${label} ordered`);
+      flash(`${label} ${t('menu.ordered')}`);
       await refreshOpen();
     } catch (e: any) {
-      flash(e?.message ?? 'Could not place that order.', 3200);
+      flash(e?.message ?? t('menu.orderFailed'), 3200);
     } finally {
       setPlacing(null);
     }
@@ -97,7 +97,7 @@ export function Menu() {
       ...o, items: o.items.map((it) => (it.id === l.itemId ? { ...it, qty } : it)),
     })));
     try { await updateMyOrderItem(l.orderId, l.itemId, qty); }
-    catch (e: any) { flash(e?.message ?? 'That order has already gone to the kitchen.', 3200); }
+    catch (e: any) { flash(e?.message ?? t('menu.alreadySent'), 3200); }
     finally { await refreshOpen(); }
   };
 
@@ -216,8 +216,7 @@ export function Menu() {
         <div className="glass" style={{ padding: 14, marginTop: 12, borderColor: 'rgba(197,64,47,0.5)' }}>
           <strong style={{ color: 'var(--error)' }}>{t('menu.viewOnly')}</strong>{' '}
           <span className="muted" style={{ fontSize: 14 }}>
-            This restaurant isn’t taking online orders right now — please order
-            with the staff.
+            {t('menu.orderingOffBody')}
           </span>
         </div>
       )}

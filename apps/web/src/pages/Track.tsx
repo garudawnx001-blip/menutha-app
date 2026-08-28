@@ -62,7 +62,7 @@ function PaymentPanel({ order, demo, onChanged }: { order: OrderView; demo?: boo
           {p.provider === 'cash' ? 'Paying cash at the counter' : 'UPI payment marked'}
         </strong>
         <p className="muted" style={{ fontSize: 14, marginTop: 4 }}>
-          Waiting for the staff to confirm — this updates automatically.
+          {t('track.awaitingConfirm')}
         </p>
       </div>
     );
@@ -97,8 +97,7 @@ function PaymentPanel({ order, demo, onChanged }: { order: OrderView; demo?: boo
         </button>
       )}
       <p className="dim" style={{ fontSize: 12, marginTop: 12 }}>
-        Paying by UPI or cash? Just pay — the restaurant marks your order paid on their
-        side once received. Nothing else needed from you.
+        {t('track.payDirect')}
       </p>
       {error && <p style={{ color: 'var(--error)', fontSize: 13.5, marginTop: 8 }}>{error}</p>}
     </div>
@@ -136,7 +135,7 @@ export function Track() {
         <Wordmark size={22} />
         <h1 className="display" style={{ fontSize: 26 }}>{t('track.loadFail')}</h1>
         <p className="muted" style={{ maxWidth: 380 }}>
-          Check your connection and try again — your order is safe with the kitchen.
+          {t('track.connError')}
         </p>
         <button className="btn btn-ghost" onClick={() => window.location.reload()}>{t('common.retry')}</button>
       </div>
@@ -167,7 +166,7 @@ export function Track() {
         <div className="glass" style={{ padding: 18, marginTop: 18, borderColor: 'rgba(199,107,92,0.5)' }}>
           <p style={{ color: 'var(--error)', fontWeight: 700 }}>{t('track.cancelledBody')}</p>
           <p className="muted" style={{ fontSize: 14, marginTop: 6 }}>
-            Please speak to the staff — nothing has been charged through Menutha.
+            {t('track.speakToStaff')}
           </p>
         </div>
       ) : (
@@ -180,7 +179,7 @@ export function Track() {
               kitchen still runs those statuses on their own board. */}
           <p style={{ fontSize: 34, lineHeight: 1 }} aria-hidden>✓</p>
           <h2 style={{ fontSize: 21, fontWeight: 700, marginTop: 8 }}>
-            Order confirmed
+            {t('track.confirmed')}
           </h2>
           <p className="muted" style={{ fontSize: 13.5, marginTop: 4 }}>
             {t('track.confirmedBody')}
@@ -252,7 +251,7 @@ export function Track() {
 
       <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
         <button className="btn btn-ghost" style={{ flex: 1 }} onClick={() => nav('/menu')}>
-          Order more
+          {t('track.orderMore')}
         </button>
         {!o.is_parcel && (
           <button className="btn btn-ghost" style={{ flex: 1 }} onClick={() => nav('/bill')}>
@@ -261,13 +260,13 @@ export function Track() {
         )}
         {done && (
           <button className="btn btn-primary" style={{ flex: 1 }} onClick={() => window.print()}>
-            Save receipt
+            {t('track.saveReceipt')}
           </button>
         )}
       </div>
       {!done && !cancelled && (
         <p className="dim" style={{ fontSize: 12, textAlign: 'center', marginTop: 12 }}>
-          Updates automatically — keep this page open.
+          {t('track.autoUpdates')}
         </p>
       )}
     </div>

@@ -127,7 +127,7 @@ export function Cart() {
                 </div>
               ))}
               <p className="dim" style={{ fontSize: 12, marginTop: 8 }}>
-                Everyone at this table shares one running bill — you can split it by person at the end.
+                {t('cart.sharedBill')}
               </p>
             </div>
           )}
@@ -154,7 +154,7 @@ export function Cart() {
             <div className="bill-row"><span>CGST ({cgstPct}%)</span><span>{inr(bill.cgst)}</span></div>
             <div className="bill-row total"><span>Total</span><span>{inr(bill.total)}</span></div>
             <p className="dim" style={{ fontSize: 12, marginTop: 8 }}>
-              Pay at the restaurant — cash or UPI at the counter.
+              {t('cart.payAtRestaurant')}
             </p>
           </div>
 
@@ -171,7 +171,7 @@ export function Cart() {
             {placing ? t('cart.place') + '…' : `${t('cart.place')} · ${inr(bill.total)}`}
           </button>
           <p className="dim" style={{ fontSize: 12, textAlign: 'center', marginTop: 10 }}>
-            The kitchen sees your order the moment you place it.
+            {t('cart.kitchenSeesNow')}
           </p>
         </>
       )}

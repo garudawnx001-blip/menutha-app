@@ -178,7 +178,7 @@ export function Bill() {
         <Wordmark size={22} />
         <h1 className="display" style={{ fontSize: 26 }}>{t('bill.loadFail')}</h1>
         <p className="muted" style={{ maxWidth: 380 }}>
-          Check your connection and try again — nothing has been charged.
+          {t('bill.connError')}
         </p>
         <button className="btn btn-ghost" onClick={() => window.location.reload()}>{t('common.retry')}</button>
       </div>
