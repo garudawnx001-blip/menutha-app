@@ -7,7 +7,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import QRCode from 'qrcode';
-import { fetchTableBill } from '../lib/api';
+import { fetchTableBill, claimTablePaid } from '../lib/api';
 import { supabase } from '../lib/supabase';
 import type { TableBill } from '../lib/types';
 import { inr } from '../lib/types';
@@ -63,16 +63,20 @@ export function Bill() {
   const [failed, setFailed] = useState(false);
   const [mode, setMode] = useState<'combined' | 'split'>('combined');
   const [vpa, setVpa] = useState<string | null>(null);
+  // 'personal' VPAs are capped for one-tap; 'merchant' are not. Set in Settings.
+  const [acctType, setAcctType] = useState<'personal' | 'merchant' | string>('personal');
   const [payQr, setPayQr] = useState('');
   const [copied, setCopied] = useState<'vpa' | 'amt' | ''>('');
+  const [claiming, setClaiming] = useState(false);
+  const [claimed, setClaimed] = useState(false);
   const timer = useRef<ReturnType<typeof setInterval>>();
 
   // The restaurant's UPI ID isn't part of the cached scan session, so read it
   // directly (public-readable) — this is what makes the pay QR appear here.
   useEffect(() => {
     if (!session?.restaurant.id) return;
-    supabase.from('restaurant').select('upi_vpa').eq('id', session.restaurant.id).single()
-      .then(({ data }) => setVpa((data?.upi_vpa as string) ?? null))
+    supabase.from('restaurant').select('upi_vpa, upi_account_type').eq('id', session.restaurant.id).single()
+      .then(({ data }) => { setVpa((data?.upi_vpa as string) ?? null); setAcctType(((data as any)?.upi_account_type as string) ?? 'personal'); })
       .catch(() => {});
   }, [session?.restaurant.id]);
 
@@ -146,6 +150,9 @@ export function Bill() {
   const payAmount = mode === 'split' && mine ? Number(mine.total) : Number(b.combined.total);
   const payLabel = mode === 'split' && mine ? t('bill.yourShare') : t('bill.theTableTotal');
   const payUri = buildPayUri(payAmount);
+  // One-tap is refused above the cap on a personal VPA; a merchant VPA is P2M
+  // and uncapped, so nothing is hidden for them.
+  const capped = acctType !== 'merchant' && payAmount > UPI_P2P_INTENT_CAP;
   // Reconciliation guard shown in split mode — the paisa-exact sum of people.
   const splitSum = b.per_person.reduce((a, p) => a + Number(p.total), 0);
   const reconciles = Math.round(splitSum * 100) === Math.round(Number(b.combined.total) * 100);
@@ -259,12 +266,20 @@ export function Bill() {
                 {t('bill.pay')} {inr(payAmount)} — {payLabel}
               </p>
 
+              {/* Adaptive by account type and amount.
+                  Merchant VPAs are P2M and uncapped, so both paths show at any
+                  amount with no warnings. Personal VPAs are capped for one-tap
+                  by the payment apps, so above the cap the tap button is hidden
+                  entirely — showing a button that will be refused is worse than
+                  not showing it — and the QR takes the whole panel. */}
               {payQr && (
                 <div style={{ textAlign: 'center' }}>
-                  <img src={payQr} width={190} height={190} alt="UPI payment QR"
+                  <img src={payQr}
+                    width={capped ? 250 : 190} height={capped ? 250 : 190}
+                    alt="UPI payment QR"
                     style={{ borderRadius: 12, border: '1px solid var(--line-strong)', margin: '0 auto' }} />
-                  <p style={{ fontWeight: 700, fontSize: 14, marginTop: 8 }}>
-                    {t('bill.scanToPay')}
+                  <p style={{ fontWeight: 700, fontSize: capped ? 16 : 14, marginTop: 8 }}>
+                    {capped ? t('bill.scanHereCamera') : t('bill.scanToPay')}
                   </p>
                   <p className="muted" style={{ fontSize: 12.5, marginTop: 2 }}>
                     {t('bill.scanAnyApp')}<br />{t('bill.cameraHint')}
@@ -290,12 +305,48 @@ export function Bill() {
                 </div>
               </div>
 
-              <a className="btn btn-ghost btn-block" style={{ marginTop: 12 }} href={payUri}>
-                {t('bill.openUpiApp')}
-              </a>
+              {/* One-tap: shown when it will actually work. Hidden entirely on
+                  a personal VPA above the cap — a button that gets refused
+                  teaches the diner the product is broken. */}
+              {!capped && (
+                <a className="btn btn-ghost btn-block" style={{ marginTop: 12 }} href={payUri}>
+                  {t('bill.openUpiApp')}
+                </a>
+              )}
               <p className="dim" style={{ fontSize: 11.5, textAlign: 'center', marginTop: 6 }}>
-                {payAmount > UPI_P2P_INTENT_CAP ? t('bill.capNote') : t('bill.intentNote')}
+                {capped ? t('bill.capNote') : acctType === 'merchant' ? '' : t('bill.intentNote')}
               </p>
+
+              {/* Diner tells the counter they've paid. This is a CLAIM, not a
+                  settlement: static UPI QRs have no webhook, so nothing can
+                  confirm receipt automatically until a payment gateway is
+                  wired. Staff still verify in their own UPI app and settle. */}
+              <button
+                className="btn btn-primary btn-block"
+                style={{ marginTop: 10 }}
+                disabled={claiming || claimed}
+                onClick={async () => {
+                  if (claiming || claimed) return;
+                  setClaiming(true);
+                  try {
+                    await claimTablePaid(session, payAmount);
+                    setClaimed(true);
+                  } catch {
+                    /* Never block the diner: they have already paid in their
+                       UPI app. Staff can still settle from their side. */
+                    setClaimed(true);
+                  } finally {
+                    setClaiming(false);
+                  }
+                }}
+              >
+                {claimed ? t('bill.claimSent') : claiming ? '…' : t('bill.iHavePaid')}
+              </button>
+              {claimed && (
+                <p className="dim" style={{ fontSize: 11.5, textAlign: 'center', marginTop: 6 }}>
+                  {t('bill.claimNote')}
+                </p>
+              )}
             </div>
           ) : null}
 

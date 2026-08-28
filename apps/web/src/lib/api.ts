@@ -307,3 +307,43 @@ async function notifyStaff(orderId: string) {
     console.warn('[notify-staff]', (data as any).errors);
   }
 }
+
+/** The diner tells the counter they have paid the table's bill.
+ *
+ *  This is a CLAIM, not a settlement, and the wording everywhere says so. A
+ *  static UPI QR has no webhook: money moves directly between the diner's app
+ *  and the restaurant's bank, and nothing tells us it happened. Until a payment
+ *  gateway is wired, the honest mechanism is that the diner says they paid, the
+ *  counter is notified immediately, and staff verify in their own UPI app
+ *  before settling. Staff remain the only party who can mark a bill paid.
+ *
+ *  Records a pending payment against each open order so the partner board's
+ *  existing "Diner says they paid — confirm we received it" flow lights up,
+ *  then fires one push so nobody has to be watching the screen.
+ */
+export async function claimTablePaid(session: Session, amount: number) {
+  const bill = await fetchTableBill(session);
+  const orders = (bill.orders ?? []).filter((o) => !!o.order_id);
+  if (!orders.length) return;
+
+  // Pending rows first: the board reads these, so the claim survives even if
+  // the push is blocked or the staff phone is off.
+  await Promise.all(
+    orders.map((o) =>
+      supabase.rpc('record_payment', {
+        p_order_id: o.order_id,
+        p_provider: 'upi_qr',
+        p_provider_ref: null,
+      }).then(() => undefined).catch(() => undefined),
+    ),
+  );
+
+  // One push for the table, not one per order.
+  await supabase.functions.invoke('notify-staff', {
+    body: {
+      orderId: orders[0].order_id,
+      kind: 'payment_claimed',
+      amount: Number(amount || 0),
+    },
+  }).catch(() => undefined);
+}

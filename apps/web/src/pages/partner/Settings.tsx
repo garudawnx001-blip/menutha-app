@@ -20,6 +20,7 @@ export function Settings() {
     open_time: restaurant.open_time ?? '',
     close_time: restaurant.close_time ?? '',
     upi_vpa: restaurant.upi_vpa ?? '',
+    upi_account_type: (restaurant as any).upi_account_type ?? 'personal',
     own_website: restaurant.own_website ?? '',
     gateway_key_id: restaurant.gateway_key_id ?? '',
     brand_color: (restaurant as any).brand_color ?? '#1B5E3F',
@@ -46,6 +47,7 @@ export function Settings() {
         open_time: form.open_time || null,
         close_time: form.close_time || null,
         upi_vpa: form.upi_vpa.trim() || null,
+        upi_account_type: form.upi_account_type,
         own_website: form.own_website.trim() || null,
         gateway_key_id: form.gateway_key_id.trim() || null,
         is_open: form.is_open,
@@ -181,6 +183,35 @@ export function Settings() {
         <F label="UPI ID (VPA) — diners' payment QR points here">
           <input className="code-input" placeholder="yourshop@okhdfcbank" value={form.upi_vpa}
             onChange={(e) => setForm({ ...form, upi_vpa: e.target.value })} />
+        </F>
+        {/* Account type drives the diner's payment panel. Payment apps cap
+            one-tap payments to PERSONAL UPI IDs (commonly ₹2,000) because they
+            are person-to-person; merchant IDs are P2M and uncapped. Nothing in
+            our link can change that — the class is resolved by the payment
+            provider from the ID itself — so we ask, and adapt the diner's
+            screen rather than showing a button that will be refused. */}
+        <F label="What kind of UPI ID is this?">
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {([
+              ['personal', 'Personal', 'One-tap works up to ₹2,000; above that diners scan the QR.'],
+              ['merchant', 'Merchant / Business', 'One-tap works at any amount. No limits shown to diners.'],
+            ] as const).map(([val, label, hint]) => (
+              <button
+                key={val}
+                type="button"
+                className={form.upi_account_type === val ? 'chip active' : 'chip'}
+                onClick={() => setForm({ ...form, upi_account_type: val })}
+                title={hint}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <span className="dim" style={{ fontSize: 12 }}>
+            {form.upi_account_type === 'merchant'
+              ? 'Diners get one-tap payment at any amount.'
+              : 'Diners get one-tap up to ₹2,000; above that the bill shows a large QR to scan with the camera. A free merchant UPI ID (PhonePe / Paytm / GPay for Business) removes the limit.'}
+          </span>
         </F>
         <F label="Own Razorpay Key ID (optional — for card checkout on YOUR account)">
           <input className="code-input" placeholder="rzp_live_…" value={form.gateway_key_id}
