@@ -1,7 +1,7 @@
 /** Billing: merge a table's unpaid orders into one bill, include/exclude
  *  orders, discount (manager+), 5% GST recompute, printable GST bill,
  *  mark paid (Cash / UPI received). */
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import QRCode from 'qrcode';
 import { fetchLiveOrders, createBill, payBill, type PortalOrder } from '../../lib/portalApi';
@@ -40,6 +40,18 @@ export function Billing() {
   const focusTable = params.get('table');
 
   const canDiscount = role === 'owner' || role === 'manager';
+
+  /* Synchronous re-entry guard for the three handlers that create or settle a
+     bill. `busy` is React state, so setBusy only schedules a re-render — a
+     second click landing before that render still passes `if (busy)`, and both
+     calls reach create_table_bill. That leaves two bill rows for the same
+     orders. A ref flips in the same tick, so the second click sees it. */
+  const inFlight = useRef(false);
+  const guard = async (fn: () => Promise<void>) => {
+    if (inFlight.current) return;
+    inFlight.current = true;
+    try { await fn(); } finally { inFlight.current = false; }
+  };
 
   const load = async () => {
     try {
@@ -94,7 +106,7 @@ export function Billing() {
    *  scroll for the commonest action in the whole product. billNow takes the
    *  orders straight to a bill, bypassing the selection step entirely.
    *  The checkboxes remain for the rare arbitrary subset. */
-  const billNow = async (list: PortalOrder[]) => {
+  const billNow = (list: PortalOrder[]) => guard(async () => {
     if (!list.length || busy) return;
     setBusy(true); setError('');
     try {
@@ -108,7 +120,7 @@ export function Billing() {
         : '');
     } catch (e: any) { setError(e?.message ?? 'Could not create the bill.'); }
     finally { setBusy(false); }
-  };
+  });
 
   /** Orders at a table grouped by who ordered, for per-person billing. */
   const byDiner = (list: PortalOrder[]) => {
@@ -123,7 +135,7 @@ export function Billing() {
 
   const sumOf = (list: PortalOrder[]) => list.reduce((a, o) => a + Number(o.total || 0), 0);
 
-  const generate = async () => {
+  const generate = () => guard(async () => {
     if (!chosen.length || busy) return;
     setBusy(true); setError('');
     try {
@@ -136,9 +148,9 @@ export function Billing() {
         : '');
     } catch (e: any) { setError(e?.message ?? 'Could not create the bill.'); }
     finally { setBusy(false); }
-  };
+  });
 
-  const settle = async (mode: 'cash' | 'upi_qr') => {
+  const settle = (mode: 'cash' | 'upi_qr') => guard(async () => {
     if (!bill || busy) return;
     setBusy(true); setError('');
     try {
@@ -147,7 +159,7 @@ export function Billing() {
       await load();
     } catch (e: any) { setError(e?.message ?? 'Could not mark the bill paid.'); }
     finally { setBusy(false); }
-  };
+  });
   useEffect(() => {
     if (!printing) return;
     const t = setTimeout(() => { window.print(); setPrinting(false); }, 300);
