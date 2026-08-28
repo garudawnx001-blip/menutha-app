@@ -270,6 +270,7 @@ export function Bill() {
                   owe", and it needs the attribution this one deliberately
                   drops. */}
               <div className="glass" style={{ padding: 16, marginTop: 12 }}>
+                <p className="overline" style={{ marginBottom: 10 }}>{t('bill.whatYouOrdered')}</p>
                 {mergedLines.map((it, i) => (
                   <div key={i} className="bill-row" style={{ fontSize: 14 }}>
                     <span>{it.qty} × {it.name}</span>
