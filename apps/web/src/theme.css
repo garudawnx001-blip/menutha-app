@@ -779,15 +779,28 @@ input.code-input::placeholder { color: var(--text-dim); }
    a plain dish now takes a single tap and the button becomes a qty stepper
    in place, which is what people already expect from a shopping app. */
 .dish .add-btn {
-  font-size: 12.5px; font-weight: 700; color: #fff;
+  font-size: 13.5px; font-weight: 700; color: #fff;
   background: var(--primary); border: 1px solid var(--primary);
-  border-radius: 999px; padding: 7px 16px; margin-top: 6px;
+  border-radius: 999px; padding: 0 18px; margin-top: 6px;
   cursor: pointer; line-height: 1; white-space: nowrap;
+  /* Measured at 360px: this was 28.5px tall — the single most-tapped control
+     in the product, and the smallest. 44px is the accepted floor for a thumb,
+     and this button is hit mid-service by someone holding a phone in one hand.
+     Height rather than padding, so a Kannada label ("ಆಯ್ಕೆ ಮಾಡಿ") whose glyphs
+     are taller than Latin cannot quietly change the button's size. */
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   transition: transform 0.1s ease, filter 0.12s ease;
 }
 .dish .add-btn:hover { filter: brightness(1.06); }
 .dish .add-btn:active { transform: scale(0.94); }
-.dish .stepper { margin-top: 6px; }
+/* Matches .add-btn's height exactly. The stepper REPLACES that button once an
+   order is in its grace window, so a different height would make the dish card
+   resize under the diner's thumb at the moment they are using it. */
+.dish .stepper { margin-top: 6px; min-height: 44px; }
+.dish .stepper button { width: 42px; height: 42px; }
 @media (prefers-reduced-motion: reduce) {
   .dish .add-btn { transition: none !important; }
 }
