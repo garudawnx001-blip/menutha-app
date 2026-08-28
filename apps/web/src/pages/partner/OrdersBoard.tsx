@@ -6,7 +6,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { subscribeOrders } from '../../lib/realtimeWeb';
 import {
-  fetchLiveOrders, advanceOrder, NEXT_STATUS, markOrderReadyNow, adjustOrderTimer,
+  fetchLiveOrders, advanceOrder, NEXT_STATUS,
   createBill, payBill, confirmPayment, staffUpdateOrderItem, staffCancelOrder,
   type PortalOrder,
 } from '../../lib/portalApi';
@@ -74,42 +74,6 @@ function notifyOrder(o: PortalOrder) {
       requireInteraction: true,  // stays up until someone at the counter looks
     });
   } catch { /* some browsers reject options; the chime still fired */ }
-}
-
-/** Has this order's prep time elapsed? */
-const isReady = (o: PortalOrder) => {
-  const r = (o as any).ready_at;
-  return !!r && new Date(r).getTime() <= Date.now();
-};
-
-/** Live countdown to an order's ready_at.
- *
- *  Ticks locally rather than re-fetching: the deadline is fixed at insert, so
- *  the only thing changing is the clock. Re-reading the board every second to
- *  animate a number would be wasteful and would fight the 30s poll. */
-function Countdown({ readyAt }: { readyAt?: string | null }) {
-  const [, force] = useState(0);
-  useEffect(() => {
-    const t = setInterval(() => force((n) => n + 1), 1000);
-    return () => clearInterval(t);
-  }, []);
-  if (!readyAt) return null;
-
-  const ms = new Date(readyAt).getTime() - Date.now();
-  const over = ms <= 0;
-  const secs = Math.floor(Math.abs(ms) / 1000);
-  const mm = Math.floor(secs / 60);
-  const ss = String(secs % 60).padStart(2, '0');
-
-  return (
-    <span
-      className={over ? 'prep-timer done' : 'prep-timer'}
-      title={over ? 'Prep time elapsed' : 'Time left of the prep estimate'}
-      aria-label={over ? 'Prep time elapsed' : `${mm} minutes ${ss} seconds left`}
-    >
-      {over ? `⏱ +${mm}:${ss}` : `⏱ ${mm}:${ss}`}
-    </span>
-  );
 }
 
 export function OrdersBoard() {
@@ -180,23 +144,6 @@ export function OrdersBoard() {
     setJustIn((prev) => { const n = new Set(prev); n.delete(o.id); return n; });
     try { await advanceOrder(o.id, next); await load(); }
     catch (e: any) { setError(e?.message ?? 'Update failed.'); }
-    finally { setBusy(''); }
-  };
-
-  /** Pull the countdown to zero. Staff-side only — the diner is not told. */
-  const readyNow = async (all: PortalOrder[]) => {
-    setBusy(all[0].id);
-    setJustIn((prev) => { const n = new Set(prev); all.forEach((x) => n.delete(x.id)); return n; });
-    try { for (const x of all) await markOrderReadyNow(x.id); await load(); }
-    catch (e: any) { setError(e?.message ?? 'Could not update the timer.'); }
-    finally { setBusy(''); }
-  };
-
-  /** Nudge one order's deadline without touching the restaurant default. */
-  const nudge = async (all: PortalOrder[], mins: number) => {
-    setBusy(all[0].id);
-    try { for (const x of all) await adjustOrderTimer(x.id, mins); await load(); }
-    catch (e: any) { setError(e?.message ?? 'Could not adjust the timer.'); }
     finally { setBusy(''); }
   };
 
@@ -431,25 +378,11 @@ export function OrdersBoard() {
               <span style={{ fontWeight: 700 }}>{inr(groupTotal)}</span>
               <span className={all.every((x) => x.paid) ? 'badge open' : 'badge'}>{all.every((x) => x.paid) ? 'Paid' : 'Unpaid'}</span>
             </div>
-            {/* Prep timer replaces the accept/preparing/ready/served workflow.
-                The order starts its own countdown the moment it lands, so
-                nobody has to press anything to move it along. Staff keep two
-                optional controls: "Ready now" pulls the countdown to zero for
-                their own tracking, and Cancel. Nothing here notifies the diner
-                — the countdown is a kitchen tool. */}
+            {/* No prep timer. An order arrives when its grace window closes and
+                stays on the board until it is settled; there is no countdown to
+                watch and nothing to press to move it along. The controls that
+                remain are the ones that change something real. */}
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-              <Countdown readyAt={(o as any).ready_at} />
-              {!isReady(o) && (
-                <>
-                  <button className="chip" disabled={busy === o.id}
-                    title="Give this order 5 more minutes"
-                    onClick={() => nudge(all, 5)}>+5m</button>
-                  <button className="btn btn-primary" style={{ padding: '9px 14px', fontSize: 13.5, flex: 1 }}
-                    disabled={busy === o.id} onClick={() => readyNow(all)}>
-                    Ready now
-                  </button>
-                </>
-              )}
               {canEdit && (
                 <>
                   <button className="chip" disabled={busy === o.id}
