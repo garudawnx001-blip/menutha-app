@@ -367,7 +367,7 @@ export function Menu() {
                               disabled={placing.has(d.id)}
                               aria-label={`Order ${d.name}`}
                             >
-                              {placing.has(d.id) ? "…" : t("menu.order")}
+                              {placing.has(d.id) ? "…" : t("menu.add")}
                             </button>
                           )}
                         </span>

@@ -215,7 +215,7 @@ export function ItemSheet({
               onClose();
             }}
           >
-            {translate(getLang(), 'menu.order')} {qty} · {inr(unit * qty)}
+            {translate(getLang(), 'menu.add')} {qty} · {inr(unit * qty)}
           </button>
         </div>
       </div>

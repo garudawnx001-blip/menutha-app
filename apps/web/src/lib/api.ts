@@ -431,3 +431,46 @@ export async function fetchMyBill(session: Session): Promise<MyBill> {
   if (error) throw error;
   return data as MyBill;
 }
+
+// ── The table's current session ────────────────────────────────────────────
+
+export interface SessionLine {
+  who: string | null; name: string; qty: number; amount: number; is_veg?: boolean;
+}
+export interface SessionBill {
+  table_id: string;
+  sgst_pct?: number | null;
+  cgst_pct?: number | null;
+  lines: SessionLine[];
+  totals: MyBillTotals;
+}
+
+/** Everything ordered at this table in the current seating.
+ *
+ *  Diners sharing a table see each other's dishes — that is the point of a
+ *  shared bill. What they never see is a phone number, a per-person split, or
+ *  a previous party's food: the session boundary moves when the table is
+ *  settled or cleared, so a new seating starts from an empty page even while
+ *  an older bill is still open in the back office. */
+export async function fetchSessionBill(session: Session): Promise<SessionBill> {
+  if (session.demo) {
+    const o = demoOrderStatus();
+    return {
+      table_id: session.table.id,
+      lines: (o?.items ?? []).map((i: any) => ({
+        who: session.guest?.name?.split(' ')[0] ?? null,
+        name: i.name, qty: i.qty, amount: Number(i.unit_price) * Number(i.qty),
+      })),
+      totals: o
+        ? { subtotal: o.subtotal, packing_charge: o.packing_charge, service_charge: 0,
+            sgst_amount: 0, cgst_amount: 0, gst_amount: o.gst_amount, total: o.total, order_count: 1 }
+        : { subtotal: 0, packing_charge: 0, service_charge: 0, sgst_amount: 0,
+            cgst_amount: 0, gst_amount: 0, total: 0, order_count: 0 },
+    };
+  }
+  const { data, error } = await supabase.rpc('table_session_bill', {
+    p_table_id: session.table.id,
+  });
+  if (error) throw error;
+  return data as SessionBill;
+}

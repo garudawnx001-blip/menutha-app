@@ -12,7 +12,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import QRCode from 'qrcode';
-import { fetchMyBill, type MyBill } from '../lib/api';
+import { fetchSessionBill, type SessionBill } from '../lib/api';
 import { supabase } from '../lib/supabase';
 import { inr } from '../lib/types';
 import { useStore } from '../store';
@@ -63,7 +63,7 @@ export function Bill() {
   const nav = useNavigate();
   const { session } = useStore();
   const t = useT();
-  const [bill, setBill] = useState<MyBill | null>(null);
+  const [bill, setBill] = useState<SessionBill | null>(null);
   const [failed, setFailed] = useState(false);
   const [vpa, setVpa] = useState<string | null>(null);
   // 'personal' VPAs are capped for one-tap; 'merchant' are not. Set in Settings.
@@ -98,7 +98,7 @@ export function Bill() {
     }
     let alive = true;
     const load = () =>
-      fetchMyBill(session)
+      fetchSessionBill(session)
         .then((b) => alive && (setBill(b), setFailed(false)))
         .catch(() => alive && setFailed(true));
     load();
@@ -111,7 +111,7 @@ export function Bill() {
 
   // Render the QR whenever the payable amount or VPA changes.
   useEffect(() => {
-    const amt = bill ? Number(bill.mine.total) : 0;
+    const amt = bill ? Number(bill.totals.total) : 0;
     if (!vpa || !(amt > 0) || !session) { setPayQr(''); return; }
     const p = new URLSearchParams({
       pa: vpa.trim(), pn: (session.restaurant.name || 'Restaurant').slice(0, 60),
@@ -139,33 +139,15 @@ export function Bill() {
   }
 
   const b = bill!;
-  const empty = !b.orders.length;
+  const empty = !b.lines.length;
 
   // There is one amount now: what this diner owes for their own order.
-  const payAmount = Number(b.mine.total);
-  const payLabel = t('bill.yourTotal');
+  const payAmount = Number(b.totals.total);
+  const payLabel = t('bill.tableTotal');
   const payUri = buildPayUri(payAmount);
   // One-tap is refused above the cap on a personal VPA; a merchant VPA is P2M
   // and uncapped, so nothing is hidden for them.
   const capped = acctType !== 'merchant' && payAmount > UPI_P2P_INTENT_CAP;
-  /** Every dish at the table as one list, identical lines merged.
-   *
-   *  Keyed on name AND unit price, so a dish whose price changed mid-service
-   *  stays on its own line rather than being silently averaged into one. */
-  const mergedLines = (() => {
-    const m = new Map<string, { name: string; qty: number; amount: number }>();
-    for (const o of b.orders ?? []) {
-      for (const it of o.items ?? []) {
-        const k = `${it.name}|${it.unit_price}`;
-        const cur = m.get(k);
-        const qty = Number(it.qty || 0);
-        if (cur) { cur.qty += qty; cur.amount += Number(it.unit_price) * qty; }
-        else m.set(k, { name: it.name, qty, amount: Number(it.unit_price) * qty });
-      }
-    }
-    return [...m.values()];
-  })();
-
   return (
     <div className="page fade-in">
       <div className="topbar">
@@ -185,29 +167,34 @@ export function Bill() {
         </div>
       ) : (
         <>
-          {/* ONE person's bill: the reader's.
-              There was a whole/split toggle here and, under it, every other
-              diner's name and total. A stranger at a shared table could read
-              what everyone else had eaten and what they owed. The payload no
-              longer even contains other people - my_table_bill scopes to the
-              caller's own phone - so there is nothing to toggle between. */}
+          {/* THE TABLE'S page, for this seating.
+              Diners sharing a table see each other's dishes - that is what a
+              shared bill is. What is deliberately absent: phone numbers, a
+              per-person breakdown, and any split machinery. Those live in the
+              restaurant's own views. A previous party's food cannot appear
+              here at all: the session boundary moves when the table is settled
+              or cleared, so a new seating starts from an empty page even while
+              an older bill is still open in the back office. */}
           <p className="muted" style={{ fontSize: 13.5, margin: '16px 0 8px' }}>
-            {b.mine.order_count} order{b.mine.order_count === 1 ? '' : 's'} · {t('bill.yoursOnly')}
+            {b.totals.order_count} order{b.totals.order_count === 1 ? '' : 's'} · {t('bill.thisTable')}
           </p>
 
           <div className="glass" style={{ padding: 16, marginTop: 12 }}>
             <p className="overline" style={{ marginBottom: 10 }}>{t('bill.whatYouOrdered')}</p>
-            {mergedLines.map((it, i) => (
+            {b.lines.map((it, i) => (
               <div key={i} className="bill-row" style={{ fontSize: 14 }}>
-                <span>{it.qty} × {it.name}</span>
+                <span style={{ minWidth: 0 }}>
+                  {it.who ? <strong style={{ fontWeight: 600 }}>{it.who}</strong> : null}
+                  {it.who ? ' — ' : ''}{it.qty > 1 ? `${it.qty} × ` : ''}{it.name}
+                </span>
                 <span>{inr(it.amount)}</span>
               </div>
             ))}
           </div>
 
           <div className="glass" style={{ padding: 16, marginTop: 16, borderColor: 'var(--primary)' }}>
-            <p className="overline" style={{ marginBottom: 10 }}>{t('bill.yourTotal')}</p>
-            <TotalsBlock b={b.mine} sgstPct={b.sgst_pct} cgstPct={b.cgst_pct} />
+            <p className="overline" style={{ marginBottom: 10 }}>{t('bill.tableTotal')}</p>
+            <TotalsBlock b={b.totals} sgstPct={b.sgst_pct} cgstPct={b.cgst_pct} />
           </div>
 
           {/* Pay panel.
