@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import type { CartLine, MenuItem } from './lib/types';
 import { inr } from './lib/types';
 import { LANGS, getLang, setLang, translate, type Lang } from './lib/i18n';
@@ -227,13 +227,60 @@ export function ItemSheet({
  *  in its own script (a Kannada speaker looks for "ಕನ್ನಡ", not "Kannada"), and
  *  persists the choice. Only the app's own wording changes — dish names are
  *  the restaurant's data. */
+const MENU_W = 148;
+
 export function LanguagePicker() {
   const [lang, setL] = useState<Lang>(getLang);
   const [open, setOpen] = useState(false);
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
   const current = LANGS.find((l) => l.key === lang) ?? LANGS[0];
+
+  /* The menu used to be absolutely positioned at `right: 0`, which silently
+     assumed the button sits near the right edge of the screen. It does not: on
+     a phone the header's action group wraps onto its own line and the language
+     chip lands at the far LEFT. Measured on the live site at 375px, the button
+     was at x=16 and the menu opened from -36 to 92 — every option cut off, so
+     "English ✓" read as "glish ✓", exactly what the client photographed.
+
+     Anchoring to a fixed side cannot be right for both cases, so we measure
+     instead: place the menu under the button, then clamp it into the viewport.
+     Fixed positioning also frees it from any scrolling or clipping ancestor. */
+  const place = () => {
+    const b = btnRef.current?.getBoundingClientRect();
+    if (!b) return;
+    const pad = 8;
+    const left = Math.min(
+      Math.max(pad, b.right - MENU_W),          // prefer right-aligned to the chip
+      Math.max(pad, window.innerWidth - MENU_W - pad), // but never past the right edge
+    );
+    setPos({ top: b.bottom + 6, left });
+  };
+
+  useEffect(() => {
+    if (!open) return;
+    place();
+    const close = (e: MouseEvent) => {
+      if (!btnRef.current?.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
+    // Reposition rather than drift: the header is not fixed, so the button moves.
+    window.addEventListener('resize', place);
+    window.addEventListener('scroll', place, true);
+    document.addEventListener('mousedown', close);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('resize', place);
+      window.removeEventListener('scroll', place, true);
+      document.removeEventListener('mousedown', close);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+
   return (
     <span style={{ position: 'relative' }}>
       <button
+        ref={btnRef}
         className="chip"
         aria-haspopup="listbox"
         aria-expanded={open}
@@ -242,13 +289,13 @@ export function LanguagePicker() {
       >
         {current.native}
       </button>
-      {open && (
+      {open && pos && (
         <span
           role="listbox"
           style={{
-            position: 'absolute', top: '100%', right: 0, marginTop: 6, zIndex: 40,
+            position: 'fixed', top: pos.top, left: pos.left, zIndex: 60,
             background: 'var(--surface)', border: '1px solid var(--line-strong)',
-            borderRadius: 12, padding: 4, minWidth: 128,
+            borderRadius: 12, padding: 4, width: MENU_W,
             boxShadow: '0 12px 30px rgba(0,0,0,0.14)', display: 'block',
           }}
         >

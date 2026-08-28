@@ -5,7 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import { placeOrder } from '../lib/api';
 import { calcBill, inr } from '../lib/types';
 import { useStore } from '../store';
-import { useT } from '../lib/i18n';
+import { useT, translateTableLabel } from '../lib/i18n';
 import { Stepper, VegMark, Wordmark } from '../components';
 
 export function Cart() {
@@ -38,7 +38,7 @@ export function Cart() {
       clearCart();
       nav(`/track/${order.id}`, { replace: true });
     } catch (e: any) {
-      setError(e?.message ?? 'Something went wrong — please try again.');
+      setError(e?.message ?? t('common.somethingWrong'));
     } finally {
       setPlacing(false);
     }
@@ -54,7 +54,7 @@ export function Cart() {
       <h1 className="display" style={{ fontSize: 28, margin: '10px 0 2px' }}>{t('cart.title')}</h1>
       <p className="muted" style={{ fontSize: 14 }}>
         {session.restaurant.name} ·{' '}
-        {session.table.is_parcel ? 'Parcel / Takeaway' : session.table.label}
+        {session.table.is_parcel ? t('menu.parcel') : translateTableLabel(session.table.label)}
       </p>
 
       {!cart.length ? (

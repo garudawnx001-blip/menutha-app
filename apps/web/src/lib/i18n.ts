@@ -144,6 +144,13 @@ const EN: Dict = {
   'common.decreaseQty': 'Decrease quantity',
   'common.increaseQty': 'Increase quantity',
   'common.changeLanguage': 'Change language',
+  'common.table': 'Table',
+  'common.demo': 'Demo',
+  'common.somethingWrong': 'Something went wrong — please try again.',
+  'common.opening': 'Opening…',
+  'track.payingCash': 'Paying cash at the counter',
+  'track.upiMarked': 'UPI payment marked',
+  'track.payCard': 'Pay by card / netbanking',
   'cart.title': 'Your order',
   'cart.empty': 'Your cart is empty.',
   'cart.browse': 'Browse the menu',
@@ -281,6 +288,13 @@ const KN: Dict = {
   'common.decreaseQty': 'ಪ್ರಮಾಣ ಕಡಿಮೆ ಮಾಡಿ',
   'common.increaseQty': 'ಪ್ರಮಾಣ ಹೆಚ್ಚಿಸಿ',
   'common.changeLanguage': 'ಭಾಷೆ ಬದಲಾಯಿಸಿ',
+  'common.table': 'ಟೇಬಲ್',
+  'common.demo': 'ಡೆಮೊ',
+  'common.somethingWrong': 'ಏನೋ ತಪ್ಪಾಗಿದೆ — ದಯವಿಟ್ಟು ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.',
+  'common.opening': 'ತೆರೆಯುತ್ತಿದೆ…',
+  'track.payingCash': 'ಕೌಂಟರ್‌ನಲ್ಲಿ ನಗದು ಪಾವತಿ',
+  'track.upiMarked': 'ಯುಪಿಐ ಪಾವತಿ ಗುರುತಿಸಲಾಗಿದೆ',
+  'track.payCard': 'ಕಾರ್ಡ್ / ನೆಟ್‌ಬ್ಯಾಂಕಿಂಗ್ ಮೂಲಕ ಪಾವತಿಸಿ',
   'cart.title': 'ನಿಮ್ಮ ಆರ್ಡರ್',
   'cart.empty': 'ನಿಮ್ಮ ಕಾರ್ಟ್ ಖಾಲಿಯಾಗಿದೆ.',
   'cart.browse': 'ಮೆನು ನೋಡಿ',
@@ -418,6 +432,13 @@ const HI: Dict = {
   'common.decreaseQty': 'मात्रा घटाएँ',
   'common.increaseQty': 'मात्रा बढ़ाएँ',
   'common.changeLanguage': 'भाषा बदलें',
+  'common.table': 'टेबल',
+  'common.demo': 'डेमो',
+  'common.somethingWrong': 'कुछ गड़बड़ हो गई — कृपया फिर कोशिश करें।',
+  'common.opening': 'खोल रहे हैं…',
+  'track.payingCash': 'काउंटर पर नकद भुगतान',
+  'track.upiMarked': 'यूपीआई भुगतान दर्ज किया गया',
+  'track.payCard': 'कार्ड / नेटबैंकिंग से भुगतान करें',
   'cart.title': 'आपका ऑर्डर',
   'cart.empty': 'आपका कार्ट खाली है।',
   'cart.browse': 'मेन्यू देखें',
@@ -531,4 +552,23 @@ export function translateCategory(name: string, lang: Lang = getLang()): string 
   if (lang === 'en') return name;
   const hit = CATEGORY_NAMES[catKey(name)];
   return hit ? hit[lang as 'kn' | 'hi'] ?? name : name;
+}
+
+/** A table label in the diner's language.
+ *
+ *  "Table 4" is stored by the restaurant, so strictly it is their data — but
+ *  the only part that carries meaning is the number. The word in front of it
+ *  is ours, and leaving it in English was conspicuous: a diner reading a fully
+ *  Kannada screen still met a Latin-script "Table 4" in the badge next to it.
+ *
+ *  So we translate the word and keep whatever follows verbatim. A label that
+ *  is not of the form "Table <something>" — "Terrace 2", "ಟೇಬಲ್ 4" already in
+ *  Kannada, "A1" — is the restaurant saying something we should not rewrite,
+ *  and passes through untouched. */
+export function translateTableLabel(label: string, lang: Lang = getLang()): string {
+  if (lang === 'en') return label;
+  const m = /^\s*table\b\s*(.*)$/i.exec(label);
+  if (!m) return label;
+  const word = translate(lang, 'common.table');
+  return m[1] ? `${word} ${m[1]}` : word;
 }

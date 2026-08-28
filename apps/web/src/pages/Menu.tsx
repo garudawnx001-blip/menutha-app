@@ -12,7 +12,7 @@ import type { CartLine, MenuItem } from '../lib/types';
 import { inr } from '../lib/types';
 import { useStore } from '../store';
 import { IdentityGate, ItemSheet, LanguagePicker, SendingIn, Spinner, Stepper, VegMark, Wordmark } from '../components';
-import { useT, translateCategory } from '../lib/i18n';
+import { useT, translateCategory, translateTableLabel } from '../lib/i18n';
 import { TableSoFar } from './TableSoFar';
 
 export function Menu() {
@@ -192,7 +192,7 @@ export function Menu() {
             </button>
           )}
           <span className="badge gold">
-            {table.is_parcel ? '📦 ' + t('menu.parcel') : `🍽 ${table.label}`}
+            {table.is_parcel ? '📦 ' + t('menu.parcel') : `🍽 ${translateTableLabel(table.label)}`}
           </span>
         </div>
       </div>
@@ -221,9 +221,9 @@ export function Menu() {
           <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
             {restaurant.city && <span className="badge">{restaurant.city}</span>}
             <span className={restaurant.is_open === false ? 'badge closed' : 'badge open'}>
-              {restaurant.is_open === false ? 'Closed now' : 'Open'}
+              {restaurant.is_open === false ? t('menu.closed') : t('menu.open')}
             </span>
-            {session.demo && <span className="badge gold">Demo</span>}
+            {session.demo && <span className="badge gold">{t('common.demo')}</span>}
           </div>
         </div>
       </div>

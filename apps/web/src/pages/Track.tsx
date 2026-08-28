@@ -10,12 +10,19 @@ import type { OrderView } from '../lib/types';
 import { inr } from '../lib/types';
 import { useStore } from '../store';
 import { Spinner, Wordmark } from '../components';
-import { useT } from '../lib/i18n';
+import { useT, translateTableLabel } from '../lib/i18n';
 
 
 /** Pay the restaurant directly: dynamic UPI QR from THEIR VPA, optional card
  *  checkout on THEIR gateway, or cash at the counter. Zero platform fees. */
 function PaymentPanel({ order, demo, onChanged }: { order: OrderView; demo?: boolean; onChanged: () => void }) {
+  // This was missing, and the panel referenced a `t` that existed only in the
+  // sibling component below — so every render threw "t is not defined" and the
+  // whole tracking screen went blank. It shipped because CI runs `npx vite
+  // build` with tsc deliberately skipped: esbuild strips types without ever
+  // resolving identifiers, so an undefined name compiles cleanly and fails in
+  // the diner's hand instead.
+  const t = useT();
   const [qr, setQr] = useState<PaymentQr | null>(null);
   const [qrImg, setQrImg] = useState('');
   const [upiUri, setUpiUri] = useState('');
@@ -40,7 +47,7 @@ function PaymentPanel({ order, demo, onChanged }: { order: OrderView; demo?: boo
   const act = async (fn: () => Promise<void>, key: string) => {
     setBusy(key); setError('');
     try { await fn(); onChanged(); }
-    catch (e: any) { setError(e?.message ?? 'Something went wrong — please try again.'); }
+    catch (e: any) { setError(e?.message ?? t('common.somethingWrong')); }
     finally { setBusy(''); }
   };
 
@@ -59,7 +66,7 @@ function PaymentPanel({ order, demo, onChanged }: { order: OrderView; demo?: boo
     return (
       <div className="glass" style={{ padding: 16, marginTop: 16, borderColor: 'var(--gold)' }}>
         <strong style={{ color: '#8a6a25' }}>
-          {p.provider === 'cash' ? 'Paying cash at the counter' : 'UPI payment marked'}
+          {p.provider === 'cash' ? t('track.payingCash') : t('track.upiMarked')}
         </strong>
         <p className="muted" style={{ fontSize: 14, marginTop: 4 }}>
           {t('track.awaitingConfirm')}
@@ -93,7 +100,7 @@ function PaymentPanel({ order, demo, onChanged }: { order: OrderView; demo?: boo
       {qr.gateway_key_id && (
         <button className="btn btn-ghost btn-block" style={{ marginTop: 10 }} disabled={busy !== ''}
           onClick={() => act(() => startGatewayCheckout(order.id, demo), 'gw')}>
-          {busy === 'gw' ? 'Opening…' : '💳 Pay by card / netbanking'}
+          {busy === 'gw' ? t('common.opening') : `💳 ${t('track.payCard')}`}
         </button>
       )}
       <p className="dim" style={{ fontSize: 12, marginTop: 12 }}>
@@ -149,9 +156,11 @@ export function Track() {
   return (
     <div className="page fade-in">
       <div className="topbar">
-        <button className="chip" onClick={() => nav('/menu')}>← Menu</button>
+        <button className="chip" onClick={() => nav('/menu')}>← {t('cart.back')}</button>
         <span className="badge gold">
-          {o.is_parcel ? '📦 Parcel' : `🍽 ${o.table_label ?? 'Table'}`}
+          {o.is_parcel
+            ? `📦 ${t('menu.parcel')}`
+            : `🍽 ${o.table_label ? translateTableLabel(o.table_label) : t('common.table')}`}
         </span>
       </div>
 

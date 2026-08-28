@@ -45,7 +45,20 @@ jobs:
           npm config set fetch-retry-maxtimeout 120000
           for i in 1 2 3; do npm ci --no-audit --no-fund && break || { echo "retry $i"; sleep 15; }; done
 
-      - name: Build (vite; skip tsc so a stray type error can't block deploy)
+      # Skipping tsc kept a stray type error from blocking a deploy — and let a
+      # genuine one through: PaymentPanel referenced an undefined `t`, which
+      # esbuild happily compiled and which blanked the whole order-tracking
+      # screen in production. esbuild strips types; it never resolves names.
+      #
+      # So the check runs, but does not gate the deploy: shipping a fix must not
+      # be blocked by an unrelated type error, which was the original and still
+      # valid concern. It fails loudly in the run summary instead. Once the
+      # report is clean, drop continue-on-error and make it a real gate.
+      - name: Type-check (reports; does not block)
+        continue-on-error: true
+        run: npx tsc --noEmit
+
+      - name: Build (vite)
         run: npx vite build
 
       - name: Compose public site (marketing landing at /, SPA fallback at 404)
