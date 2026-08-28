@@ -12,7 +12,6 @@ import {
 } from '../../lib/portalApi';
 import { inr } from '../../lib/types';
 import { usePartner } from './PartnerShell';
-import { Growth } from './Growth';
 import { Spinner, VegMark } from '../../components';
 
 const LIVE = ['placed', 'accepted', 'preparing', 'ready'];
@@ -304,9 +303,6 @@ export function OrdersBoard() {
       </div>
 
 
-      {/* Growth. Owners and managers only — the floor doesn't need revenue
-          trends mid-service, and kitchen accounts shouldn't see turnover. */}
-      {(role === 'owner' || role === 'manager') && <Growth restaurantId={restaurant.id} />}
       {orders.length === 0 && (
         <div className="glass" style={{ padding: 22, textAlign: 'center' }}>
           <p className="muted">No live orders. New orders appear here instantly — keep this tab open.</p>

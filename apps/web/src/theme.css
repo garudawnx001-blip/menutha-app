@@ -590,16 +590,39 @@ input.code-input::placeholder { color: var(--text-dim); }
     overflow-x: auto; scrollbar-width: none;
   }
   .portal-nav::-webkit-scrollbar { display: none; }
-  /* Same failure as the category chips, on the primary navigation: this bar
-     scrolls horizontally with its scrollbar hidden, so an owner on a narrow
-     phone (8 sections + Sign out) gets no signal that the last items exist.
-     Fading the right edge makes a partially-covered item read as "there is
-     more this way", where a cleanly clipped one reads as "that's all there
-     is". This is an affordance patch, not the fix — the real answer is fewer
-     top-level items on a phone, which belongs with the IA alignment work. */
-  .portal-nav {
-    -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 30px), transparent 100%);
-    mask-image: linear-gradient(to right, #000 calc(100% - 30px), transparent 100%);
+  /* THE FIX, replacing the edge-fade patch that stood in for it.
+     Nine sections at a 64px minimum need ~612px; a 360px phone bar has ~348px,
+     so four of them sat off the right edge of a scroller whose scrollbar is
+     hidden — an owner could not reach Plan, Settings or Sign out, and nothing
+     said they were there. Fading the edge made the loss visible without giving
+     the items back.
+
+     The bar now carries the four primary sections plus More, and the rest are a
+     sheet above it. Same split as the partner app, so both surfaces are
+     navigated the same way. Nothing scrolls, so nothing can hide. */
+  .portal-nav { overflow-x: visible; justify-content: space-around; }
+
+  .portal-rest {
+    position: fixed;
+    left: 0; right: 0;
+    bottom: calc(58px + env(safe-area-inset-bottom));
+    display: none;
+    flex-direction: column;
+    background: var(--surface);
+    border-top: 1px solid var(--line-strong);
+    box-shadow: 0 -12px 30px rgba(28, 26, 21, 0.12);
+    padding: 6px 8px;
+  }
+  .portal-rest.open { display: flex; }
+  /* In the sheet a section is a full-width row, not a bar tile. */
+  .portal-rest .portal-link {
+    flex-direction: row;
+    justify-content: flex-start;
+    gap: 12px;
+    min-width: 0;
+    width: 100%;
+    padding: 12px 14px;
+    font-size: 15px;
   }
   .portal-brand { display: none; }
   .portal-link { flex-direction: column; gap: 3px; padding: 6px 10px; font-size: 10.5px; min-width: 64px; align-items: center; }
@@ -1326,4 +1349,13 @@ input.code-input::placeholder { color: var(--text-dim); }
     overflow-x: visible;
     row-gap: 8px;
   }
+}
+
+/* Desktop sidebar: the "rest" group is not a sheet, just the remainder of the
+   column, so the section order reads the same at every width. Sign out sits at
+   the bottom as before. */
+@media (min-width: 800px) {
+  .portal-rest { display: flex; flex-direction: column; position: static; background: none; border: 0; box-shadow: none; padding: 0; }
+  .portal-rest .portal-link:last-child { margin-top: 12px; }
+  .portal-more { display: none; }
 }

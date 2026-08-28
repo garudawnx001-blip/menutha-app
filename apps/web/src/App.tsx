@@ -11,6 +11,7 @@ import { PartnerShell } from './pages/partner/PartnerShell';
 import { Register } from './pages/partner/Register';
 import { OrdersBoard } from './pages/partner/OrdersBoard';
 import { MenuManager } from './pages/partner/MenuManager';
+import { Reports } from './pages/partner/Reports';
 import { TablesQR } from './pages/partner/TablesQR';
 import { Billing } from './pages/partner/Billing';
 import { Reservations } from './pages/partner/Reservations';
@@ -46,6 +47,8 @@ export function App() {
             <Route path="/partner/menu" element={<MenuManager />} />
             <Route path="/partner/tables" element={<TablesQR />} />
             <Route path="/partner/billing" element={<Billing />} />
+
+            <Route path="/partner/reports" element={<Reports />} />
             <Route path="/partner/reservations" element={<Reservations />} />
             <Route path="/partner/staff" element={<Staff />} />
             <Route path="/partner/settings" element={<Settings />} />
