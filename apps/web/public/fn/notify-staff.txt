@@ -1,0 +1,396 @@
+/**
+ * notify-staff — pushes to a restaurant's staff devices.
+ * URL:    https://<project-ref>.supabase.co/functions/v1/notify-staff
+ * Deploy: supabase functions deploy notify-staff --no-verify-jwt
+ *
+ * WHY THIS EXISTS
+ * The web app used to POST to https://exp.host directly from the diner's
+ * browser. That can never work: exp.host answers the CORS preflight with 200
+ * but sends no Access-Control-Allow-Origin header, so the browser blocks the
+ * request before it leaves the page (verified live from https://menutha.com —
+ * "TypeError: Failed to fetch"). Every real diner order comes from the web, so
+ * no staff push was ever actually delivered. Sending from an Edge Function puts
+ * the call server-side, where CORS does not apply.
+ *
+ * --no-verify-jwt is deliberate: diners are anonymous, and this endpoint takes
+ * only an order id. It reveals nothing — the caller learns whether staff were
+ * notified, not who they are or what their tokens are.
+ *
+ * FCM: native tokens (v14+) go straight to Firebase with our own service
+ * account, so no Expo credentials are needed at all. Expo tokens from v13-and-
+ * earlier installs still route through Expo and keep returning
+ * InvalidCredentials; that failure is reported in `errors` rather than
+ * swallowed, and is precisely why v14 moved devices off Expo tokens.
+ *
+ * Accepts three shapes:
+ *   { selftest: true }                            — credential check, sends nothing
+ *   { orderId }                                   — new order (90s grouping applies)
+ *   { orderId, kind:'payment_claimed', amount }   — diner says they paid
+ */
+import { createClient } from "jsr:@supabase/supabase-js@2";
+// sendFcm + fcmSelfTest are inlined below (single-file deploy).
+
+const CORS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+};
+
+const json = (body: unknown, status = 200) =>
+  new Response(JSON.stringify(body), {
+    status,
+    headers: { ...CORS, "Content-Type": "application/json" },
+  });
+
+/** A burst of taps is one event to a human, so only the first order from a
+ *  table+diner inside this window pushes. Deliberately applied here rather than
+ *  by merging order rows: merged rows would fight per-order tax rounding, which
+ *  is what guarantees the table total and the sum of per-person totals agree to
+ *  the paisa. */
+const GROUP_WINDOW_SECONDS = 90;
+
+interface OrderRow {
+  order_no: number;
+  total: number;
+  notes: string | null;
+  is_parcel: boolean;
+  guest_name: string | null;
+  guest_phone: string | null;
+  table_id: string | null;
+  restaurant_id: string;
+  dining_table: { label: string } | { label: string }[] | null;
+  order_item: { name: string; qty: number }[] | null;
+}
+
+Deno.serve(async (req) => {
+  if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
+  if (req.method !== "POST") return json({ error: "POST only" }, 405);
+
+  let body: { orderId?: string; selftest?: boolean; kind?: string; amount?: number } = {};
+  try {
+    body = (await req.json()) ?? {};
+  } catch {
+    return json({ error: "body must be JSON" }, 400);
+  }
+
+  // Health check for the push credential chain. Runs exactly the code a real
+  // send uses — read the secret, sign an RS256 JWT with Web Crypto, exchange it
+  // for an FCM-scoped OAuth token — but sends nothing and touches no data.
+  if (body.selftest === true) {
+    try {
+      return json({ selftest: "ok", ...(await fcmSelfTest()) });
+    } catch (e) {
+      return json({ selftest: "failed", error: String(e) }, 500);
+    }
+  }
+
+  const orderId = body.orderId ?? "";
+  if (!/^[0-9a-f-]{36}$/i.test(orderId)) return json({ error: "orderId must be a uuid" }, 400);
+
+  const db = createClient(
+    Deno.env.get("SB_URL") ?? Deno.env.get("SUPABASE_URL")!,
+    Deno.env.get("SB_SERVICE_ROLE_KEY") ?? Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    { auth: { persistSession: false } },
+  );
+
+  const { data: order, error: oErr } = await db
+    .from("food_order")
+    .select(
+      "order_no, total, notes, is_parcel, guest_name, guest_phone, table_id, restaurant_id, dining_table(label), order_item(name, qty)",
+    )
+    .eq("id", orderId)
+    .single<OrderRow>();
+  if (oErr || !order) return json({ error: "order not found" }, 404);
+
+  const row = order;
+
+  /** Deliver one message to every registered staff device.
+   *
+   *  Two token shapes coexist by design: v13-and-earlier installs hold an Expo
+   *  token, v14+ hold the device's native FCM token. Native tokens go straight
+   *  to Firebase with our own service account and need no Expo credentials;
+   *  Expo tokens keep their old path so older phones are no worse off. */
+  async function pushToStaff(title: string, text: string, data: Record<string, string>) {
+    const { data: members } = await db
+      .from("restaurant_member")
+      .select("user_id")
+      .eq("restaurant_id", row.restaurant_id);
+    const ids = (members ?? []).map((m: { user_id: string }) => m.user_id);
+    if (!ids.length) return { sent: 0, devices: 0, reason: "no staff for restaurant" };
+
+    const { data: users } = await db
+      .from("app_user")
+      .select("push_token")
+      .in("id", ids)
+      .not("push_token", "is", null);
+
+    const all = (users ?? [])
+      .map((u: { push_token: string | null }) => u.push_token)
+      .filter((t): t is string => !!t && t.length > 10);
+    const expoTokens = all.filter((t) => t.startsWith("ExponentPushToken"));
+    const fcmTokens = all.filter((t) => !t.startsWith("ExponentPushToken"));
+    if (!all.length) return { sent: 0, devices: 0, reason: "no registered devices" };
+
+    let sent = 0;
+    const errors: string[] = [];
+
+    if (fcmTokens.length) {
+      try {
+        const r = await sendFcm(fcmTokens, title, text, data);
+        sent += r.sent;
+        errors.push(...r.errors.map((e) => `fcm: ${e}`));
+        // Clear tokens FCM calls dead, so an uninstalled app stops being retried
+        // on every single order forever.
+        if (r.stale.length) {
+          await db.from("app_user").update({ push_token: null }).in("push_token", r.stale);
+        }
+      } catch (e) {
+        errors.push(`fcm: ${e}`);
+      }
+    }
+
+    if (expoTokens.length) {
+      try {
+        const r = await fetch("https://exp.host/--/api/v2/push/send", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Accept: "application/json" },
+          body: JSON.stringify(expoTokens.map((to) => ({
+            to, title, body: text, sound: "default",
+            channelId: "orders", priority: "high", data,
+          }))),
+        });
+        const tickets = ((await r.json())?.data ?? []) as { status?: string; message?: string }[];
+        for (const t of tickets) {
+          if (t?.status === "error") errors.push(`expo: ${t.message ?? "unknown"}`);
+          else sent++;
+        }
+      } catch (e) {
+        errors.push(`expo: ${e}`);
+      }
+    }
+
+    // Report failures rather than swallowing them — a silent 200 is exactly how
+    // this stayed invisible for weeks.
+    return { sent, devices: all.length, fcm: fcmTokens.length, expo: expoTokens.length, errors };
+  }
+
+  const table = Array.isArray(row.dining_table) ? row.dining_table[0] : row.dining_table;
+  const seat = row.is_parcel ? "Parcel" : table?.label ?? "Table";
+  const who = (row.guest_name ?? "").trim();
+
+  // ── Payment claim ─────────────────────────────────────────────────────────
+  // The diner pressed "I've paid". A static UPI QR has no webhook — money moves
+  // between their app and the restaurant's bank and nothing tells us — so this
+  // is the diner's word, not a confirmation. The wording says so, and staff
+  // still verify in their own UPI app before settling. Never grouped: a payment
+  // claim is not noise.
+  if (body.kind === "payment_claimed") {
+    const amt = Number(body.amount ?? row.total ?? 0).toFixed(2);
+    const res = await pushToStaff(
+      `Payment claimed · ${seat}`,
+      `${who || "A diner"} says they paid ₹${amt}.\nCheck your UPI app, then settle the bill.`,
+      { orderId, kind: "payment_claimed" },
+    );
+    return json({ ...res, kind: "payment_claimed" });
+  }
+
+  // ── New order, with 90-second grouping ────────────────────────────────────
+  const since = new Date(Date.now() - GROUP_WINDOW_SECONDS * 1000).toISOString();
+  const { data: recent } = await db
+    .from("food_order")
+    .select("id, guest_phone, table_id")
+    .eq("restaurant_id", row.restaurant_id)
+    .gte("placed_at", since)
+    .neq("id", orderId);
+
+  const sameParty = (recent ?? []).filter((r: { guest_phone: string | null; table_id: string | null }) =>
+    (r.guest_phone ?? "") === (row.guest_phone ?? "") &&
+    (r.table_id ?? "") === (row.table_id ?? "")
+  );
+  if (sameParty.length > 0) {
+    return json({
+      sent: 0,
+      grouped: true,
+      windowSeconds: GROUP_WINDOW_SECONDS,
+      reason: "another order from this table was announced moments ago",
+    });
+  }
+
+  const items = (row.order_item ?? []).map((i) => `${i.qty}× ${i.name}`).join(", ");
+  const count = (row.order_item ?? []).reduce((a, i) => a + Number(i.qty || 0), 0);
+  const head = [who, `${count} item${count === 1 ? "" : "s"}`, `₹${Number(row.total || 0).toFixed(2)}`]
+    .filter(Boolean)
+    .join(" · ");
+
+  const res = await pushToStaff(
+    `New order · ${seat} · #${row.order_no}`,
+    `${head}\n${items}${row.notes ? `\nNote: ${row.notes}` : ""}`,
+    { orderId, kind: "order_placed" },
+  );
+  return json(res);
+});
+
+// ── Inlined FCM HTTP v1 sender + self-test (was fcm.ts) ─────────────────
+
+interface ServiceAccount {
+  project_id: string;
+  client_email: string;
+  private_key: string;
+}
+
+let cachedToken: { value: string; expiresAt: number } | null = null;
+
+function readServiceAccount(): ServiceAccount {
+  const raw = Deno.env.get("FIREBASE_SERVICE_ACCOUNT");
+  if (!raw) throw new Error("FIREBASE_SERVICE_ACCOUNT secret is not set");
+  const sa = JSON.parse(raw) as ServiceAccount;
+  if (!sa.project_id || !sa.client_email || !sa.private_key) {
+    throw new Error("FIREBASE_SERVICE_ACCOUNT is missing project_id/client_email/private_key");
+  }
+  return sa;
+}
+
+const b64url = (bytes: Uint8Array) =>
+  btoa(String.fromCharCode(...bytes)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+
+const b64urlStr = (s: string) => b64url(new TextEncoder().encode(s));
+
+/** PEM (PKCS#8) → CryptoKey for RS256 signing. */
+async function importKey(pem: string): Promise<CryptoKey> {
+  const body = pem
+    .replace(/-----BEGIN PRIVATE KEY-----/, "")
+    .replace(/-----END PRIVATE KEY-----/, "")
+    .replace(/\s+/g, "");
+  const der = Uint8Array.from(atob(body), (c) => c.charCodeAt(0));
+  return crypto.subtle.importKey(
+    "pkcs8",
+    der,
+    { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+}
+
+/** Google OAuth2 access token for the FCM scope, cached until just before it
+ *  expires so a burst of orders doesn't mint a token per order. */
+async function accessToken(sa: ServiceAccount): Promise<string> {
+  const now = Math.floor(Date.now() / 1000);
+  if (cachedToken && cachedToken.expiresAt > now + 60) return cachedToken.value;
+
+  const claim = {
+    iss: sa.client_email,
+    scope: "https://www.googleapis.com/auth/firebase.messaging",
+    aud: "https://oauth2.googleapis.com/token",
+    iat: now,
+    exp: now + 3600,
+  };
+  const unsigned = `${b64urlStr(JSON.stringify({ alg: "RS256", typ: "JWT" }))}.${b64urlStr(JSON.stringify(claim))}`;
+  const key = await importKey(sa.private_key);
+  const sig = new Uint8Array(
+    await crypto.subtle.sign("RSASSA-PKCS1-v1_5", key, new TextEncoder().encode(unsigned)),
+  );
+  const jwt = `${unsigned}.${b64url(sig)}`;
+
+  const res = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
+      assertion: jwt,
+    }),
+  });
+  const json = await res.json();
+  if (!res.ok || !json.access_token) {
+    throw new Error(`google oauth failed: ${json.error_description ?? json.error ?? res.status}`);
+  }
+  cachedToken = { value: json.access_token, expiresAt: now + Number(json.expires_in ?? 3600) };
+  return cachedToken.value;
+}
+
+export interface FcmResult { sent: number; errors: string[]; stale: string[] }
+
+/**
+ * Send one notification to many native FCM tokens.
+ * Returns tokens FCM reports as dead in `stale` so the caller can clear them —
+ * an uninstalled app otherwise leaves a token that fails forever.
+ */
+export async function sendFcm(
+  tokens: string[],
+  title: string,
+  body: string,
+  data: Record<string, string>,
+): Promise<FcmResult> {
+  if (!tokens.length) return { sent: 0, errors: [], stale: [] };
+
+  const sa = readServiceAccount();
+  const token = await accessToken(sa);
+  const url = `https://fcm.googleapis.com/v1/projects/${sa.project_id}/messages:send`;
+
+  const out: FcmResult = { sent: 0, errors: [], stale: [] };
+
+  // FCM v1 has no multicast endpoint; one request per device, in parallel.
+  await Promise.all(tokens.map(async (to) => {
+    try {
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: {
+            token: to,
+            notification: { title, body },
+            data,
+            android: {
+              priority: "HIGH",
+              notification: {
+                channel_id: "orders",       // the high-importance channel the app creates
+                sound: "default",
+                default_vibrate_timings: true,
+              },
+            },
+          },
+        }),
+      });
+      if (res.ok) { out.sent++; return; }
+      const err = await res.json().catch(() => ({}));
+      const status = err?.error?.status ?? String(res.status);
+      // UNREGISTERED / INVALID_ARGUMENT on the token means the install is gone.
+      if (status === "NOT_FOUND" || status === "UNREGISTERED") out.stale.push(to);
+      out.errors.push(`${status}: ${err?.error?.message ?? "send failed"}`);
+    } catch (e) {
+      out.errors.push(String(e));
+    }
+  }));
+
+  return out;
+}
+
+/**
+ * Credential health check. Runs the exact chain a real send depends on —
+ * read the secret, sign an RS256 JWT with Web Crypto, exchange it for an
+ * FCM-scoped OAuth token — without sending a notification or touching data.
+ * Returns only non-sensitive facts; the key and the token never leave here.
+ */
+export async function fcmSelfTest(): Promise<{ project: string; tokenMinted: boolean; fcmReachable: boolean; fcmStatus: string }> {
+  const sa = readServiceAccount();
+  const token = await accessToken(sa);
+
+  // A deliberately invalid device token: FCM must reject the TOKEN, not the
+  // AUTH. INVALID_ARGUMENT proves the credential was accepted.
+  const res = await fetch(`https://fcm.googleapis.com/v1/projects/${sa.project_id}/messages:send`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      message: { token: "selftest-invalid-token", notification: { title: "selftest", body: "selftest" } },
+    }),
+  });
+  const err = await res.json().catch(() => ({}));
+  const status = err?.error?.status ?? String(res.status);
+
+  return {
+    project: sa.project_id,
+    tokenMinted: !!token,
+    // UNAUTHENTICATED/PERMISSION_DENIED would mean the credential is the problem.
+    fcmReachable: status === "INVALID_ARGUMENT" || status === "NOT_FOUND" || status === "UNREGISTERED",
+    fcmStatus: status,
+  };
+}
