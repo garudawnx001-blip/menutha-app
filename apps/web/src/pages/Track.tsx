@@ -10,6 +10,7 @@ import type { OrderView } from '../lib/types';
 import { inr } from '../lib/types';
 import { useStore } from '../store';
 import { Spinner, Wordmark } from '../components';
+import { useT } from '../lib/i18n';
 
 
 /** Pay the restaurant directly: dynamic UPI QR from THEIR VPA, optional card
@@ -106,6 +107,7 @@ function PaymentPanel({ order, demo, onChanged }: { order: OrderView; demo?: boo
 
 export function Track() {
   const { id = '' } = useParams();
+  const t = useT();
   const nav = useNavigate();
   const { session } = useStore();
   const [order, setOrder] = useState<OrderView | null>(null);
@@ -126,17 +128,17 @@ export function Track() {
     };
   }, [id]);
 
-  if (!order && !failed) return <Spinner label="Finding your order…" />;
+  if (!order && !failed) return <Spinner label={t('track.loading')} />;
 
   if (failed && !order) {
     return (
       <div className="page center-fill fade-in">
         <Wordmark size={22} />
-        <h1 className="display" style={{ fontSize: 26 }}>Couldn’t load this order</h1>
+        <h1 className="display" style={{ fontSize: 26 }}>{t('track.loadFail')}</h1>
         <p className="muted" style={{ maxWidth: 380 }}>
           Check your connection and try again — your order is safe with the kitchen.
         </p>
-        <button className="btn btn-ghost" onClick={() => window.location.reload()}>Retry</button>
+        <button className="btn btn-ghost" onClick={() => window.location.reload()}>{t('common.retry')}</button>
       </div>
     );
   }
@@ -155,15 +157,15 @@ export function Track() {
       </div>
 
       <p className="overline" style={{ marginTop: 12 }}>
-        {o.restaurant_name}{o.order_no ? ` · Order #${o.order_no}` : ''}
+        {o.restaurant_name}{o.order_no ? ` · ${t('track.orderNo')} #${o.order_no}` : ''}
       </p>
       <h1 className="display" style={{ fontSize: 30, marginTop: 4 }}>
-        {cancelled ? 'Order cancelled' : done ? 'Served — enjoy!' : 'Your order is live'}
+        {cancelled ? t('track.cancelled') : done ? t('track.servedEnjoy') : t('track.live')}
       </h1>
 
       {cancelled ? (
         <div className="glass" style={{ padding: 18, marginTop: 18, borderColor: 'rgba(199,107,92,0.5)' }}>
-          <p style={{ color: 'var(--error)', fontWeight: 700 }}>The restaurant cancelled this order.</p>
+          <p style={{ color: 'var(--error)', fontWeight: 700 }}>{t('track.cancelledBody')}</p>
           <p className="muted" style={{ fontSize: 14, marginTop: 6 }}>
             Please speak to the staff — nothing has been charged through Menutha.
           </p>
@@ -206,19 +208,19 @@ export function Track() {
       )}
 
       <div className="glass" style={{ padding: 16, marginTop: 16 }}>
-        <p className="overline" style={{ marginBottom: 10 }}>Receipt</p>
+        <p className="overline" style={{ marginBottom: 10 }}>{t('track.receipt')}</p>
         {o.items.map((it, i) => (
           <div key={i} className="bill-row">
             <span>{it.qty} × {it.name}</span>
             <span>{inr(it.unit_price * it.qty)}</span>
           </div>
         ))}
-        <div className="bill-row"><span>Subtotal</span><span>{inr(o.subtotal)}</span></div>
+        <div className="bill-row"><span>{t('bill.subtotal')}</span><span>{inr(o.subtotal)}</span></div>
         {Number(o.packing_charge) > 0 && (
-          <div className="bill-row"><span>Packing charge</span><span>{inr(o.packing_charge)}</span></div>
+          <div className="bill-row"><span>{t('bill.packing')}</span><span>{inr(o.packing_charge)}</span></div>
         )}
         {Number(o.service_charge ?? 0) > 0 && (
-          <div className="bill-row"><span>Service charge</span><span>{inr(o.service_charge!)}</span></div>
+          <div className="bill-row"><span>{t('bill.service')}</span><span>{inr(o.service_charge!)}</span></div>
         )}
         {o.sgst_amount != null || o.cgst_amount != null ? (
           <>

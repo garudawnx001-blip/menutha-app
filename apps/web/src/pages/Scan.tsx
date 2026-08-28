@@ -5,9 +5,11 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { resolveToken, ScanError } from '../lib/api';
 import { useStore } from '../store';
 import { Spinner, Wordmark } from '../components';
+import { useT } from '../lib/i18n';
 
 export function Scan() {
   const { token = '' } = useParams();
+  const t = useT();
   const nav = useNavigate();
   const { startSession } = useStore();
   const [error, setError] = useState<{ title: string; body: string } | null>(null);
@@ -23,16 +25,16 @@ export function Scan() {
       } catch (e) {
         if (cancelled) return;
         if (e instanceof ScanError && e.kind === 'not_accepting') {
-          setError({ title: 'Not taking orders', body: e.message });
+          setError({ title: t('scan.closed'), body: e.message });
         } else if (e instanceof ScanError) {
           setError({
-            title: 'QR not recognised',
-            body: 'This code doesn’t match any table. Please re-scan the QR on your table, or ask the staff for a fresh card.',
+            title: t('scan.badQr'),
+            body: t('scan.badQrBody'),
           });
         } else {
           setError({
-            title: 'Connection trouble',
-            body: 'We couldn’t reach the restaurant’s menu. Check your internet connection and try again.',
+            title: t('scan.offline'),
+            body: t('scan.offlineBody'),
           });
         }
       }
@@ -42,7 +44,7 @@ export function Scan() {
     };
   }, [token]);
 
-  if (!error) return <Spinner label="Setting your table…" />;
+  if (!error) return <Spinner label={t('scan.loading')} />;
 
   return (
     <div className="page center-fill fade-in">
@@ -50,7 +52,7 @@ export function Scan() {
       <h1 className="display" style={{ fontSize: 28, marginTop: 10 }}>{error.title}</h1>
       <p className="muted" style={{ maxWidth: 380 }}>{error.body}</p>
       <button className="btn btn-ghost" style={{ marginTop: 8 }} onClick={() => window.location.reload()}>
-        Try again
+        {t('common.retry')}
       </button>
     </div>
   );

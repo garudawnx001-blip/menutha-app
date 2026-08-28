@@ -105,7 +105,7 @@ export function Menu() {
             </button>
           )}
           <span className="badge gold">
-            {table.is_parcel ? '📦 Parcel / Takeaway' : `🍽 ${table.label}`}
+            {table.is_parcel ? '📦 ' + t('menu.parcel') : `🍽 ${table.label}`}
           </span>
         </div>
       </div>
@@ -126,7 +126,7 @@ export function Menu() {
         <div className="hero-body">
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <span className="live-dot" />
-            <span className="overline" style={{ color: 'var(--text-muted)' }}>Live menu</span>
+            <span className="overline" style={{ color: 'var(--text-muted)' }}>{t('menu.liveMenu')}</span>
           </div>
           <h1 className="display" style={{ fontSize: 'clamp(26px, 5vw, 36px)', marginTop: 4 }}>
             {restaurant.name}
@@ -143,7 +143,7 @@ export function Menu() {
 
       {session.orderingDisabled && (
         <div className="glass" style={{ padding: 14, marginTop: 12, borderColor: 'rgba(197,64,47,0.5)' }}>
-          <strong style={{ color: 'var(--error)' }}>View-only menu.</strong>{' '}
+          <strong style={{ color: 'var(--error)' }}>{t('menu.viewOnly')}</strong>{' '}
           <span className="muted" style={{ fontSize: 14 }}>
             This restaurant isn’t taking online orders right now — please order
             with the staff.
@@ -161,7 +161,7 @@ export function Menu() {
             aria-label={t("menu.search")}
           />
         </div>
-        <div className="chip-row diet-row" role="group" aria-label="Dietary filter">
+        <div className="chip-row diet-row" role="group" aria-label={t('menu.dietFilter')}>
           <button
             className={'chip diet-chip diet-all' + (diet === 'all' ? ' active' : '')}
             style={diet === 'all' ? { background: '#e8833a', borderColor: '#e8833a', color: '#fffdf8' } : undefined}
@@ -208,12 +208,12 @@ export function Menu() {
           leaving to the bill screen to check is what caused double-ordering. */}
       {!session.demo && !session.table.is_parcel && <TableSoFar session={session} />}
 
-      {items === null && !failed && <Spinner label="Fetching the live menu…" />}
+      {items === null && !failed && <Spinner label={t('menu.loading')} />}
       {failed && (
         <div className="center-fill">
-          <h2 className="display" style={{ fontSize: 22 }}>Couldn’t load the menu</h2>
-          <p className="muted">Check your connection, then try again.</p>
-          <button className="btn btn-ghost" onClick={() => window.location.reload()}>Retry</button>
+          <h2 className="display" style={{ fontSize: 22 }}>{t('menu.loadFail')}</h2>
+          <p className="muted">{t('menu.loadFailBody')}</p>
+          <button className="btn btn-ghost" onClick={() => window.location.reload()}>{t('common.retry')}</button>
         </div>
       )}
       {items !== null && !failed && visible.length === 0 && (

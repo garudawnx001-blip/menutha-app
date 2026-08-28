@@ -109,17 +109,17 @@ export function Bill() {
   }, [vpa, bill, mode, session?.guest?.phone]);
 
   if (!session) return null;
-  if (!bill && !failed) return <Spinner label="Adding up your table…" />;
+  if (!bill && !failed) return <Spinner label={t('bill.loading')} />;
 
   if (failed && !bill) {
     return (
       <div className="page center-fill fade-in">
         <Wordmark size={22} />
-        <h1 className="display" style={{ fontSize: 26 }}>Couldn’t load the bill</h1>
+        <h1 className="display" style={{ fontSize: 26 }}>{t('bill.loadFail')}</h1>
         <p className="muted" style={{ maxWidth: 380 }}>
           Check your connection and try again — nothing has been charged.
         </p>
-        <button className="btn btn-ghost" onClick={() => window.location.reload()}>Retry</button>
+        <button className="btn btn-ghost" onClick={() => window.location.reload()}>{t('common.retry')}</button>
       </div>
     );
   }
@@ -131,7 +131,7 @@ export function Bill() {
   const myPhone = (session.guest?.phone ?? '').trim();
   const mine = b.per_person.find((p) => (p.diner_phone ?? '') === myPhone);
   const payAmount = mode === 'split' && mine ? Number(mine.total) : Number(b.combined.total);
-  const payLabel = mode === 'split' && mine ? `your share` : `the table total`;
+  const payLabel = mode === 'split' && mine ? t('bill.yourShare') : t('bill.theTableTotal');
   const payUri = buildPayUri(payAmount);
   // Reconciliation guard shown in split mode — the paisa-exact sum of people.
   const splitSum = b.per_person.reduce((a, p) => a + Number(p.total), 0);
@@ -152,11 +152,11 @@ export function Bill() {
       {empty ? (
         <div className="center-fill">
           <p className="muted">{t('bill.none')}</p>
-          <button className="btn btn-primary" onClick={() => nav('/menu')}>Browse the menu</button>
+          <button className="btn btn-primary" onClick={() => nav('/menu')}>{t('cart.browse')}</button>
         </div>
       ) : (
         <>
-          <div className="seg" role="tablist" aria-label="Bill view" style={{ marginTop: 16 }}>
+          <div className="seg" role="tablist" aria-label={t('bill.view')} style={{ marginTop: 16 }}>
             <button
               role="tab" aria-selected={mode === 'combined'}
               className={mode === 'combined' ? 'seg-btn active' : 'seg-btn'}
@@ -176,12 +176,12 @@ export function Bill() {
           {mode === 'combined' ? (
             <>
               <p className="muted" style={{ fontSize: 13.5, margin: '14px 0 8px' }}>
-                {b.combined.order_count} order{b.combined.order_count === 1 ? '' : 's'} · one bill for the table
+                {b.combined.order_count} order{b.combined.order_count === 1 ? '' : 's'} · {t('bill.oneBill')}
               </p>
               {b.orders.map((o) => (
                 <div key={o.order_id} className="glass" style={{ padding: 16, marginTop: 12 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
-                    <strong style={{ fontSize: 15 }}>{o.diner_name || 'Guest'}</strong>
+                    <strong style={{ fontSize: 15 }}>{o.diner_name || t('common.guest')}</strong>
                     <span className="muted" style={{ fontSize: 12.5, textTransform: 'capitalize' }}>{o.status}</span>
                   </div>
                   {o.items.map((it, i) => (
@@ -191,24 +191,24 @@ export function Bill() {
                     </div>
                   ))}
                   <div className="bill-row" style={{ marginTop: 4 }}>
-                    <span className="muted">Order total</span><span>{inr(o.total)}</span>
+                    <span className="muted">{t('bill.orderTotal')}</span><span>{inr(o.total)}</span>
                   </div>
                 </div>
               ))}
               <div className="glass" style={{ padding: 16, marginTop: 16, borderColor: 'var(--primary)' }}>
-                <p className="overline" style={{ marginBottom: 10 }}>Table total</p>
+                <p className="overline" style={{ marginBottom: 10 }}>{t('bill.tableTotal')}</p>
                 <TotalsBlock b={b.combined} sgstPct={b.sgst_pct} cgstPct={b.cgst_pct} />
               </div>
             </>
           ) : (
             <>
               <p className="muted" style={{ fontSize: 13.5, margin: '14px 0 8px' }}>
-                Each person’s own dishes, taxed exactly — the parts add up to the table total.
+                {t('bill.splitNote')}
               </p>
               {b.per_person.map((p, i) => (
                 <div key={i} className="glass" style={{ padding: 16, marginTop: 12 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
-                    <strong style={{ fontSize: 15 }}>{p.diner_name || 'Guest'}</strong>
+                    <strong style={{ fontSize: 15 }}>{p.diner_name || t('common.guest')}</strong>
                     <span className="muted" style={{ fontSize: 12.5 }}>
                       {p.order_count} order{p.order_count === 1 ? '' : 's'}
                     </span>
@@ -218,7 +218,7 @@ export function Bill() {
               ))}
               <div className="glass" style={{ padding: 16, marginTop: 16, borderColor: 'var(--primary)' }}>
                 <div className="bill-row total">
-                  <span>{reconciles ? 'Adds up to the table total' : 'Table total'}</span>
+                  <span>{t(reconciles ? 'bill.addsUp' : 'bill.tableTotal')}</span>
                   <span>{inr(b.combined.total)}</span>
                 </div>
               </div>
@@ -229,7 +229,7 @@ export function Bill() {
           {payUri ? (
             <div className="glass" style={{ padding: 16, marginTop: 16 }}>
               <p className="overline" style={{ marginBottom: 6 }}>
-                Pay {inr(payAmount)} — {payLabel}
+                {t('bill.pay')} {inr(payAmount)} — {payLabel}
               </p>
               <div style={{ display: 'flex', gap: 14, alignItems: 'center', flexWrap: 'wrap' }}>
                 {payQr && (
@@ -251,8 +251,8 @@ export function Bill() {
 
           <p className="dim" style={{ fontSize: 12, textAlign: 'center', marginTop: 14 }}>
             {payUri
-              ? 'Paying by UPI or cash? Just pay — the restaurant marks it received on their side.'
-              : 'Pay at the restaurant — cash or UPI at the counter.'} Updates live as your table orders.
+              ? t('bill.payNote')
+              : t('bill.payAtCounter')} {t('bill.updatesLive')}
           </p>
           <div style={{ display: 'flex', gap: 10, marginTop: 12 }}>
             <button className="btn btn-ghost" style={{ flex: 1 }} onClick={() => nav('/menu')}>{t('bill.orderMore')}</button>

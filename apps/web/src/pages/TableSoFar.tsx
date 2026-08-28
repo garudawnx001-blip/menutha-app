@@ -14,11 +14,13 @@ import { useNavigate } from 'react-router-dom';
 import { fetchTableBill } from '../lib/api';
 import type { Session } from '../lib/types';
 import { inr } from '../lib/types';
+import { useT } from '../lib/i18n';
 
 interface Row { who: string; total: number; items: string; mine: boolean }
 
 export function TableSoFar({ session }: { session: Session }) {
   const nav = useNavigate();
+  const t = useT();
   const [rows, setRows] = useState<Row[]>([]);
   const [total, setTotal] = useState(0);
   const [open, setOpen] = useState(false);
@@ -60,7 +62,7 @@ export function TableSoFar({ session }: { session: Session }) {
       >
         <span style={{ minWidth: 0 }}>
           <span className="overline" style={{ color: 'var(--primary)' }}>
-            Already ordered at this table
+            {t('bill.alreadyOrdered')}
           </span>
           <span className="tsf-sum">
             {dishes} dish{dishes === 1 ? '' : 'es'} · {inr(total)}
@@ -75,7 +77,7 @@ export function TableSoFar({ session }: { session: Session }) {
             <div key={i} className="tsf-row">
               <span style={{ minWidth: 0 }}>
                 <strong style={{ fontSize: 13.5 }}>
-                  {r.who}{r.mine ? ' (you)' : ''}
+                  {r.who || t('common.guest')}{r.mine ? ' (you)' : ''}
                 </strong>
                 <span className="tsf-items">{r.items}</span>
               </span>
@@ -84,7 +86,7 @@ export function TableSoFar({ session }: { session: Session }) {
           ))}
           <button className="btn btn-ghost btn-block" style={{ marginTop: 10, padding: '9px 12px', fontSize: 13.5 }}
             onClick={() => nav('/bill')}>
-            View the full bill
+            {t('bill.viewFull')}
           </button>
         </div>
       )}

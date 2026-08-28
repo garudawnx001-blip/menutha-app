@@ -75,7 +75,7 @@ export function Cart() {
         <Wordmark size={20} />
       </div>
 
-      <h1 className="display" style={{ fontSize: 28, margin: '10px 0 2px' }}>Your order</h1>
+      <h1 className="display" style={{ fontSize: 28, margin: '10px 0 2px' }}>{t('cart.title')}</h1>
       <p className="muted" style={{ fontSize: 14 }}>
         {session.restaurant.name} ·{' '}
         {session.table.is_parcel ? 'Parcel / Takeaway' : session.table.label}
@@ -133,19 +133,19 @@ export function Cart() {
           )}
 
           <div style={{ marginTop: 16 }}>
-            <p className="overline" style={{ marginBottom: 8 }}>Cooking instructions</p>
+            <p className="overline" style={{ marginBottom: 8 }}>{t('cart.instructions')}</p>
             <textarea
               className="notes"
-              placeholder="e.g. Less spicy, no onion…"
+              placeholder={t('cart.instructionsPh')}
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
             />
           </div>
 
           <div className="glass" style={{ padding: 16, marginTop: 16 }}>
-            <div className="bill-row"><span>Subtotal</span><span>{inr(bill.subtotal)}</span></div>
+            <div className="bill-row"><span>{t('bill.subtotal')}</span><span>{inr(bill.subtotal)}</span></div>
             {packing > 0 && (
-              <div className="bill-row"><span>Packing charge</span><span>{inr(packing)}</span></div>
+              <div className="bill-row"><span>{t('bill.packing')}</span><span>{inr(packing)}</span></div>
             )}
             {bill.service > 0 && (
               <div className="bill-row"><span>Service charge ({svcPct}%)</span><span>{inr(bill.service)}</span></div>
