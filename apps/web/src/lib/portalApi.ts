@@ -57,6 +57,7 @@ export interface PortalOrder {
   table_label?: string;
   guest_name?: string | null;
   guest_phone?: string | null;
+  ready_at?: string | null;
   items: { name: string; qty: number; unit_price: number; is_veg?: boolean }[];
   paid?: boolean;
   /** Diner-initiated payment awaiting one-tap staff confirmation. */
@@ -66,7 +67,7 @@ export interface PortalOrder {
 export async function fetchLiveOrders(restaurantId: string, statuses: string[]): Promise<PortalOrder[]> {
   const { data, error } = await supabase
     .from('food_order')
-    .select('id, order_no, status, is_parcel, subtotal, packing_charge, gst_amount, total, notes, placed_at, guest_name, guest_phone, dining_table(label), order_item(name, qty, unit_price, is_veg), payment(id, status, provider)')
+    .select('id, order_no, status, is_parcel, subtotal, packing_charge, gst_amount, total, notes, placed_at, ready_at, guest_name, guest_phone, dining_table(label), order_item(name, qty, unit_price, is_veg), payment(id, status, provider)')
     .eq('restaurant_id', restaurantId)
     .in('status', statuses)
     .order('placed_at', { ascending: true });
@@ -382,4 +383,24 @@ export async function fetchGrowth(
     b.orders += 1;
   }
   return [...buckets.values()];
+}
+
+// ── Prep timer ─────────────────────────────────────────────────────────────
+// Replaces the accept/preparing/ready/served workflow: an order starts its own
+// countdown when it lands. These are staff-side tools only — neither notifies
+// the diner.
+
+/** Pull an order's countdown to zero. */
+export async function markOrderReadyNow(orderId: string) {
+  const { error } = await supabase.rpc('mark_order_ready_now', { p_order_id: orderId });
+  if (error) throw error;
+}
+
+/** Nudge one order's deadline by +/- minutes, without changing the
+ *  restaurant's default prep time. */
+export async function adjustOrderTimer(orderId: string, deltaMinutes: number) {
+  const { error } = await supabase.rpc('adjust_order_timer', {
+    p_order_id: orderId, p_delta_minutes: deltaMinutes,
+  });
+  if (error) throw error;
 }

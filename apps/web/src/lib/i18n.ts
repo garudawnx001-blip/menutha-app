@@ -26,6 +26,9 @@ type Dict = Record<string, string>;
 
 const EN: Dict = {
   'menu.search': 'Search dishes',
+  'track.approx': 'About',
+  'track.minutes': 'minutes',
+  'track.anyMoment': 'Should be with you any moment.',
   'bill.scanHereCamera': 'Scan here with your camera',
   'bill.iHavePaid': 'I’ve paid',
   'bill.claimSent': 'Told the counter ✓',
@@ -122,6 +125,9 @@ const EN: Dict = {
 
 const KN: Dict = {
   'menu.search': 'ಖಾದ್ಯ ಹುಡುಕಿ',
+  'track.approx': 'ಸುಮಾರು',
+  'track.minutes': 'ನಿಮಿಷ',
+  'track.anyMoment': 'ಯಾವ ಕ್ಷಣದಲ್ಲಾದರೂ ಬರಲಿದೆ.',
   'bill.scanHereCamera': 'ಇಲ್ಲಿ ಕ್ಯಾಮೆರಾದಿಂದ ಸ್ಕ್ಯಾನ್ ಮಾಡಿ',
   'bill.iHavePaid': 'ನಾನು ಪಾವತಿಸಿದ್ದೇನೆ',
   'bill.claimSent': 'ಕೌಂಟರ್‌ಗೆ ತಿಳಿಸಲಾಗಿದೆ ✓',
@@ -218,6 +224,9 @@ const KN: Dict = {
 
 const HI: Dict = {
   'menu.search': 'व्यंजन खोजें',
+  'track.approx': 'लगभग',
+  'track.minutes': 'मिनट',
+  'track.anyMoment': 'किसी भी क्षण आ जाएगा।',
   'bill.scanHereCamera': 'यहाँ कैमरे से स्कैन करें',
   'bill.iHavePaid': 'मैंने भुगतान कर दिया',
   'bill.claimSent': 'काउंटर को बता दिया ✓',

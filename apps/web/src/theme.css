@@ -1028,3 +1028,22 @@ input.code-input::placeholder { color: var(--text-dim); }
   .printable.fmt-80 hr,
   .printable.fmt-58 hr { border: 0; border-top: 1px dashed #000; }
 }
+
+/* Prep countdown on the order card. A kitchen tool, not a diner promise —
+   nothing about it is shown to the customer. */
+.prep-timer {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  font-size: 13px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: var(--sand);
+  border: 1px solid var(--line-strong);
+  color: var(--text);
+  white-space: nowrap;
+}
+.prep-timer.done {
+  background: color-mix(in srgb, var(--primary) 14%, transparent);
+  border-color: var(--primary);
+  color: var(--primary);
+}

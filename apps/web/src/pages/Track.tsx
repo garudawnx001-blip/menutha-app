@@ -183,9 +183,22 @@ export function Track() {
             Order confirmed
           </h2>
           <p className="muted" style={{ fontSize: 13.5, marginTop: 4 }}>
-            The kitchen has it. Your food will be brought to
+            {t('track.confirmedBody')}
             {o.is_parcel ? ' the counter' : ` ${session?.table.label ?? 'your table'}`}.
           </p>
+          {/* Passive estimate only. Deliberately no alert, push or countdown
+              ticking down to a promise: diners are anonymous with no push
+              channel, and telling someone their food is ready when the kitchen
+              is backed up is worse than saying nothing. A quiet "about N
+              minutes" on a page they already have open is the honest limit. */}
+          {(o as any).ready_at && !done && !cancelled && (() => {
+            const mins = Math.max(0, Math.round((new Date((o as any).ready_at).getTime() - Date.now()) / 60000));
+            return (
+              <p className="dim" style={{ fontSize: 12.5, marginTop: 6 }}>
+                {mins > 0 ? `${t('track.approx')} ${mins} ${t('track.minutes')}` : t('track.anyMoment')}
+              </p>
+            );
+          })()}
 
           <div style={{ marginTop: 14, borderTop: '1px solid var(--line)', paddingTop: 10 }}>
             {(o.items ?? []).map((it, i) => (

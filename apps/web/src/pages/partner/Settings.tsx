@@ -28,6 +28,7 @@ export function Settings() {
     sgst_pct: String((restaurant as any).sgst_pct ?? 2.5),
     cgst_pct: String((restaurant as any).cgst_pct ?? 2.5),
     service_charge_pct: String((restaurant as any).service_charge_pct ?? 0),
+    prep_minutes: String((restaurant as any).prep_minutes ?? 15),
   });
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -55,6 +56,7 @@ export function Settings() {
         sgst_pct: Math.min(14, Math.max(0, Number(form.sgst_pct) || 0)),
         cgst_pct: Math.min(14, Math.max(0, Number(form.cgst_pct) || 0)),
         service_charge_pct: Math.min(25, Math.max(0, Number(form.service_charge_pct) || 0)),
+        prep_minutes: Math.min(180, Math.max(0, Math.round(Number(form.prep_minutes) || 0))),
         ...(can('white_label') || can('basic_theme') ? { brand_color: form.brand_color } : {}),
       });
       await reload();
@@ -178,6 +180,21 @@ export function Settings() {
           appear on the bill. Changes apply to <strong>new orders</strong> — orders already placed
           keep the rates they were priced at, so an existing bill still shows the old charges.
         </p>
+
+        <h3 style={{ fontWeight: 700, marginBottom: 10 }}>Kitchen prep time</h3>
+        <F label="Default prep time (minutes)">
+          <input className="code-input" inputMode="numeric" style={{ maxWidth: 140 }}
+            value={form.prep_minutes}
+            onChange={(e) => setForm({ ...form, prep_minutes: e.target.value })} />
+          <span className="dim" style={{ fontSize: 12 }}>
+            Each new order starts a countdown of this length on the Orders board, so nobody
+            has to press Accept or Ready to move it along. Staff can still press
+            <strong> Ready now</strong> or <strong>+5m</strong> on any single order.
+            {' '}This is a kitchen tool — <strong>customers are not notified</strong>. An order
+            keeps the prep time it was placed with, so changing this never moves an
+            estimate already given.
+          </span>
+        </F>
 
         <h3 style={{ fontWeight: 700, marginBottom: 10 }}>Payments — direct to you</h3>
         <F label="UPI ID (VPA) — diners' payment QR points here">
