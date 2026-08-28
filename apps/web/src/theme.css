@@ -974,8 +974,14 @@ input.code-input::placeholder { color: var(--text-dim); }
    page margins prints a clean document that tears off straight, and
    print-color-adjust keeps the QR and accent bands from being stripped. */
 @page {
-  size: A4;
-  margin: 14mm 12mm;
+  /* `auto`, not A4. The page box then becomes whatever paper the person picked
+     in their own print dialog — A4, Letter, a 100x150 label, an 80mm roll — and
+     every print rule below can read that width in a media query. Hard-coding A4
+     here is what forced a paper dropdown to exist in the first place: the
+     document could not adapt, so the owner had to declare the paper twice and
+     could get it wrong. */
+  size: auto;
+  margin: 8mm;
 }
 @media print {
   html, body {
@@ -1030,34 +1036,33 @@ input.code-input::placeholder { color: var(--text-dim); }
   .portal-nav, .cartbar-wrap, .btn, .chip, .seg, .growth-chart { display: none !important; }
 }
 
-/* ── Bill paper formats ─────────────────────────────────────────────────────
-   Restaurants own whatever printer they own: A4 laser, or an 80mm/58mm
-   thermal roll. The @page size itself is injected at print time (only one can
-   be active per document); these rules retune the typography so a bill is
-   readable rather than merely scaled down. */
-@media print {
-  .printable.fmt-80,
-  .printable.fmt-58 {
-    /* Thermal rolls are monospace-friendly and unforgiving of wide columns. */
+/* ── Bills on whatever roll is loaded ───────────────────────────────────────
+   A restaurant prints on the paper physically in the machine. Asking them to
+   name it first, in our words, before the print dialog asked them again, only
+   created a way to be wrong — so the picker is gone and the bill reads the
+   real page width instead.
+
+   Anything narrower than about 100mm is a thermal roll: monospace, tighter
+   leading, and the logo and pay-QR capped hard because roll length is the
+   scarce resource. Below 65mm is a 58mm roll, which needs another step down. */
+@media print and (max-width: 100mm) {
+  .printable {
     font-family: "Courier New", Courier, monospace !important;
     line-height: 1.35;
+    font-size: 10.5px;
   }
-  .printable.fmt-80 { width: 74mm; font-size: 10.5px; }
-  .printable.fmt-58 { width: 54mm; font-size: 9px; }
+  .printable .bill-logo { max-height: 34px !important; }
+  .printable img[alt=""] { max-width: 34mm; height: auto; }
+  .printable td:first-child { word-break: break-word; padding-right: 4px; }
+  .printable td:last-child { width: 20mm; }
+  .printable hr { border: 0; border-top: 1px dashed #000; }
+}
 
-  /* A logo eats precious roll length; cap it hard on narrow paper. */
-  .printable.fmt-80 .bill-logo { max-height: 34px !important; }
-  .printable.fmt-58 .bill-logo { max-height: 26px !important; }
-
-  /* The pay QR is the one thing worth its space, but not at A4 size. */
-  .printable.fmt-80 img[alt=""] { max-width: 34mm; height: auto; }
-  .printable.fmt-58 img[alt=""] { max-width: 26mm; height: auto; }
-
-  /* Long dish names must wrap rather than push the price column off the roll. */
-  .printable.fmt-80 td:first-child,
-  .printable.fmt-58 td:first-child { word-break: break-word; padding-right: 4px; }
-  .printable.fmt-80 hr,
-  .printable.fmt-58 hr { border: 0; border-top: 1px dashed #000; }
+@media print and (max-width: 65mm) {
+  .printable { font-size: 9px; }
+  .printable .bill-logo { max-height: 26px !important; }
+  .printable img[alt=""] { max-width: 26mm; height: auto; }
+  .printable td:last-child { width: 16mm; }
 }
 
 /* Prep countdown on the order card. A kitchen tool, not a diner promise —
@@ -1101,75 +1106,68 @@ input.code-input::placeholder { color: var(--text-dim); }
    labels was a fixed-pixel PNG being stretched. */
 .qr-svg svg { width: 100%; height: 100%; display: block; }
 
-/* ── QR cards across paper sizes ────────────────────────────────────────────
-   Each size gets a layout, not a scaled-down A4. On a 40mm square there is
-   room for a QR and a table number and nothing else; keeping the wordmark,
-   the tagline and the footer is how the client's 40mm print came out as
-   unreadable specks. What survives at each size is chosen, not accidental. */
+/* ── QR cards on whatever paper is loaded ───────────────────────────────────
+   There is no size picker any more, so this one block has to be right on an
+   A4 sheet, a 100x150 label and a 40mm square alike.
+
+   TWO THINGS WERE WRONG BEFORE.
+
+   First, the sheet was a CSS GRID, and Chrome does not fragment grid
+   containers: `break-inside: avoid` and `break-after: page` on a grid item are
+   silently ignored. Verified locally — twelve cards each carrying
+   `break-after: page` printed as ONE page. So the cards were never being kept
+   whole or placed deliberately; they were sliced wherever the page happened to
+   end, which is exactly the "misaligned across pages" the client photographed.
+   Normal block/inline-block flow fragments correctly, so that is what print
+   uses. The grid stays on screen, where it is fine.
+
+   Second, the layout was chosen by a dropdown rather than by the paper. Now it
+   keys off the real page box: `@page { size: auto }` means the page width IS
+   the printer's paper, and these media queries read it. */
 @media print {
-  /* One card per page, centred, at every size. Fixes the web cards printing
-     mis-aligned across pages the way the app's did. */
+  .qr-sheet { display: block; }
   .qr-sheet .qr-card {
-    break-inside: avoid; page-break-inside: avoid;
-    break-after: page; page-break-after: always;
-    margin: 0 auto;
-  }
-  .qr-sheet .qr-card:last-child { break-after: auto; page-break-after: auto; }
+    /* BLOCK, and one per row. Two-up would fit more on an A4 sheet, but every
+       way of tiling two across — grid, inline-block, float — either ignores
+       fragmentation or handles it badly, and a card sliced in half across a
+       page boundary is the exact defect being fixed. `break-inside: avoid`
+       only applies to block-level boxes, so this is the layout that can
+       actually promise a whole card. Measured: grid and inline-block both
+       ignore break rules entirely; plain blocks honour them.
 
-  /* A4: two across, as before. */
-  .qr-sheet.cf-a4 { grid-template-columns: 1fr 1fr; gap: 16px; }
-  .qr-sheet.cf-a4 .qr-card { break-after: auto; page-break-after: auto; }
-
-  /* Printing ONE table's card is the common case — a new table, a replaced
-     sticker — and in a two-column grid a lone card sat in the left column,
-     which is what "not centred" meant. One card gets the whole width. */
-  .qr-sheet:has(.qr-card:only-child) {
-    grid-template-columns: 1fr;
-    justify-items: center;
+       The cost is paper, and it is worth it — these get cut out and stood on
+       tables, so a clean card matters more than a full sheet. */
+    display: block;
+    width: 88mm;
+    margin: 0 auto 6mm;
+    break-inside: avoid;
+    page-break-inside: avoid;
   }
+}
 
-  /* 100 × 150 portrait: one card filling the label. */
-  .qr-sheet.cf-100 { display: block; }
-  .qr-sheet.cf-100 .qr-card {
-    width: 90mm; min-height: 140mm; padding: 8mm 6mm 6mm;
-    outline-offset: -5px;
+/* Label and roll widths: one card per row, and the marketing copy goes. A
+   100x150 label has room for the house name and the table; a 40mm square has
+   room for the code and the table number and nothing else. What survives at
+   each width is chosen, not scaled. */
+@media print and (max-width: 130mm) {
+  .qr-sheet .qr-card {
+    width: 100%; margin: 0 0 4mm;
+    display: flex; flex-direction: column; align-items: center;
   }
-  .qr-sheet.cf-100 .qr-house { font-size: 15px; }
-  .qr-sheet.cf-100 .qr-table { font-size: 20px; margin: 8px 0 10px; }
-  .qr-sheet.cf-100 .qr-well { padding: 8px; }
-  .qr-sheet.cf-100 .qr-svg { width: 58mm !important; height: 58mm !important; }
+  .qr-sheet .qr-eyebrow, .qr-sheet .qr-steps, .qr-sheet .qr-foot { display: none; }
+  .qr-sheet .qr-svg { width: 55mm !important; height: 55mm !important; }
+}
 
-  /* Square labels: QR-dominant. The code IS the product here — everything
-     that competes with it for space is removed rather than shrunk. */
-  .qr-sheet.cf-50, .qr-sheet.cf-40 { display: block; }
-  .qr-sheet.cf-50 .qr-card, .qr-sheet.cf-40 .qr-card {
-    border: none; outline: none; padding: 0;
-    display: flex; flex-direction: column; align-items: center; justify-content: center;
+@media print and (max-width: 60mm) {
+  .qr-sheet .qr-card {
+    border: none; outline: none; padding: 0; min-height: 0;
+    justify-content: center;
   }
-  .qr-sheet.cf-50 .qr-card::before, .qr-sheet.cf-40 .qr-card::before,
-  .qr-sheet.cf-50 .qr-card::after,  .qr-sheet.cf-40 .qr-card::after { display: none; }
-  /* Decorative corner rules and the marketing copy have no room on a label. */
-  .qr-sheet.cf-50 .qr-eyebrow, .qr-sheet.cf-40 .qr-eyebrow,
-  .qr-sheet.cf-50 .qr-house,   .qr-sheet.cf-40 .qr-house,
-  .qr-sheet.cf-50 .qr-cta,     .qr-sheet.cf-40 .qr-cta,
-  .qr-sheet.cf-50 .qr-steps,   .qr-sheet.cf-40 .qr-steps,
-  .qr-sheet.cf-50 .qr-foot,    .qr-sheet.cf-40 .qr-foot { display: none; }
-  .qr-sheet.cf-50 .qr-card > div:not(:has(.qr-well)),
-  .qr-sheet.cf-40 .qr-card > div:not(:has(.qr-well)) { display: none; }
-
-  .qr-sheet.cf-50 .qr-card { width: 46mm; min-height: 46mm; }
-  .qr-sheet.cf-50 .qr-well { padding: 0; border: none; }
-  .qr-sheet.cf-50 .qr-svg { width: 34mm !important; height: 34mm !important; }
-  .qr-sheet.cf-50 .qr-table {
-    font-size: 11px; margin: 2mm 0 0; padding: 1mm 3mm;
-  }
-
-  .qr-sheet.cf-40 .qr-card { width: 37mm; min-height: 37mm; }
-  .qr-sheet.cf-40 .qr-well { padding: 0; border: none; }
-  .qr-sheet.cf-40 .qr-svg { width: 28mm !important; height: 28mm !important; }
-  .qr-sheet.cf-40 .qr-table {
-    font-size: 9px; margin: 1mm 0 0; padding: 0.5mm 2mm;
-  }
+  .qr-sheet .qr-card::before, .qr-sheet .qr-card::after { display: none; }
+  .qr-sheet .qr-house, .qr-sheet .qr-cta { display: none; }
+  .qr-sheet .qr-well { padding: 0; border: none; }
+  .qr-sheet .qr-svg { width: 30mm !important; height: 30mm !important; }
+  .qr-sheet .qr-table { font-size: 9px; margin: 1mm 0 0; padding: .5mm 2mm; }
 }
 
 /* ── Bill document pass ─────────────────────────────────────────────────────
@@ -1187,7 +1185,6 @@ input.code-input::placeholder { color: var(--text-dim); }
     width: 22mm; text-align: right; white-space: nowrap;
     font-variant-numeric: tabular-nums;
   }
-  .printable.fmt-58 td:last-child { width: 16mm; }
   /* Totals separated by rule, not by guesswork. */
   .printable tr.t td, .printable .bill-row.total {
     border-top: 1px solid #000; padding-top: 5px; font-weight: 700;

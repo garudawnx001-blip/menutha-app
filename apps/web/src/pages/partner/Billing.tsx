@@ -14,17 +14,12 @@ interface BillDraft {
   orders: PortalOrder[];
 }
 
-/** Paper formats a restaurant actually owns. @page accepts only one active
- *  size per document, so the chosen one is written into a dedicated <style>
- *  immediately before printing rather than shipped as three dead rules.
- *  Everything still goes through the browser's own print dialog, so any
- *  installed printer — laser, inkjet or thermal — works unchanged. */
-const PRINT_FORMATS = {
-  a4:   { label: 'A4 sheet',  page: 'size: A4; margin: 12mm;',        cls: 'fmt-a4' },
-  mm80: { label: '80mm roll', page: 'size: 80mm auto; margin: 3mm;',  cls: 'fmt-80' },
-  mm58: { label: '58mm roll', page: 'size: 58mm auto; margin: 2mm;',  cls: 'fmt-58' },
-} as const;
-type PrintFmt = keyof typeof PRINT_FORMATS;
+/* The paper picker is gone. A bill printed on the roll that is physically in
+   the machine is the only correct outcome, and the print dialog already knows
+   which one that is — asking first, in a second vocabulary, only created a way
+   to be wrong. The bill now reflows off the real page width (theme.css), so
+   80mm and 58mm rolls get monospace and narrow columns without anyone
+   choosing. */
 
 
 export function Billing() {
@@ -43,7 +38,6 @@ export function Billing() {
   // so settling is one tap from the notification, not a hunt.
   const [params] = useSearchParams();
   const focusTable = params.get('table');
-  const [fmt, setFmt] = useState<PrintFmt>('a4');
 
   const canDiscount = role === 'owner' || role === 'manager';
 
@@ -156,17 +150,9 @@ export function Billing() {
   };
   useEffect(() => {
     if (!printing) return;
-    const id = 'menutha-print-format';
-    let tag = document.getElementById(id) as HTMLStyleElement | null;
-    if (!tag) {
-      tag = document.createElement('style');
-      tag.id = id;
-      document.head.appendChild(tag);
-    }
-    tag.textContent = `@page { ${PRINT_FORMATS[fmt].page} }`;
     const t = setTimeout(() => { window.print(); setPrinting(false); }, 300);
     return () => clearTimeout(t);
-  }, [printing, fmt]);
+  }, [printing]);
 
   if (orders === null) return <Spinner label="Loading unpaid orders…" />;
 
@@ -282,12 +268,6 @@ export function Billing() {
           <div className="topbar" style={{ padding: 0 }}>
             <strong>Bill #{bill.bill_no}</strong>
             <span style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
-              <select className="code-input" style={{ padding: "6px 8px", fontSize: 12.5, width: "auto" }}
-                value={fmt} onChange={(e) => setFmt(e.target.value as PrintFmt)} aria-label="Paper size">
-                {(Object.keys(PRINT_FORMATS) as PrintFmt[]).map((k) => (
-                  <option key={k} value={k}>{PRINT_FORMATS[k].label}</option>
-                ))}
-              </select>
               <button className="chip" onClick={() => setPrinting(true)}>🖨 Print bill</button>
             </span>
           </div>
@@ -321,7 +301,7 @@ export function Billing() {
       )}
 
       {printing && bill && (
-        <div className={`printable ${PRINT_FORMATS[fmt].cls}`} style={{ fontFamily: 'Helvetica, Arial, sans-serif', fontSize: 13 }}>
+        <div className="printable" style={{ fontFamily: 'Helvetica, Arial, sans-serif', fontSize: 13 }}>
           {/* Branded header. The bill is the one thing a diner takes away, so
               it carries the restaurant's own identity — logo, address, GSTIN,
               phone — not just a name. All editable in Settings. */}
