@@ -198,6 +198,24 @@ export function Bill() {
   // and uncapped, so nothing is hidden for them.
   const capped = acctType !== 'merchant' && payAmount > UPI_P2P_INTENT_CAP;
   // Reconciliation guard shown in split mode — the paisa-exact sum of people.
+  /** Every dish at the table as one list, identical lines merged.
+   *
+   *  Keyed on name AND unit price, so a dish whose price changed mid-service
+   *  stays on its own line rather than being silently averaged into one. */
+  const mergedLines = (() => {
+    const m = new Map<string, { name: string; qty: number; amount: number }>();
+    for (const o of b.orders ?? []) {
+      for (const it of o.items ?? []) {
+        const k = `${it.name}|${it.unit_price}`;
+        const cur = m.get(k);
+        const qty = Number(it.qty || 0);
+        if (cur) { cur.qty += qty; cur.amount += Number(it.unit_price) * qty; }
+        else m.set(k, { name: it.name, qty, amount: Number(it.unit_price) * qty });
+      }
+    }
+    return [...m.values()];
+  })();
+
   const splitSum = b.per_person.reduce((a, p) => a + Number(p.total), 0);
   const reconciles = Math.round(splitSum * 100) === Math.round(Number(b.combined.total) * 100);
 
@@ -242,23 +260,23 @@ export function Bill() {
               <p className="muted" style={{ fontSize: 13.5, margin: '14px 0 8px' }}>
                 {b.combined.order_count} order{b.combined.order_count === 1 ? '' : 's'} · {t('bill.oneBill')}
               </p>
-              {b.orders.map((o) => (
-                <div key={o.order_id} className="glass" style={{ padding: 16, marginTop: 12 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
-                    <strong style={{ fontSize: 15 }}>{o.diner_name || t('common.guest')}</strong>
-                    <span className="muted" style={{ fontSize: 12.5, textTransform: 'capitalize' }}>{o.status}</span>
+              {/* ONE itemised list, not one card per order.
+                  Ordering dish by dish means a table of four now places a
+                  dozen orders, and a card each turned the combined bill into a
+                  dozen boxes a diner had to add up themselves — the opposite
+                  of "one bill". Identical dishes at the same price are merged,
+                  which is what a restaurant bill has always looked like. The
+                  per-person split is untouched: that view answers "what do I
+                  owe", and it needs the attribution this one deliberately
+                  drops. */}
+              <div className="glass" style={{ padding: 16, marginTop: 12 }}>
+                {mergedLines.map((it, i) => (
+                  <div key={i} className="bill-row" style={{ fontSize: 14 }}>
+                    <span>{it.qty} × {it.name}</span>
+                    <span>{inr(it.amount)}</span>
                   </div>
-                  {o.items.map((it, i) => (
-                    <div key={i} className="bill-row" style={{ fontSize: 14 }}>
-                      <span>{it.qty} × {it.name}</span>
-                      <span>{inr(it.unit_price * it.qty)}</span>
-                    </div>
-                  ))}
-                  <div className="bill-row" style={{ marginTop: 4 }}>
-                    <span className="muted">{t('bill.orderTotal')}</span><span>{inr(o.total)}</span>
-                  </div>
-                </div>
-              ))}
+                ))}
+              </div>
               <div className="glass" style={{ padding: 16, marginTop: 16, borderColor: 'var(--primary)' }}>
                 <p className="overline" style={{ marginBottom: 10 }}>{t('bill.tableTotal')}</p>
                 <TotalsBlock b={b.combined} sgstPct={b.sgst_pct} cgstPct={b.cgst_pct} />
