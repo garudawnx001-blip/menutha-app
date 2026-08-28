@@ -965,6 +965,19 @@ input.code-input::placeholder { color: var(--text-dim); }
     margin: 0 !important;
     padding: 0 !important;
   }
+  /* COLLAPSE, don't just hide.
+     This used visibility:hidden alone, and a hidden element still occupies its
+     full box. So the portal sidebar, the page heading and the format chips all
+     reserved a page's worth of empty space above the card — which is exactly
+     the reported "page 1 blank, card on page 2" when printing a table QR.
+     Anything that neither IS the printable region nor CONTAINS it now takes no
+     space at all; ancestors on the path to it stay in flow so the region
+     paginates normally across multiple cards. */
+  .portal-nav { display: none !important; }
+  .portal-main *:not(:has(.printable)):not(.printable):not(.printable *) {
+    display: none !important;
+  }
+
   body * { visibility: hidden; }
   .printable, .printable * { visibility: visible; }
   .printable {
@@ -1091,6 +1104,14 @@ input.code-input::placeholder { color: var(--text-dim); }
   /* A4: two across, as before. */
   .qr-sheet.cf-a4 { grid-template-columns: 1fr 1fr; gap: 16px; }
   .qr-sheet.cf-a4 .qr-card { break-after: auto; page-break-after: auto; }
+
+  /* Printing ONE table's card is the common case — a new table, a replaced
+     sticker — and in a two-column grid a lone card sat in the left column,
+     which is what "not centred" meant. One card gets the whole width. */
+  .qr-sheet:has(.qr-card:only-child) {
+    grid-template-columns: 1fr;
+    justify-items: center;
+  }
 
   /* 100 × 150 portrait: one card filling the label. */
   .qr-sheet.cf-100 { display: block; }
