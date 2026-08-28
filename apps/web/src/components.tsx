@@ -319,22 +319,3 @@ export function LanguagePicker() {
   );
 }
 
-/** Live countdown to the moment an order reaches the kitchen.
- *
- *  Ticks locally rather than polling: the deadline is a fixed timestamp from
- *  the server, so the only thing that needs to change every second is the
- *  rendering of it. Once it passes, the order is with the kitchen and the
- *  wording says so plainly — no diner should be left guessing whether their
- *  food is being cooked. */
-export function SendingIn({ until, label = 'Sending in', sentLabel = 'With the kitchen' }:
-  { until: string; label?: string; sentLabel?: string }) {
-  const left = () => Math.max(0, Math.ceil((new Date(until).getTime() - Date.now()) / 1000));
-  const [secs, setSecs] = React.useState(left);
-  React.useEffect(() => {
-    setSecs(left());
-    const id = setInterval(() => setSecs(left()), 1000);
-    return () => clearInterval(id);
-  }, [until]);
-  if (secs <= 0) return <>{sentLabel}</>;
-  return <>{label} {secs}s</>;
-}

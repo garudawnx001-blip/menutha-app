@@ -11,7 +11,7 @@ import {
 import type { CartLine, MenuItem } from '../lib/types';
 import { inr } from '../lib/types';
 import { useStore } from '../store';
-import { IdentityGate, ItemSheet, LanguagePicker, SendingIn, Spinner, Stepper, VegMark, Wordmark } from '../components';
+import { IdentityGate, ItemSheet, LanguagePicker, Spinner, Stepper, VegMark, Wordmark } from '../components';
 import { useT, useLang, translateCategory, translateTableLabel } from '../lib/i18n';
 import { dishName } from '../lib/translit';
 import { TableSoFar } from './TableSoFar';
@@ -416,9 +416,16 @@ export function Menu() {
         />
       )}
 
-      {/* Not a cart — these orders are already placed. The bar exists so the
-          diner can see the window closing and reach the undo controls before
-          the kitchen gets them. */}
+      {/* Not a cart — these orders are already placed. The bar is a way back to
+          them, nothing more.
+
+          It used to count down the grace window ("Sending in 59s"), which told
+          the diner about a mechanism that exists for the restaurant's benefit,
+          not theirs. From the table, an order is placed the moment you tap; the
+          delay before the kitchen sees it is the restaurant's own buffer. A
+          visible timer turned that into a deadline the diner had to watch. The
+          window still works exactly as before — the undo controls are still
+          here — it simply is not narrated. */}
       {pending.length > 0 && !session.orderingDisabled && (
         <div className="cartbar-wrap">
           <button className="cartbar pending-bar" onClick={() => nav('/bill')}>
@@ -426,7 +433,7 @@ export function Menu() {
               {pending.length} order{pending.length > 1 ? 's' : ''} · {inr(pendingTotal)}
             </span>
             <span style={{ color: 'var(--accent)', fontWeight: 700 }}>
-              <SendingIn until={pending[0].released_at} label={t('menu.sendingIn')} sentLabel={t('menu.withKitchen')} /> →
+              {t('menu.bill')} →
             </span>
           </button>
         </div>

@@ -191,10 +191,16 @@ export async function placeOrder(
     }
     throw error;
   }
-  // The notification's contents are built server-side from the order row, so
-  // the client only has to name the order. That also keeps what the kitchen
-  // sees identical no matter which client placed it.
-  notifyStaff((data as { id: string }).id).catch(() => {});
+  // NO push from here. This used to call notify-staff the instant the row was
+  // inserted, which defeated the grace window entirely: the client photographed
+  // "New order · Table 1 · #36" arriving on the staff phone while their own
+  // screen still showed the order as pending. Staff were being sent to the
+  // kitchen for an order the diner could still cancel.
+  //
+  // The release sweep is the notifier, and it already does this correctly —
+  // `where released_at <= now() and release_notified = false`, so it fires once
+  // and only after the window closes. This call was a second, earlier path to
+  // the same push. Deleting it is the whole fix.
   return data as { id: string };
 }
 
@@ -303,27 +309,6 @@ export async function startGatewayCheckout(orderId: string, demo?: boolean): Pro
   });
 }
 
-/** Ask the backend to push "new order" to staff devices.
- *
- *  This used to POST to https://exp.host straight from the diner's browser,
- *  which can never work: exp.host answers the CORS preflight 200 but sends no
- *  Access-Control-Allow-Origin, so the browser blocks the request before it
- *  leaves the page. Verified live from https://menutha.com — "Failed to fetch".
- *  Every diner order comes from the web, so no staff push was ever delivered.
- *
- *  The notify-staff Edge Function does the send server-side, where CORS does
- *  not apply. Still fire-and-forget: the partner board's realtime subscription
- *  is the primary signal and does not depend on this. */
-async function notifyStaff(orderId: string) {
-  const { data, error } = await supabase.functions.invoke('notify-staff', {
-    body: { orderId },
-  });
-  if (error) throw error;
-  // Surfaced for debugging only — a push failure must never block ordering.
-  if (import.meta.env.DEV && (data as any)?.errors?.length) {
-    console.warn('[notify-staff]', (data as any).errors);
-  }
-}
 
 /** The diner tells the counter they have paid the table's bill.
  *

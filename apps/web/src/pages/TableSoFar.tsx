@@ -12,7 +12,6 @@ import { fetchMyBill, fetchMyOpenOrders, cancelMyOrder, type OpenOrder } from '.
 import type { Session } from '../lib/types';
 import { inr } from '../lib/types';
 import { useT } from '../lib/i18n';
-import { SendingIn } from '../components';
 
 interface Row { total: number; items: string }
 
@@ -81,12 +80,11 @@ export function TableSoFar({ session }: { session: Session }) {
           {editable.map((o) => (
             <div key={o.id} className="tsf-pending-row">
               <span style={{ minWidth: 0 }}>
+                {/* A plain state, not a countdown. Cancel stays available for
+                    as long as the order is editable — the button disappearing
+                    is the only signal the diner needs that the moment passed. */}
                 <span className="overline" style={{ color: 'var(--accent)' }}>
-                  <SendingIn
-                    until={o.released_at}
-                    label={t('menu.sendingIn')}
-                    sentLabel={t('menu.withKitchen')}
-                  />
+                  {t('menu.placed')}
                 </span>
                 <span className="tsf-items">
                   {(o.items ?? []).map((i) => `${i.qty}× ${i.name}`).join(', ')}
