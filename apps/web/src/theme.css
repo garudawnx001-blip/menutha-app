@@ -1218,3 +1218,32 @@ input.code-input::placeholder { color: var(--text-dim); }
    so it counts down rather than inviting a checkout. */
 .cartbar.pending-bar { border-color: var(--accent); }
 .cartbar.pending-bar span:last-child { font-variant-numeric: tabular-nums; }
+
+/* ── Desktop widths ────────────────────────────────────────────────────────
+   The layout stopped adapting at 900px, so 1280, 1440 and 1920 all rendered
+   exactly like a 900px window: 860px of content stranded in the middle with
+   55% of a 1920 screen empty. A restaurant runs the portal on the counter PC
+   all day — that is the primary surface, not an afterthought.
+
+   The diner menu stays deliberately narrow: it is read on a phone, and a
+   dish list stretched across a 1920 monitor is worse, not better. What widens
+   is the PORTAL, where density is the point — more tickets visible at once
+   means fewer missed on the pass. */
+
+@media (min-width: 1200px) {
+  .portal-main { max-width: 1180px; }
+  /* Tickets: a third column once there is genuinely room. Scoped to the
+     portal — .menu-grid is shared with the diner's dish grid, which stays
+     inside the narrow readable page and would only get cramped. */
+  .portal-main .menu-grid { grid-template-columns: repeat(3, 1fr); }
+}
+
+@media (min-width: 1500px) {
+  .portal-main { max-width: 1420px; }
+  .portal-main .menu-grid { grid-template-columns: repeat(4, 1fr); }
+}
+
+@media (min-width: 1800px) {
+  .portal-main { max-width: 1600px; }
+}
+
