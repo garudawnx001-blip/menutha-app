@@ -1,23 +1,20 @@
-/** "Your table so far" — everything already ordered at this table, shown while
- *  the diner is still browsing.
+/** "Already ordered" — this diner's own orders at this table.
  *
- *  Before this, prior orders were only visible by leaving the menu and opening
- *  the table bill, so people at a shared table re-ordered dishes that were
- *  already on their way. Putting it on the menu itself is the fix: it is the
- *  screen they are actually looking at.
+ *  Exists to stop the SAME person ordering the same dish twice, which needs
+ *  their own history and nothing else. It used to list every diner at the
+ *  table by name and total; that is now neither shown nor fetched.
  *
  *  Collapsed to a one-line summary by default so it never competes with the
- *  menu, and expands to the full itemisation on tap. Polls in step with the
- *  bill so a companion's order shows up without a refresh. */
+ *  menu, and expands on tap. Polls in step with the bill. */
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { fetchTableBill, fetchMyOpenOrders, cancelMyOrder, type OpenOrder } from '../lib/api';
+import { fetchMyBill, fetchMyOpenOrders, cancelMyOrder, type OpenOrder } from '../lib/api';
 import type { Session } from '../lib/types';
 import { inr } from '../lib/types';
 import { useT } from '../lib/i18n';
 import { SendingIn } from '../components';
 
-interface Row { who: string; total: number; items: string; mine: boolean }
+interface Row { total: number; items: string }
 
 export function TableSoFar({ session }: { session: Session }) {
   const nav = useNavigate();
@@ -53,19 +50,19 @@ export function TableSoFar({ session }: { session: Session }) {
     if (session.table.is_parcel || session.demo) return;
     let alive = true;
     const load = () =>
-      fetchTableBill(session)
+      fetchMyBill(session)
         .then((b) => {
           if (!alive) return;
-          const myPhone = (session.guest?.phone ?? '').trim();
+          // MY orders only. This strip exists to stop the same person ordering
+          // the same dish twice, which needs their own history and nothing
+          // else - it used to list every diner at the table by name.
           setRows(
             (b.orders ?? []).map((o) => ({
-              who: o.diner_name || 'Guest',
               total: Number(o.total || 0),
               items: (o.items ?? []).map((i) => `${i.qty}× ${i.name}`).join(', '),
-              mine: !!myPhone && (o.diner_phone ?? '') === myPhone,
             })),
           );
-          setTotal(Number(b.combined?.total ?? 0));
+          setTotal(Number(b.mine?.total ?? 0));
         })
         .catch(() => {});
     load();
@@ -127,10 +124,10 @@ export function TableSoFar({ session }: { session: Session }) {
         <div className="tsf-body">
           {rows.map((r, i) => (
             <div key={i} className="tsf-row">
+              {/* No name on the row any more — every row here is this diner's
+                  own, so labelling whose it is was only ever meaningful when
+                  the strip listed the whole table. */}
               <span style={{ minWidth: 0 }}>
-                <strong style={{ fontSize: 13.5 }}>
-                  {r.who || t('common.guest')}{r.mine ? ' (you)' : ''}
-                </strong>
                 <span className="tsf-items">{r.items}</span>
               </span>
               <span style={{ fontWeight: 700, fontSize: 13.5, whiteSpace: 'nowrap' }}>{inr(r.total)}</span>

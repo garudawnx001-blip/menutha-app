@@ -385,3 +385,49 @@ export async function cancelMyOrder(orderId: string) {
   const { error } = await supabase.rpc('diner_cancel_order', { p_order_id: orderId });
   if (error) throw error;
 }
+
+// ── The diner's own bill ───────────────────────────────────────────────────
+
+export interface MyBillTotals {
+  subtotal: number; packing_charge: number; service_charge?: number;
+  sgst_amount?: number; cgst_amount?: number; gst_amount: number;
+  total: number; order_count: number;
+}
+export interface MyBill {
+  table_id: string;
+  sgst_pct?: number | null;
+  cgst_pct?: number | null;
+  orders: { order_id: string; placed_at: string; status: string; total: number;
+            items: { name: string; qty: number; unit_price: number; is_veg?: boolean }[] }[];
+  mine: MyBillTotals;
+}
+
+/** Only this diner's unsettled orders at this table.
+ *
+ *  Replaces fetchTableBill on the diner's screen. Scoping happens in the
+ *  database, not here: filtering a full-table payload in the client would
+ *  still have put every other diner's name, phone and total on a stranger's
+ *  device, and would still have shown a previous party's uncleared food to
+ *  whoever scanned the table next. */
+export async function fetchMyBill(session: Session): Promise<MyBill> {
+  if (session.demo) {
+    const o = demoOrderStatus();
+    const mine = o
+      ? { subtotal: o.subtotal, packing_charge: o.packing_charge, service_charge: 0,
+          sgst_amount: 0, cgst_amount: 0, gst_amount: o.gst_amount, total: o.total, order_count: 1 }
+      : { subtotal: 0, packing_charge: 0, service_charge: 0, sgst_amount: 0, cgst_amount: 0,
+          gst_amount: 0, total: 0, order_count: 0 };
+    return {
+      table_id: session.table.id,
+      orders: o ? [{ order_id: o.id, placed_at: new Date().toISOString(), status: o.status,
+                     total: o.total, items: o.items as any }] : [],
+      mine,
+    };
+  }
+  const { data, error } = await supabase.rpc('my_table_bill', {
+    p_table_id: session.table.id,
+    p_phone: session.guest?.phone ?? '',
+  });
+  if (error) throw error;
+  return data as MyBill;
+}

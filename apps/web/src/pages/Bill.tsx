@@ -1,15 +1,19 @@
-/** Table bill — the whole table's live bill from get_table_bill. DEFAULT view
- *  is the combined table total (one bill for everyone); a toggle switches to the
- *  per-person split. The combined total always equals the sum of the per-person
- *  totals to the paisa (place_order rounds once per order), so both views
- *  reconcile exactly. Polls every 6s so orders placed by others at the table
- *  appear live. */
+/** The diner's own bill.
+ *
+ *  Shows only what THIS person ordered, plus the QR to pay it. Scoping is done
+ *  in the database (my_table_bill), not here: filtering a whole-table payload
+ *  in the client would still have put every other diner's name, phone and
+ *  total onto a stranger's device, and would still have shown a previous
+ *  party's uncleared food to whoever scanned the table next.
+ *
+ *  No "I've paid" button: a static UPI QR has no webhook, so that was always
+ *  the diner's word rather than a confirmation, and the counter verifies in
+ *  its own UPI app regardless. Polls every 6s. */
 import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import QRCode from 'qrcode';
-import { fetchTableBill, claimTablePaid } from '../lib/api';
+import { fetchMyBill, type MyBill } from '../lib/api';
 import { supabase } from '../lib/supabase';
-import type { TableBill } from '../lib/types';
 import { inr } from '../lib/types';
 import { useStore } from '../store';
 import { Spinner, Wordmark } from '../components';
@@ -59,20 +63,13 @@ export function Bill() {
   const nav = useNavigate();
   const { session } = useStore();
   const t = useT();
-  const [bill, setBill] = useState<TableBill | null>(null);
+  const [bill, setBill] = useState<MyBill | null>(null);
   const [failed, setFailed] = useState(false);
-  const [mode, setMode] = useState<'combined' | 'split'>('combined');
   const [vpa, setVpa] = useState<string | null>(null);
   // 'personal' VPAs are capped for one-tap; 'merchant' are not. Set in Settings.
   const [acctType, setAcctType] = useState<'personal' | 'merchant' | string>('personal');
   const [payQr, setPayQr] = useState('');
   const [copied, setCopied] = useState<'vpa' | 'amt' | ''>('');
-  const [claiming, setClaiming] = useState(false);
-  const [claimed, setClaimed] = useState(false);
-  // True from the moment the diner leaves for their UPI app until they answer
-  // the prompt on return. Nothing is claimed without an explicit yes.
-  const [awaitingReturn, setAwaitingReturn] = useState(false);
-  const [askPaid, setAskPaid] = useState(false);
   const timer = useRef<ReturnType<typeof setInterval>>();
 
   // The restaurant's UPI ID isn't part of the cached scan session, so read it
@@ -101,7 +98,7 @@ export function Bill() {
     }
     let alive = true;
     const load = () =>
-      fetchTableBill(session)
+      fetchMyBill(session)
         .then((b) => alive && (setBill(b), setFailed(false)))
         .catch(() => alive && setFailed(true));
     load();
@@ -114,11 +111,7 @@ export function Bill() {
 
   // Render the QR whenever the payable amount or VPA changes.
   useEffect(() => {
-    const amt = bill
-      ? (mode === 'split'
-          ? Number(bill.per_person.find((p) => (p.diner_phone ?? '') === (session?.guest?.phone ?? '').trim())?.total ?? bill.combined.total)
-          : Number(bill.combined.total))
-      : 0;
+    const amt = bill ? Number(bill.mine.total) : 0;
     if (!vpa || !(amt > 0) || !session) { setPayQr(''); return; }
     const p = new URLSearchParams({
       pa: vpa.trim(), pn: (session.restaurant.name || 'Restaurant').slice(0, 60),
@@ -127,47 +120,7 @@ export function Bill() {
     QRCode.toDataURL('upi://pay?' + p.toString(), {
       margin: 1, width: 380, color: { dark: '#1C1A15', light: '#FFFDF8' },
     }).then(setPayQr).catch(() => setPayQr(''));
-  }, [vpa, bill, mode, session?.guest?.phone]);
-
-  /** Ask once, on the way back from the UPI app.
-   *
-   *  The diner has no reason to hunt for an "I've paid" button — they think
-   *  they're finished. Catching the moment the tab regains focus is the only
-   *  point where the question is natural. Deliberately a PROMPT, never an
-   *  automatic claim: returning to the tab is not evidence a payment
-   *  succeeded, and a false "paid" on the counter's screen is worse than no
-   *  signal at all. */
-  useEffect(() => {
-    if (!awaitingReturn || claimed) return;
-    const onBack = () => {
-      if (document.visibilityState === 'visible') {
-        setAwaitingReturn(false);
-        setAskPaid(true);
-      }
-    };
-    document.addEventListener('visibilitychange', onBack);
-    window.addEventListener('focus', onBack);
-    return () => {
-      document.removeEventListener('visibilitychange', onBack);
-      window.removeEventListener('focus', onBack);
-    };
-  }, [awaitingReturn, claimed]);
-
-  /** Record the claim and let staff know. Never blocks the diner — they have
-   *  already paid in their own app, so a failure here is ours to absorb. */
-  const sendClaim = async () => {
-    if (claiming || claimed) return;
-    setClaiming(true);
-    try {
-      await claimTablePaid(session!, payAmount);
-    } catch {
-      /* swallowed on purpose — see above */
-    } finally {
-      setClaimed(true);
-      setClaiming(false);
-      setAskPaid(false);
-    }
-  };
+  }, [vpa, bill, session?.guest?.phone]);
 
   if (!session) return null;
   if (!bill && !failed) return <Spinner label={t('bill.loading')} />;
@@ -188,16 +141,13 @@ export function Bill() {
   const b = bill!;
   const empty = !b.orders.length;
 
-  // Amount the diner is looking at: the whole table, or their own share in split.
-  const myPhone = (session.guest?.phone ?? '').trim();
-  const mine = b.per_person.find((p) => (p.diner_phone ?? '') === myPhone);
-  const payAmount = mode === 'split' && mine ? Number(mine.total) : Number(b.combined.total);
-  const payLabel = mode === 'split' && mine ? t('bill.yourShare') : t('bill.theTableTotal');
+  // There is one amount now: what this diner owes for their own order.
+  const payAmount = Number(b.mine.total);
+  const payLabel = t('bill.yourTotal');
   const payUri = buildPayUri(payAmount);
   // One-tap is refused above the cap on a personal VPA; a merchant VPA is P2M
   // and uncapped, so nothing is hidden for them.
   const capped = acctType !== 'merchant' && payAmount > UPI_P2P_INTENT_CAP;
-  // Reconciliation guard shown in split mode — the paisa-exact sum of people.
   /** Every dish at the table as one list, identical lines merged.
    *
    *  Keyed on name AND unit price, so a dish whose price changed mid-service
@@ -215,9 +165,6 @@ export function Bill() {
     }
     return [...m.values()];
   })();
-
-  const splitSum = b.per_person.reduce((a, p) => a + Number(p.total), 0);
-  const reconciles = Math.round(splitSum * 100) === Math.round(Number(b.combined.total) * 100);
 
   return (
     <div className="page fade-in">
@@ -238,75 +185,30 @@ export function Bill() {
         </div>
       ) : (
         <>
-          <div className="seg" role="tablist" aria-label={t('bill.view')} style={{ marginTop: 16 }}>
-            <button
-              role="tab" aria-selected={mode === 'combined'}
-              className={mode === 'combined' ? 'seg-btn active' : 'seg-btn'}
-              onClick={() => setMode('combined')}
-            >
-              {t('bill.whole')}
-            </button>
-            <button
-              role="tab" aria-selected={mode === 'split'}
-              className={mode === 'split' ? 'seg-btn active' : 'seg-btn'}
-              onClick={() => setMode('split')}
-            >
-              {t('bill.split')}
-            </button>
+          {/* ONE person's bill: the reader's.
+              There was a whole/split toggle here and, under it, every other
+              diner's name and total. A stranger at a shared table could read
+              what everyone else had eaten and what they owed. The payload no
+              longer even contains other people - my_table_bill scopes to the
+              caller's own phone - so there is nothing to toggle between. */}
+          <p className="muted" style={{ fontSize: 13.5, margin: '16px 0 8px' }}>
+            {b.mine.order_count} order{b.mine.order_count === 1 ? '' : 's'} · {t('bill.yoursOnly')}
+          </p>
+
+          <div className="glass" style={{ padding: 16, marginTop: 12 }}>
+            <p className="overline" style={{ marginBottom: 10 }}>{t('bill.whatYouOrdered')}</p>
+            {mergedLines.map((it, i) => (
+              <div key={i} className="bill-row" style={{ fontSize: 14 }}>
+                <span>{it.qty} × {it.name}</span>
+                <span>{inr(it.amount)}</span>
+              </div>
+            ))}
           </div>
 
-          {mode === 'combined' ? (
-            <>
-              <p className="muted" style={{ fontSize: 13.5, margin: '14px 0 8px' }}>
-                {b.combined.order_count} order{b.combined.order_count === 1 ? '' : 's'} · {t('bill.oneBill')}
-              </p>
-              {/* ONE itemised list, not one card per order.
-                  Ordering dish by dish means a table of four now places a
-                  dozen orders, and a card each turned the combined bill into a
-                  dozen boxes a diner had to add up themselves — the opposite
-                  of "one bill". Identical dishes at the same price are merged,
-                  which is what a restaurant bill has always looked like. The
-                  per-person split is untouched: that view answers "what do I
-                  owe", and it needs the attribution this one deliberately
-                  drops. */}
-              <div className="glass" style={{ padding: 16, marginTop: 12 }}>
-                <p className="overline" style={{ marginBottom: 10 }}>{t('bill.whatYouOrdered')}</p>
-                {mergedLines.map((it, i) => (
-                  <div key={i} className="bill-row" style={{ fontSize: 14 }}>
-                    <span>{it.qty} × {it.name}</span>
-                    <span>{inr(it.amount)}</span>
-                  </div>
-                ))}
-              </div>
-              <div className="glass" style={{ padding: 16, marginTop: 16, borderColor: 'var(--primary)' }}>
-                <p className="overline" style={{ marginBottom: 10 }}>{t('bill.tableTotal')}</p>
-                <TotalsBlock b={b.combined} sgstPct={b.sgst_pct} cgstPct={b.cgst_pct} />
-              </div>
-            </>
-          ) : (
-            <>
-              <p className="muted" style={{ fontSize: 13.5, margin: '14px 0 8px' }}>
-                {t('bill.splitNote')}
-              </p>
-              {b.per_person.map((p, i) => (
-                <div key={i} className="glass" style={{ padding: 16, marginTop: 12 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
-                    <strong style={{ fontSize: 15 }}>{p.diner_name || t('common.guest')}</strong>
-                    <span className="muted" style={{ fontSize: 12.5 }}>
-                      {p.order_count} order{p.order_count === 1 ? '' : 's'}
-                    </span>
-                  </div>
-                  <div style={{ marginTop: 6 }}><TotalsBlock b={p} sgstPct={b.sgst_pct} cgstPct={b.cgst_pct} /></div>
-                </div>
-              ))}
-              <div className="glass" style={{ padding: 16, marginTop: 16, borderColor: 'var(--primary)' }}>
-                <div className="bill-row total">
-                  <span>{t(reconciles ? 'bill.addsUp' : 'bill.tableTotal')}</span>
-                  <span>{inr(b.combined.total)}</span>
-                </div>
-              </div>
-            </>
-          )}
+          <div className="glass" style={{ padding: 16, marginTop: 16, borderColor: 'var(--primary)' }}>
+            <p className="overline" style={{ marginBottom: 10 }}>{t('bill.yourTotal')}</p>
+            <TotalsBlock b={b.mine} sgstPct={b.sgst_pct} cgstPct={b.cgst_pct} />
+          </div>
 
           {/* Pay panel.
            *
@@ -376,12 +278,6 @@ export function Bill() {
                   className="btn btn-ghost btn-block"
                   style={{ marginTop: 12 }}
                   href={payUri}
-                  onClick={() => {
-                    // Leaving for the UPI app. Arm the return prompt so the
-                    // diner is asked once, on the way back, instead of having
-                    // to hunt for a button they have no reason to look for.
-                    setAwaitingReturn(true);
-                  }}
                 >
                   {t('bill.openUpiApp')}
                 </a>
@@ -389,24 +285,6 @@ export function Bill() {
               <p className="dim" style={{ fontSize: 11.5, textAlign: 'center', marginTop: 6 }}>
                 {capped ? t('bill.capNote') : acctType === 'merchant' ? '' : t('bill.intentNote')}
               </p>
-
-              {/* Diner tells the counter they've paid. This is a CLAIM, not a
-                  settlement: static UPI QRs have no webhook, so nothing can
-                  confirm receipt automatically until a payment gateway is
-                  wired. Staff still verify in their own UPI app and settle. */}
-              <button
-                className="btn btn-primary btn-block"
-                style={{ marginTop: 10 }}
-                disabled={claiming || claimed}
-                onClick={sendClaim}
-              >
-                {claimed ? t('bill.claimSent') : claiming ? '…' : t('bill.iHavePaid')}
-              </button>
-              {claimed && (
-                <p className="dim" style={{ fontSize: 11.5, textAlign: 'center', marginTop: 6 }}>
-                  {t('bill.claimNote')}
-                </p>
-              )}
             </div>
           ) : null}
 
@@ -422,28 +300,6 @@ export function Bill() {
         </>
       )}
 
-      {/* Asked once, on return from the UPI app. A prompt rather than an
-          automatic claim: coming back to the tab does not prove a payment
-          went through, and a false "paid" on the counter's screen is worse
-          than no signal at all. */}
-      {askPaid && !claimed && (
-        <div className="modal-scrim" onClick={() => setAskPaid(false)}>
-          <div className="sheet" onClick={(e) => e.stopPropagation()}>
-            <h2 className="display" style={{ fontSize: 22, marginBottom: 6 }}>
-              {t('bill.didYouPay')} {inr(payAmount)}?
-            </h2>
-            <p className="muted" style={{ fontSize: 13.5 }}>{t('bill.didYouPayBody')}</p>
-            <button className="btn btn-primary btn-block" style={{ marginTop: 14 }}
-              disabled={claiming} onClick={sendClaim}>
-              {claiming ? '…' : t('bill.yesPaid')}
-            </button>
-            <button className="btn btn-ghost btn-block" style={{ marginTop: 8 }}
-              onClick={() => setAskPaid(false)}>
-              {t('bill.notYet')}
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
