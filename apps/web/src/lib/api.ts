@@ -347,3 +347,41 @@ export async function claimTablePaid(session: Session, amount: number) {
     },
   }).catch(() => undefined);
 }
+
+// ── Orders the diner may still change (grace window) ───────────────────────
+
+export interface OpenOrderItem {
+  id: string; menu_item_id: string | null; name: string; qty: number; unit_price: number;
+}
+export interface OpenOrder {
+  id: string; order_no: number; placed_at: string; released_at: string;
+  total: number; status: string; editable: boolean; items: OpenOrderItem[];
+}
+
+/** Every order of mine at this table that is still inside its grace window, or
+ *  released so recently the diner is probably still looking at it. Drives both
+ *  the per-dish stepper on the menu and the countdown strip. */
+export async function fetchMyOpenOrders(session: Session): Promise<OpenOrder[]> {
+  if (session.demo || !session.table?.id) return [];
+  const { data, error } = await supabase.rpc('my_open_orders', {
+    p_table_id: session.table.id,
+    p_phone: session.guest?.phone ?? '',
+  });
+  if (error) throw error;
+  return (data ?? []) as OpenOrder[];
+}
+
+/** Change a quantity before the order reaches the kitchen. qty 0 removes the
+ *  line; removing the last line cancels the order. The window is enforced
+ *  server-side, so a stale page cannot edit something already being cooked. */
+export async function updateMyOrderItem(orderId: string, itemId: string, qty: number) {
+  const { error } = await supabase.rpc('diner_update_order_item', {
+    p_order_id: orderId, p_order_item_id: itemId, p_qty: qty,
+  });
+  if (error) throw error;
+}
+
+export async function cancelMyOrder(orderId: string) {
+  const { error } = await supabase.rpc('diner_cancel_order', { p_order_id: orderId });
+  if (error) throw error;
+}

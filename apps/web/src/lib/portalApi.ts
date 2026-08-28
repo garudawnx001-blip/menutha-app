@@ -58,7 +58,8 @@ export interface PortalOrder {
   guest_name?: string | null;
   guest_phone?: string | null;
   ready_at?: string | null;
-  items: { name: string; qty: number; unit_price: number; is_veg?: boolean }[];
+  released_at?: string | null;
+  items: { id: string; name: string; qty: number; unit_price: number; is_veg?: boolean }[];
   paid?: boolean;
   /** Diner-initiated payment awaiting one-tap staff confirmation. */
   pendingPayment?: { id: string; provider: string } | null;
@@ -67,9 +68,14 @@ export interface PortalOrder {
 export async function fetchLiveOrders(restaurantId: string, statuses: string[]): Promise<PortalOrder[]> {
   const { data, error } = await supabase
     .from('food_order')
-    .select('id, order_no, status, is_parcel, subtotal, packing_charge, gst_amount, total, notes, placed_at, ready_at, guest_name, guest_phone, dining_table(label), order_item(name, qty, unit_price, is_veg), payment(id, status, provider)')
+    .select('id, order_no, status, is_parcel, subtotal, packing_charge, gst_amount, total, notes, placed_at, ready_at, released_at, guest_name, guest_phone, dining_table(label), order_item(id, name, qty, unit_price, is_veg), payment(id, status, provider)')
     .eq('restaurant_id', restaurantId)
     .in('status', statuses)
+    // The grace window is a query predicate, not a job: an order becomes
+    // visible to staff the moment its release time passes, with nothing
+    // scheduled. Orders still inside their window have not reached the
+    // restaurant yet and must not appear on the board.
+    .lte('released_at', new Date().toISOString())
     .order('placed_at', { ascending: true });
   if (error) throw error;
   return (data ?? []).map((row: any) => ({
@@ -480,4 +486,24 @@ export async function reorderDishes(ids: string[]) {
   await Promise.all(
     ids.map((id, i) => supabase.from('menu_item').update({ sort_order: i }).eq('id', id)),
   );
+}
+
+// ── Staff order edits — owner and manager only ─────────────────────────────
+// Customers change their mind after the grace window, or walk out. Staff can
+// fix an order at any time, but the role check lives in the database, not
+// here: a waiter must not be able to quietly remove items from a bill, and a
+// hidden button is not a permission.
+
+/** Change a quantity on a live order. qty 0 removes the line; removing the
+ *  last line cancels the order. Re-totals server-side. */
+export async function staffUpdateOrderItem(orderId: string, itemId: string, qty: number) {
+  const { error } = await supabase.rpc('staff_update_order_item', {
+    p_order_id: orderId, p_order_item_id: itemId, p_qty: qty,
+  });
+  if (error) throw error;
+}
+
+export async function staffCancelOrder(orderId: string) {
+  const { error } = await supabase.rpc('staff_cancel_order', { p_order_id: orderId });
+  if (error) throw error;
 }

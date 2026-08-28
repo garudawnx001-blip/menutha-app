@@ -1192,3 +1192,29 @@ input.code-input::placeholder { color: var(--text-dim); }
    phone — on a phone it keeps the full-width sheet behaviour. */
 .sheet-wide { max-width: 620px; }
 @media (max-width: 640px) { .sheet-wide { max-width: none; } }
+
+/* ── Grace window: orders placed but not yet with the kitchen ──────────── */
+
+/* Sits above the table summary because it is the only part a diner can still
+   act on. Accent-edged so it reads as live, not as history. */
+.tsf-pending {
+  border-bottom: 1px solid var(--hairline, rgba(0,0,0,0.08));
+  padding: 4px 0 8px;
+  margin-bottom: 4px;
+}
+.tsf-pending-row {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 10px; padding: 7px 0;
+}
+.tsf-pending-row > span:first-child {
+  display: flex; flex-direction: column; gap: 2px; min-width: 0;
+}
+.tsf-pending-row .tsf-items {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.tsf-pending-row button { flex: 0 0 auto; }
+
+/* The bottom bar is no longer a cart — the orders in it are already placed —
+   so it counts down rather than inviting a checkout. */
+.cartbar.pending-bar { border-color: var(--accent); }
+.cartbar.pending-bar span:last-child { font-variant-numeric: tabular-nums; }

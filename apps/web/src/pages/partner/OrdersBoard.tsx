@@ -7,7 +7,8 @@ import { useNavigate } from 'react-router-dom';
 import { subscribeOrders } from '../../lib/realtimeWeb';
 import {
   fetchLiveOrders, advanceOrder, NEXT_STATUS, markOrderReadyNow, adjustOrderTimer,
-  createBill, payBill, confirmPayment, type PortalOrder,
+  createBill, payBill, confirmPayment, staffUpdateOrderItem, staffCancelOrder,
+  type PortalOrder,
 } from '../../lib/portalApi';
 import { inr } from '../../lib/types';
 import { usePartner } from './PartnerShell';
@@ -143,15 +144,20 @@ export function OrdersBoard() {
       setOrders(live);
       setServedToday(served);
       setError('');
+      return live;
     } catch (e: any) {
       setError(e?.message ?? 'Could not load orders.');
+      return null;
     }
   };
 
   useEffect(() => {
     load();
     const channel = subscribeOrders(restaurant.id, () => load());
-    const t = setInterval(load, 30000); // safety net alongside realtime
+    // 10s, not 30: an order becomes visible when its grace window elapses, and
+    // that moment produces no realtime event to ride on — the row was inserted
+    // a minute earlier. Polling is what makes a released order appear.
+    const t = setInterval(load, 10000);
     return () => { channel.unsubscribe(); clearInterval(t); };
   }, [restaurant.id]);
 
@@ -182,12 +188,33 @@ export function OrdersBoard() {
     finally { setBusy(''); }
   };
 
+  // Editing and cancelling an order change what a table owes, so they are the
+  // owner's and manager's to make. The buttons are hidden from everyone else,
+  // but the real check is in the database — a hidden button is not a
+  // permission, and both RPCs refuse anyone below manager.
+  const canEdit = role === 'owner' || role === 'manager';
+  const [editing, setEditing] = useState<PortalOrder | null>(null);
+
   const cancel = async (o: PortalOrder) => {
     if (!confirm(`Cancel order #${o.order_no}?`)) return;
     setBusy(o.id);
     setJustIn((prev) => { const n = new Set(prev); n.delete(o.id); return n; });
-    try { await advanceOrder(o.id, 'cancelled'); await load(); }
+    try { await staffCancelOrder(o.id); setEditing(null); await load(); }
     catch (e: any) { setError(e?.message ?? 'Cancel failed.'); }
+    finally { setBusy(''); }
+  };
+
+  /** Change one line on a live order. qty 0 removes it; removing the last line
+   *  cancels the order. The total is recomputed server-side from the item rows
+   *  at their original prices, so a menu price change never rewrites a bill
+   *  the diner has already been quoted. */
+  const setItemQty = async (o: PortalOrder, itemId: string, qty: number) => {
+    setBusy(o.id);
+    try {
+      await staffUpdateOrderItem(o.id, itemId, qty);
+      const fresh = await load();
+      setEditing((cur) => (cur ? (fresh ?? []).find((x) => x.id === cur.id) ?? null : null));
+    } catch (e: any) { setError(e?.message ?? 'Could not change that item.'); }
     finally { setBusy(''); }
   };
 
@@ -354,8 +381,15 @@ export function OrdersBoard() {
                   </button>
                 </>
               )}
-              {role !== 'waiter' && (
-                <button className="chip" disabled={busy === o.id} onClick={() => cancel(o)} title="Cancel this order">✕</button>
+              {canEdit && (
+                <>
+                  <button className="chip" disabled={busy === o.id}
+                    onClick={() => setEditing(o)} title="Change what is on this order">
+                    Edit
+                  </button>
+                  <button className="chip" disabled={busy === o.id}
+                    onClick={() => cancel(o)} title="Cancel this order">✕</button>
+                </>
               )}
             </div>
             {/* Payment. Two unlabelled buttons reading "₹ Cash" and "UPI ✓" sat
@@ -459,6 +493,65 @@ export function OrdersBoard() {
             })}
           </div>
         </>
+      )}
+
+      {/* Staff edit. The diner's own grace window has closed by the time an
+          order is on this board, so this is the counter's copy of it: change a
+          quantity a customer got wrong, drop an item the kitchen is out of, or
+          cancel outright. Every change re-totals the order server-side at the
+          prices already quoted. */}
+      {editing && (
+        <div className="modal-scrim" onClick={() => setEditing(null)}>
+          <div className="sheet" onClick={(e) => e.stopPropagation()}>
+            <h2 className="display" style={{ fontSize: 22 }}>
+              Edit order #{editing.order_no}
+            </h2>
+            <p className="muted" style={{ fontSize: 13.5, marginTop: 4 }}>
+              {editing.is_parcel ? '📦 Parcel' : editing.table_label ?? 'Table'}
+              {(editing.guest_name || '').trim() ? ` · ${editing.guest_name}` : ''}
+            </p>
+
+            <div style={{ marginTop: 14 }}>
+              {editing.items.map((it) => (
+                <div key={it.id} className="row-item">
+                  <span style={{ display: 'flex', gap: 8, alignItems: 'center', minWidth: 0 }}>
+                    <VegMark veg={!!it.is_veg} />
+                    <span style={{ minWidth: 0 }}>
+                      <p style={{ fontWeight: 600, fontSize: 14 }}>{it.name}</p>
+                      <p className="dim" style={{ fontSize: 12.5 }}>{inr(it.unit_price)} each</p>
+                    </span>
+                  </span>
+                  <span style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                    <button className="chip" disabled={busy === editing.id}
+                      title={it.qty === 1 ? 'Remove this item' : 'One fewer'}
+                      onClick={() => setItemQty(editing, it.id, it.qty - 1)}>−</button>
+                    <span style={{ minWidth: 22, textAlign: 'center', fontWeight: 700 }}>{it.qty}</span>
+                    <button className="chip" disabled={busy === editing.id}
+                      onClick={() => setItemQty(editing, it.id, it.qty + 1)}>+</button>
+                  </span>
+                </div>
+              ))}
+            </div>
+
+            <div className="bill-row" style={{ marginTop: 12, fontWeight: 700 }}>
+              <span>Order total</span><span>{inr(editing.total)}</span>
+            </div>
+            <p className="dim" style={{ fontSize: 12.5, marginTop: 6 }}>
+              To add something new, ask the diner to order it — it joins the same
+              table bill.
+            </p>
+
+            <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
+              <button className="btn btn-ghost" style={{ flex: 1 }} onClick={() => setEditing(null)}>
+                Done
+              </button>
+              <button className="chip" disabled={busy === editing.id}
+                style={{ color: 'var(--error)' }} onClick={() => cancel(editing)}>
+                Cancel order
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

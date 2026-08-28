@@ -1,19 +1,23 @@
 /** Live menu — hero, search, veg filter, category chips, dish grid, item
- *  sheet, sticky cart bar. Subscribes to menu changes (live once menu_item is
- *  in the realtime publication) and refetches on tab refocus as a fallback. */
+ *  sheet, per-item ordering with a grace window. Subscribes to menu changes
+ *  (live once menu_item is in the realtime publication) and refetches on tab
+ *  refocus as a fallback. */
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { fetchMenu, subscribeMenu } from '../lib/api';
+import {
+  fetchMenu, subscribeMenu, placeOrder,
+  fetchMyOpenOrders, updateMyOrderItem, type OpenOrder,
+} from '../lib/api';
 import type { CartLine, MenuItem } from '../lib/types';
-import { calcBill, inr } from '../lib/types';
+import { inr } from '../lib/types';
 import { useStore } from '../store';
-import { IdentityGate, ItemSheet, LanguagePicker, Spinner, Stepper, VegMark, Wordmark } from '../components';
+import { IdentityGate, ItemSheet, LanguagePicker, SendingIn, Spinner, Stepper, VegMark, Wordmark } from '../components';
 import { useT } from '../lib/i18n';
 import { TableSoFar } from './TableSoFar';
 
 export function Menu() {
   const nav = useNavigate();
-  const { session, cart, addLine, setQty, setGuest } = useStore();
+  const { session, setGuest } = useStore();
   const t = useT();
   const [items, setItems] = useState<MenuItem[] | null>(null);
   const [failed, setFailed] = useState(false);
@@ -30,6 +34,72 @@ export function Menu() {
   }, [query, diet, activeCat]);
   const [open, setOpen] = useState<MenuItem | null>(null);
   const [toast, setToast] = useState('');
+
+  // ── Ordering without a cart ───────────────────────────────────────────────
+  // Each dish is ordered on its own the moment it is tapped, so nothing is left
+  // sitting in a basket the diner forgets to submit. What used to be the cart's
+  // job — changing your mind — is the grace window instead: for the first
+  // minute an order has not reached the kitchen yet, so the "Add" button turns
+  // into a stepper wired to the real order row. Once the window closes the
+  // stepper reverts to "Order", and ordering again is correct: the kitchen
+  // already has the first one.
+  const [openOrders, setOpenOrders] = useState<OpenOrder[]>([]);
+  const [placing, setPlacing] = useState<string | null>(null);
+
+  const refreshOpen = React.useCallback(() => {
+    if (!session || session.demo) return Promise.resolve();
+    return fetchMyOpenOrders(session).then(setOpenOrders).catch(() => {});
+  }, [session?.table.id, session?.guest?.phone]);
+
+  useEffect(() => {
+    refreshOpen();
+    const id = setInterval(refreshOpen, 6000);
+    return () => clearInterval(id);
+  }, [refreshOpen]);
+
+  /** menu_item_id → the still-editable order line for it. Later orders win, so
+   *  the stepper always drives the one whose window is open longest. */
+  const liveLines = useMemo(() => {
+    const m = new Map<string, { orderId: string; itemId: string; qty: number }>();
+    for (const o of openOrders) {
+      if (!o.editable) continue;
+      for (const it of o.items ?? []) {
+        if (it.menu_item_id) m.set(it.menu_item_id, { orderId: o.id, itemId: it.id, qty: it.qty });
+      }
+    }
+    return m;
+  }, [openOrders]);
+
+  const flash = (msg: string, ms = 1600) => {
+    setToast(msg);
+    window.setTimeout(() => setToast(''), ms);
+  };
+
+  const orderNow = async (line: CartLine, label: string) => {
+    if (!session || placing) return;
+    setPlacing(line.menuItemId);
+    try {
+      await placeOrder(session, [line]);
+      flash(`${label} ordered`);
+      await refreshOpen();
+    } catch (e: any) {
+      flash(e?.message ?? 'Could not place that order.', 3200);
+    } finally {
+      setPlacing(null);
+    }
+  };
+
+  /** Change a quantity on an order that has not reached the kitchen yet.
+   *  Optimistic, then reconciled — if the window closed a moment ago the server
+   *  refuses and the refresh puts the button back to "Order". */
+  const changeQty = async (l: { orderId: string; itemId: string }, qty: number) => {
+    setOpenOrders((prev) => prev.map((o) => (o.id !== l.orderId ? o : {
+      ...o, items: o.items.map((it) => (it.id === l.itemId ? { ...it, qty } : it)),
+    })));
+    try { await updateMyOrderItem(l.orderId, l.itemId, qty); }
+    catch (e: any) { flash(e?.message ?? 'That order has already gone to the kitchen.', 3200); }
+    finally { await refreshOpen(); }
+  };
 
   // The menu is the session root: a diner reaches it when /scan/<token>
   // replaced its own history entry, so a browser Back would otherwise land on a
@@ -90,11 +160,12 @@ export function Menu() {
 
   if (!session) return null;
   const { restaurant, table } = session;
-  const bill = calcBill(cart, 0);
-  const count = cart.reduce((a, l) => a + l.qty, 0);
+  // Anything still inside its window: the one thing the diner may still undo.
+  const pending = openOrders.filter((o) => o.editable);
+  const pendingTotal = pending.reduce((a, o) => a + Number(o.total || 0), 0);
 
   return (
-    <div className="page fade-in" style={{ paddingBottom: count ? 110 : undefined }}>
+    <div className="page fade-in" style={{ paddingBottom: pending.length ? 110 : undefined }}>
       <div className="topbar">
         <Wordmark size={22} />
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -227,21 +298,17 @@ export function Menu() {
           <h2 className="cat-heading">{cat}</h2>
           <div className="menu-grid">
             {dishes.map((d) => {
-              // One tap to add, exactly like a shopping app: a plain dish goes
-              // straight into the cart and the button becomes a qty stepper.
+              // One tap orders the dish outright — no cart, nothing to submit
+              // afterwards. While the order is still inside its grace window
+              // the button becomes a stepper on the real order line, so
+              // changing your mind works exactly as a cart used to.
               // Dishes with options still open the sheet — a choice has to be made.
-              const li = cart.findIndex(
-                (l) => l.menuItemId === d.id && l.optionIds.length === 0,
-              );
-              const qty = li >= 0 ? cart[li].qty : 0;
-              const quickAdd = () => {
-                addLine({
-                  menuItemId: d.id, name: d.name, price: d.price, qty: 1,
-                  isVeg: d.is_veg, optionIds: [], optionLabels: [], optionDelta: 0,
-                });
-                setToast(`${d.name} added`);
-                window.setTimeout(() => setToast(''), 1400);
-              };
+              const live = liveLines.get(d.id);
+              const qty = live?.qty ?? 0;
+              const quickOrder = () => orderNow({
+                menuItemId: d.id, name: d.name, price: d.price, qty: 1,
+                isVeg: d.is_veg, optionIds: [], optionLabels: [], optionDelta: 0,
+              }, d.name);
               return (
                 <div
                   key={d.id}
@@ -275,15 +342,16 @@ export function Menu() {
                             <button className="add-btn" onClick={() => setOpen(d)}>
                               {t('menu.choose')}
                             </button>
-                          ) : qty > 0 ? (
-                            <Stepper qty={qty} onChange={(q) => setQty(li, q)} />
+                          ) : live && qty > 0 ? (
+                            <Stepper qty={qty} onChange={(q) => changeQty(live, q)} />
                           ) : (
                             <button
                               className="add-btn"
-                              onClick={quickAdd}
-                              aria-label={`Add ${d.name}`}
+                              onClick={quickOrder}
+                              disabled={placing === d.id}
+                              aria-label={`Order ${d.name}`}
                             >
-                              {t('menu.add')}
+                              {placing === d.id ? '…' : t('menu.order')}
                             </button>
                           )}
                         </span>
@@ -302,11 +370,10 @@ export function Menu() {
           item={open}
           onClose={() => setOpen(null)}
           onAdd={(line: CartLine) => {
-            addLine(line);
-            // Instant feedback: flash a toast + pulse the cart bar so the diner
-            // sees the add land immediately (state already updates synchronously).
-            setToast(`${line.qty} × ${line.name} added`);
-            window.setTimeout(() => setToast(''), 1800);
+            // The sheet exists to settle a choice, so confirming it places the
+            // order there and then — same as a one-tap dish.
+            setOpen(null);
+            orderNow(line, `${line.qty} × ${line.name}`);
           }}
         />
       )}
@@ -323,13 +390,18 @@ export function Menu() {
         />
       )}
 
-      {count > 0 && !session.orderingDisabled && (
+      {/* Not a cart — these orders are already placed. The bar exists so the
+          diner can see the window closing and reach the undo controls before
+          the kitchen gets them. */}
+      {pending.length > 0 && !session.orderingDisabled && (
         <div className="cartbar-wrap">
-          <button className="cartbar" onClick={() => nav('/cart')}>
+          <button className="cartbar pending-bar" onClick={() => nav('/bill')}>
             <span style={{ fontWeight: 700 }}>
-              {count} item{count > 1 ? 's' : ''} · {inr(bill.subtotal)}
+              {pending.length} order{pending.length > 1 ? 's' : ''} · {inr(pendingTotal)}
             </span>
-            <span style={{ color: 'var(--accent)', fontWeight: 700 }}>{t('menu.viewCart')} →</span>
+            <span style={{ color: 'var(--accent)', fontWeight: 700 }}>
+              <SendingIn until={pending[0].released_at} label={t('menu.sendingIn')} sentLabel={t('menu.withKitchen')} /> →
+            </span>
           </button>
         </div>
       )}

@@ -11,10 +11,11 @@
  *  bill so a companion's order shows up without a refresh. */
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { fetchTableBill } from '../lib/api';
+import { fetchTableBill, fetchMyOpenOrders, cancelMyOrder, type OpenOrder } from '../lib/api';
 import type { Session } from '../lib/types';
 import { inr } from '../lib/types';
 import { useT } from '../lib/i18n';
+import { SendingIn } from '../components';
 
 interface Row { who: string; total: number; items: string; mine: boolean }
 
@@ -24,6 +25,29 @@ export function TableSoFar({ session }: { session: Session }) {
   const [rows, setRows] = useState<Row[]>([]);
   const [total, setTotal] = useState(0);
   const [open, setOpen] = useState(false);
+
+  // Orders of mine that have not reached the kitchen yet. These are the only
+  // ones a diner may still pull back, so they get their own block above the
+  // table summary rather than being buried in it.
+  const [mine, setMine] = useState<OpenOrder[]>([]);
+  const [cancelling, setCancelling] = useState<string | null>(null);
+  useEffect(() => {
+    if (session.table.is_parcel || session.demo) return;
+    let alive = true;
+    const load = () => fetchMyOpenOrders(session).then((o) => alive && setMine(o)).catch(() => {});
+    load();
+    const id = setInterval(load, 6000);
+    return () => { alive = false; clearInterval(id); };
+  }, [session.table.id, session.guest?.phone]);
+
+  const editable = mine.filter((o) => o.editable);
+
+  const cancel = async (id: string) => {
+    setCancelling(id);
+    try { await cancelMyOrder(id); setMine((prev) => prev.filter((o) => o.id !== id)); }
+    catch { /* window closed — the next poll will show it as sent */ }
+    finally { setCancelling(null); }
+  };
 
   useEffect(() => {
     if (session.table.is_parcel || session.demo) return;
@@ -49,15 +73,43 @@ export function TableSoFar({ session }: { session: Session }) {
     return () => { alive = false; clearInterval(t); };
   }, [session.table.id, session.guest?.phone]);
 
-  if (!rows.length) return null;
+  if (!rows.length && !editable.length) return null;
 
   const dishes = rows.reduce((a, r) => a + r.items.split(', ').filter(Boolean).length, 0);
 
   return (
     <div className="table-so-far-strip glass">
+      {editable.length > 0 && (
+        <div className="tsf-pending">
+          {editable.map((o) => (
+            <div key={o.id} className="tsf-pending-row">
+              <span style={{ minWidth: 0 }}>
+                <span className="overline" style={{ color: 'var(--accent)' }}>
+                  <SendingIn
+                    until={o.released_at}
+                    label={t('menu.sendingIn')}
+                    sentLabel={t('menu.withKitchen')}
+                  />
+                </span>
+                <span className="tsf-items">
+                  {(o.items ?? []).map((i) => `${i.qty}× ${i.name}`).join(', ')}
+                </span>
+              </span>
+              <button
+                className="chip"
+                disabled={cancelling === o.id}
+                onClick={() => cancel(o.id)}
+              >
+                {cancelling === o.id ? '…' : t('menu.cancelOrder')}
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
       <button
         className="tsf-head"
         aria-expanded={open}
+        hidden={!rows.length}
         onClick={() => setOpen((o) => !o)}
       >
         <span style={{ minWidth: 0 }}>
