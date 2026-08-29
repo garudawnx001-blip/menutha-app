@@ -338,7 +338,7 @@ export function OrdersBoard() {
               {/* Tapping the ticket header opens Billing already focused on
                   this table — settling is the commonest thing staff do next,
                   and it was three screens away. The buttons below stop the
-                  click so a tap on "Ready now" never navigates. */}
+                  click so a tap on Edit or Cancel never navigates. */}
               <button
                 className="ticket-open"
                 title="Open this table's bill"
@@ -374,10 +374,16 @@ export function OrdersBoard() {
               <span style={{ fontWeight: 700 }}>{inr(groupTotal)}</span>
               <span className={all.every((x) => x.paid) ? 'badge open' : 'badge'}>{all.every((x) => x.paid) ? 'Paid' : 'Unpaid'}</span>
             </div>
-            {/* No prep timer. An order arrives when its grace window closes and
-                stays on the board until it is settled; there is no countdown to
-                watch and nothing to press to move it along. The controls that
-                remain are the ones that change something real. */}
+            {/* Edit and Cancel, and nothing else.
+                No prep timer and no "ready" control: an order arrives when its
+                grace window closes and stays on the board until it is settled,
+                so there is no countdown to watch and no step to press it
+                through. The two controls that remain each change something
+                real.
+
+                Cancel is spelled out. It was a bare ✕, which named neither what
+                it did nor how final it was — the one destructive control on the
+                ticket was also the least legible. */}
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
               {canEdit && (
                 <>
@@ -386,7 +392,10 @@ export function OrdersBoard() {
                     Edit
                   </button>
                   <button className="chip" disabled={busy === o.id}
-                    onClick={() => cancel(all)} title="Cancel this ticket">✕</button>
+                    style={{ color: 'var(--error)' }}
+                    onClick={() => cancel(all)} title="Cancel this ticket">
+                    Cancel
+                  </button>
                 </>
               )}
             </div>
