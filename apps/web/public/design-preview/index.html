@@ -60,10 +60,12 @@ option beside it. Three lines of copy had to follow, because they promised thing
 the plan CTA was &ldquo;Continue &middot; &#8377;999/mo after trial&rdquo; &rarr; <b>&ldquo;Start the 10-day trial&rdquo;</b>;
 &ldquo;your card is authorised for AutoPay after day 10&rdquo; &rarr; <b>no card is taken at all</b>; and the success
 screen&rsquo;s &ldquo;renews &#8377;999/mo unless you cancel&rdquo; &rarr; nothing renews, because no mandate exists.<br>
-5 &middot; <b>Plan periods completed</b> &mdash; Monthly &#8377;999 &middot; <b>6 months &#8377;5,399</b> &middot; Annual &#8377;9,599.
-The pack already had &#8377;999 and &#8377;9,599; the six-month row was missing.<br>
+<b>Withdrawn:</b> an earlier version of this file added a six-month row to the Plan period selector. The pack
+already had one &mdash; a bad search on my side said otherwise &mdash; and the edit produced the duplicate
+&ldquo;6 months &middot; &#8377;5,399&rdquo; you spotted. Plan is back to the pack&rsquo;s original, untouched.
+Periods read <b>Monthly &middot; &#8377;999 &nbsp;|&nbsp; 6 months &middot; &#8377;5,399 &nbsp;|&nbsp; Annual &middot; &#8377;9,599</b>, once each.<br>
 <b>Left as the pack has them (flagged, not changed):</b> Basic &#8377;599 and Enterprise &#8377;3,499 are tier
-prices on a different axis from the Growth periods above; the pack&rsquo;s own handoff calls them placeholders
+prices on a different axis from the periods above; the pack&rsquo;s own handoff calls them placeholders
 pending the <code>subscription_plans</code> table. Confirm before they reach a customer.<br>
 Also left: the <b>Plan</b> screen still carries the footnote &ldquo;payments are processed by Razorpay&rdquo;.
 That is a post-sign-up screen and Razorpay is queued for it, so it was outside the sign-up correction &mdash;
@@ -1354,7 +1356,7 @@ corrected directly &mdash; the prose is stale in every place it conflicts.
   </div>
 </div>
 </div></div></div>
-<div class="cell"><span class="tag fixed">Plan · CORRECTED</span><div class="phone"><div class="screen">
+<div class="cell"><span class="tag">Plan</span><div class="phone"><div class="screen">
 <div style="display: flex; flex-direction: column; height: 100%; box-sizing: border-box; background: linear-gradient(165deg, #FBF6EC, #F6EBDB 55%, #F1E1CE); font-family: 'Inter', system-ui, sans-serif; color: #1C1A17; overflow: hidden; position: relative;">
   <div style="position: absolute; inset: 0; pointer-events: none; background: radial-gradient(120% 58% at 14% -6%, rgba(217,119,87,0.20), transparent 56%), radial-gradient(100% 54% at 100% 108%, rgba(201,160,78,0.20), transparent 52%), radial-gradient(64% 32% at -10% 62%, rgba(27,94,63,0.10), transparent 70%);"></div>
 
@@ -1379,7 +1381,7 @@ corrected directly &mdash; the prose is stale in every place it conflicts.
       <div style="display: flex; gap: 4px; padding: 4px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.7); background: rgba(244,237,225,0.7); backdrop-filter: blur(18px); align-self: flex-start; flex-wrap: wrap;">
         <span data-lens style="min-height: 42px; display: inline-flex; align-items: center; padding: 0 16px; border-radius: 999px; background: #d97757; color: #FCF8F1; font-size: 12.5px; font-weight: 700; box-shadow: 0 4px 12px rgba(193,95,60,0.28); cursor: pointer; transition: transform 160ms cubic-bezier(0.2,0.9,0.3,1), box-shadow 200ms ease, background 200ms ease;" style-hover="transform: translateY(-1px); box-shadow: 0 10px 22px rgba(28,26,21,0.14)" style-active="transform: translateY(1px) scale(0.972); box-shadow: 0 3px 8px rgba(28,26,21,0.1); filter: brightness(1.05) saturate(1.1)">Monthly · ₹999</span>
         <span data-lens style="min-height: 42px; display: inline-flex; align-items: center; padding: 0 16px; border-radius: 999px; color: #5E574B; font-size: 12.5px; font-weight: 600; cursor: pointer; transition: transform 160ms cubic-bezier(0.2,0.9,0.3,1), box-shadow 200ms ease, background 200ms ease;" style-hover="transform: translateY(-1px); box-shadow: 0 10px 22px rgba(28,26,21,0.14)" style-active="transform: translateY(1px) scale(0.972); box-shadow: 0 3px 8px rgba(28,26,21,0.1); filter: brightness(1.05) saturate(1.1)">6 months · ₹5,399</span>
-        <span data-lens style="min-height: 42px; display: inline-flex; align-items: center; padding: 0 16px; border-radius: 999px; color: #5E574B; font-size: 12.5px; font-weight: 600; cursor: pointer; transition: transform 160ms cubic-bezier(0.2,0.9,0.3,1), box-shadow 200ms ease, background 200ms ease;" style-hover="transform: translateY(-1px); box-shadow: 0 10px 22px rgba(28,26,21,0.14)" style-active="transform: translateY(1px) scale(0.972); box-shadow: 0 3px 8px rgba(28,26,21,0.1); filter: brightness(1.05) saturate(1.1)">6 months · ₹5,399</span><span style="font-size: 11.5px; color: #5E574B;">Annual · ₹9,599</span>
+        <span data-lens style="min-height: 42px; display: inline-flex; align-items: center; padding: 0 16px; border-radius: 999px; color: #5E574B; font-size: 12.5px; font-weight: 600; cursor: pointer; transition: transform 160ms cubic-bezier(0.2,0.9,0.3,1), box-shadow 200ms ease, background 200ms ease;" style-hover="transform: translateY(-1px); box-shadow: 0 10px 22px rgba(28,26,21,0.14)" style-active="transform: translateY(1px) scale(0.972); box-shadow: 0 3px 8px rgba(28,26,21,0.1); filter: brightness(1.05) saturate(1.1)">Annual · ₹9,599</span>
       </div>
     </div>
 
