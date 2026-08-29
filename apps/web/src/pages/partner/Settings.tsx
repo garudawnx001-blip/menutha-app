@@ -100,7 +100,7 @@ export function Settings() {
         {/* What appears on the printed bill. A tax invoice needs the
             restaurant's own identity on it, not just a name — these all render
             in the bill header, with the logo above them. */}
-        <div style={{ display: 'flex', gap: 10 }}>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
           <F label="Phone (on bill)">
             <input className="code-input" inputMode="tel" placeholder="98765 43210"
               value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
@@ -117,8 +117,8 @@ export function Settings() {
             Printed at the bottom of every bill. Leave blank for none.
           </span>
         </F>
-        <div style={{ display: 'flex', gap: 10 }}>
-          <div style={{ flex: 1 }}>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          <div style={{ flex: '1 1 140px', minWidth: 0 }}>
             <F label="City">
               <input className="code-input" value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} />
             </F>
@@ -130,13 +130,19 @@ export function Settings() {
             </F>
           </div>
         </div>
-        <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end' }}>
-          <div style={{ flex: 1 }}>
+        {/* Wraps, and the children may shrink.
+            `input[type=time]` carries an intrinsic minimum width that flex:1
+            alone will not shrink below, so two of them plus the Open/Closed
+            chip needed ~350px and overflowed a 305px screen — pushing the chip
+            off the right edge entirely. minWidth:0 lets them compress and the
+            wrap gives the chip its own line when they cannot. */}
+        <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+          <div style={{ flex: '1 1 120px', minWidth: 0 }}>
             <F label="Opens">
               <input className="code-input" type="time" value={form.open_time ?? ''} onChange={(e) => setForm({ ...form, open_time: e.target.value })} />
             </F>
           </div>
-          <div style={{ flex: 1 }}>
+          <div style={{ flex: '1 1 120px', minWidth: 0 }}>
             <F label="Closes">
               <input className="code-input" type="time" value={form.close_time ?? ''} onChange={(e) => setForm({ ...form, close_time: e.target.value })} />
             </F>
@@ -154,20 +160,20 @@ export function Settings() {
 
       <div className="glass" style={{ padding: 16, marginBottom: 14 }}>
         <h3 style={{ fontWeight: 700, marginBottom: 10 }}>Bill charges</h3>
-        <div style={{ display: 'flex', gap: 10 }}>
-          <div style={{ flex: 1 }}>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          <div style={{ flex: '1 1 140px', minWidth: 0 }}>
             <F label="SGST %">
               <input className="code-input" inputMode="decimal" value={form.sgst_pct}
                 onChange={(e) => setForm({ ...form, sgst_pct: e.target.value })} />
             </F>
           </div>
-          <div style={{ flex: 1 }}>
+          <div style={{ flex: '1 1 140px', minWidth: 0 }}>
             <F label="CGST %">
               <input className="code-input" inputMode="decimal" value={form.cgst_pct}
                 onChange={(e) => setForm({ ...form, cgst_pct: e.target.value })} />
             </F>
           </div>
-          <div style={{ flex: 1 }}>
+          <div style={{ flex: '1 1 140px', minWidth: 0 }}>
             <F label="Service charge %">
               <input className="code-input" inputMode="decimal" value={form.service_charge_pct}
                 onChange={(e) => setForm({ ...form, service_charge_pct: e.target.value })} />

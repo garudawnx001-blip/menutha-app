@@ -103,7 +103,11 @@ export function Growth({ restaurantId }: { restaurantId: string }) {
               phone without wrapping into a second line of clutter. */}
           <select
             className="code-input"
-            style={{ padding: '8px 10px', fontSize: 13, width: 'auto' }}
+            // 44px, not the 35px this used to be. It is the control that drives
+            // the whole Reports screen, and it sat below the size a thumb
+            // reliably hits. Height rather than vertical padding so the box
+            // cannot shrink back when the font metrics change.
+            style={{ padding: '0 10px', fontSize: 14, width: 'auto', minHeight: 44 }}
             value={period}
             onChange={(e) => setPeriod(e.target.value as GrowthPeriod)}
             aria-label="Reporting period"

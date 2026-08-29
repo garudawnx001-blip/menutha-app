@@ -625,8 +625,27 @@ input.code-input::placeholder { color: var(--text-dim); }
     font-size: 15px;
   }
   .portal-brand { display: none; }
-  .portal-link { flex-direction: column; gap: 3px; padding: 6px 10px; font-size: 10.5px; min-width: 64px; align-items: center; }
-  .portal-link .portal-link-label { white-space: nowrap; }
+  /* Items SHARE the bar instead of each claiming a fixed 64px.
+     At a 305px viewport the old rule needed 5 x 64px plus padding = 332px, so
+     More itself sat at left:278 with its right edge at 342 — off the screen,
+     which put every section past Billing out of reach on a small phone. The
+     bar cannot have a minimum width larger than the phones it runs on.
+     flex:1 with min-width:0 divides whatever width exists, so this fits at
+     305px and at 320px and stops depending on how many items there are. */
+  .portal-nav { gap: 2px; padding-inline: 4px; }
+  .portal-link {
+    flex: 1 1 0; min-width: 0;
+    flex-direction: column; gap: 3px; padding: 6px 4px;
+    font-size: 10px; align-items: center;
+  }
+  /* A long label ellipsizes rather than widening its item and pushing the
+     last one off the edge — the failure this replaces. */
+  .portal-link .portal-link-label {
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    max-width: 100%; display: block; text-align: center;
+  }
+  /* The More sheet is not width-constrained, so its rows keep full labels. */
+  .portal-rest .portal-link .portal-link-label { overflow: visible; font-size: 15px; }
   .portal-main { padding: 0 14px calc(96px + env(safe-area-inset-bottom)); }
 }
 @media (min-width: 800px) { .portal-main { padding-bottom: 40px; } }
@@ -1398,3 +1417,20 @@ input.code-input::placeholder { color: var(--text-dim); }
   .qr-sheet .qr-card { padding: 0; }
   .qr-sheet .qr-table { font-size: 8px; margin: 0.8mm 0 0; padding: 0.3mm 1.5mm; }
 }
+
+/* Selects were never styled: the rule above is `input.code-input`, which a
+   <select> does not match. That is how the Reports period control — the thing
+   that drives the whole screen — ended up 35px tall and unstyled while every
+   input around it was 51px. Same box, same touch floor. */
+select.code-input {
+  width: auto;
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-md);
+  padding: 0 12px;
+  min-height: 44px;
+  font-size: 14px;
+  color: var(--text);
+  outline: none;
+}
+select.code-input:focus { border-color: var(--primary); }
