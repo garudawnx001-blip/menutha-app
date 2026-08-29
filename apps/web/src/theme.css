@@ -172,6 +172,9 @@ img { max-width: 100%; display: block; }
 /* ── Chips ──────────────────────────────────────────────────────────────── */
 
 .chip {
+  /* Same 44px floor: chips measured 38px. These are real controls — period
+     pickers, method switches — not labels. */
+  min-height: 44px;
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -743,6 +746,10 @@ input.code-input::placeholder { color: var(--text-dim); }
   border-radius: 999px;
 }
 .seg-btn {
+  /* 44px floor. Was 9px padding on a 14px font, which measured 39px on a phone
+     — under the tap target every other control in this product is held to, on
+     the two controls a new partner presses first. */
+  min-height: 44px;
   flex: 1; padding: 9px 14px; border: none; border-radius: 999px;
   background: transparent; color: var(--text-muted, #6f6857);
   font: inherit; font-size: 14px; font-weight: 700; cursor: pointer;
