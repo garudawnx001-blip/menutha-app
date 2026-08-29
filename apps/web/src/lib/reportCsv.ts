@@ -64,8 +64,11 @@ export function buildReportCsv(r: ReportCsvInput): string {
   lines.push(row('Menutha — Sales report'));
   lines.push(row('Restaurant', r.restaurantName));
   lines.push(row('Period', r.periodLabel));
-  lines.push(row('From', r.from));
-  lines.push(row('To', r.to));
+  // "Covers", not "From": a period labelled "Today" is queried as the last 24
+  // hours, so its start date is yesterday. Both are correct and the pairing
+  // looks like an error unless the wording says what the dates actually are.
+  lines.push(row('Covers from', r.from));
+  lines.push(row('Covers to', r.to));
   lines.push(row('Generated', r.generatedAt.toISOString()));
   lines.push('');
 
