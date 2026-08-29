@@ -3,7 +3,79 @@
  *  single largest thing in the bundle, and this is a bar chart. */
 import React, { useEffect, useState } from 'react';
 import { fetchGrowth, type GrowthPeriod, type GrowthPoint } from '../../lib/portalApi';
+import { supabase } from '../../lib/supabase';
+import { buildReportCsv, reportFileName } from '../../lib/reportCsv';
 import { inr } from '../../lib/types';
+
+const isoDay = (d: Date) => d.toISOString().slice(0, 10);
+
+/** How far back the top-items and peak-hours queries reach, matching the app. */
+function daysForPeriod(p: GrowthPeriod, from: string, to: string): number {
+  if (p === 'custom') {
+    const ms = new Date(to + 'T23:59:59').getTime() - new Date(from + 'T00:00:00').getTime();
+    return Math.max(1, Math.ceil(ms / 86400000));
+  }
+  return p === 'day' ? 1 : p === 'week' ? 7 : p === 'month' ? 30 : 365;
+}
+
+const HOUR_LABELS: Record<number, string> = {
+  11: '11 -- 12 PM', 12: '12 -- 1 PM', 13: '1 -- 2 PM', 14: '2 -- 3 PM',
+  17: '5 -- 6 PM', 18: '6 -- 7 PM', 19: '7 -- 8 PM', 20: '8 -- 9 PM', 21: '9 -- 10 PM',
+};
+
+/**
+ * The two series this card does not itself display.
+ *
+ * The portal's Growth card shows a trend and a total; the app's Reports screen
+ * also ranks top items and peak hours. Exporting only what this screen happens
+ * to render would produce a file that differs from the phone's for the same
+ * week — and the first thing anyone does with two disagreeing exports is doubt
+ * the numbers rather than the export. Same queries the app uses, so both
+ * surfaces emit the same document.
+ */
+async function fetchExtraSeries(restaurantId: string, period: GrowthPeriod, from: string, to: string) {
+  const since = new Date();
+  since.setDate(since.getDate() - daysForPeriod(period, from, to));
+
+  const [itemsRes, ordersRes] = await Promise.all([
+    supabase
+      .from('order_item')
+      .select('name, qty, unit_price, food_order!inner(restaurant_id, placed_at)')
+      .eq('food_order.restaurant_id', restaurantId)
+      .gte('food_order.placed_at', since.toISOString()),
+    supabase
+      .from('food_order')
+      .select('id, total, placed_at')
+      .eq('restaurant_id', restaurantId)
+      .neq('status', 'cancelled')
+      .gte('placed_at', since.toISOString()),
+  ]);
+
+  const agg: Record<string, { name: string; qty: number; revenue: number }> = {};
+  for (const it of (itemsRes.data ?? []) as any[]) {
+    if (!agg[it.name]) agg[it.name] = { name: it.name, qty: 0, revenue: 0 };
+    agg[it.name].qty += it.qty;
+    agg[it.name].revenue += it.qty * Number(it.unit_price);
+  }
+  const topItems = Object.values(agg).sort((a, b) => b.revenue - a.revenue).slice(0, 10);
+
+  const orders = (ordersRes.data ?? []) as any[];
+  const hourCounts: Record<number, number> = {};
+  for (const o of orders) {
+    const h = new Date(o.placed_at).getHours();
+    hourCounts[h] = (hourCounts[h] || 0) + 1;
+  }
+  const maxCount = Math.max(...Object.values(hourCounts), 1);
+  const peakHours = Object.entries(hourCounts)
+    .map(([h, c]) => ({
+      label: HOUR_LABELS[Number(h)] || `${Number(h) % 12 || 12} ${Number(h) >= 12 ? 'PM' : 'AM'}`,
+      intensity: c / maxCount,
+    }))
+    .sort((a, b) => b.intensity - a.intensity)
+    .slice(0, 5);
+
+  return { topItems, peakHours };
+}
 
 const PERIODS: { key: GrowthPeriod; label: string }[] = [
   { key: 'day', label: 'Today' },
@@ -77,6 +149,55 @@ export function Growth({ restaurantId }: { restaurantId: string }) {
   const second = (points ?? []).slice(half).reduce((a, p) => a + p.revenue, 0);
   const trend = first > 0 ? Math.round(((second - first) / first) * 100) : null;
 
+  const [exporting, setExporting] = useState(false);
+
+  /**
+   * Hand the browser the file.
+   *
+   * A Blob and an object URL rather than a data: URI — a year of orders is
+   * comfortably past the length a data: URI can carry in some browsers, and a
+   * report that silently truncates is worse than one that fails. The URL is
+   * revoked afterwards so the blob is not held for the life of the tab.
+   */
+  const downloadCsv = async () => {
+    if (exporting) return;
+    setExporting(true);
+    try {
+      const { data: rest } = await supabase
+        .from('restaurant').select('name').eq('id', restaurantId).single();
+      const extra = await fetchExtraSeries(restaurantId, period, from, to);
+
+      const payload = {
+        restaurantName: rest?.name || 'Restaurant',
+        periodLabel: PERIODS.find((p) => p.key === period)?.label ?? String(period),
+        from: period === 'custom'
+          ? from
+          : isoDay(new Date(Date.now() - daysForPeriod(period, from, to) * 86400000)),
+        to: period === 'custom' ? to : isoDay(new Date()),
+        totalRevenue: total,
+        totalOrders: count,
+        points: points ?? [],
+        topItems: extra.topItems,
+        peakHours: extra.peakHours,
+        generatedAt: new Date(),
+      };
+
+      const blob = new Blob([buildReportCsv(payload)], { type: 'text/csv;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = reportFileName(payload, 'csv');
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (e: any) {
+      setError(e?.message ?? 'Could not build the report file.');
+    } finally {
+      setExporting(false);
+    }
+  };
+
   return (
     <div className="glass" style={{ padding: 16, marginBottom: 14 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, flexWrap: 'wrap' }}>
@@ -114,6 +235,19 @@ export function Growth({ restaurantId }: { restaurantId: string }) {
           >
             {PERIODS.map((p) => <option key={p.key} value={p.key}>{p.label}</option>)}
           </select>
+          {/* The report download the client asked for. It sits beside the
+              period control because what you export is whatever that control is
+              showing — putting it anywhere else invites exporting one range
+              while looking at another. */}
+          <button
+            className="chip"
+            onClick={downloadCsv}
+            disabled={exporting || !points}
+            style={{ minHeight: 44 }}
+            title="Download this report as a CSV for Excel"
+          >
+            {exporting ? 'Preparing…' : '⬇ CSV'}
+          </button>
           {period === 'custom' && (
             <>
               {/* Native date inputs: a real calendar on every platform, and no
