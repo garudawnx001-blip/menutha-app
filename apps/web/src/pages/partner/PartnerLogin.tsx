@@ -128,7 +128,7 @@ export function PartnerLogin() {
                 value={password} onChange={(e) => setPassword(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && signInEmail()} />
               {error && <p style={{ color: 'var(--error)', fontSize: 13.5, marginTop: 10 }}>{error}</p>}
               <button className="btn btn-primary btn-block" style={{ marginTop: 16 }} disabled={busy || !email || !password} onClick={signInEmail}>
-                {busy ? 'Signing in…' : 'Sign in'}
+                {busy ? 'Opening…' : 'Open my restaurant'}
               </button>
             </>
           )}
