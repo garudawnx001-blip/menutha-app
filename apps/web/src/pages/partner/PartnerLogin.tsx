@@ -8,7 +8,12 @@ import { Wordmark } from '../../components';
 export function PartnerLogin() {
   const nav = useNavigate();
   const [mode, setMode] = useState<'login' | 'signup'>('login');
-  const [tab, setTab] = useState<'otp' | 'email'>('otp');
+  // Email, not OTP. Phone OTP is still a UI stub — SMS is not configured, and
+  // the send fails with "SMS login is not configured yet". Defaulting the
+  // portal to it stranded the one real user, who signs in with email and
+  // password, on a form that cannot work. Both surfaces default to email until
+  // OTP is wired, and then both flip together.
+  const [tab, setTab] = useState<'otp' | 'email'>('email');
   const [phone, setPhone] = useState('');
   const [otp, setOtp] = useState('');
   const [otpSent, setOtpSent] = useState(false);
@@ -77,13 +82,13 @@ export function PartnerLogin() {
               onClick={() => { setMode('login'); setError(''); setOtpSent(false); }}>Log in</button>
             <button role="tab" aria-selected={mode === 'signup'}
               className={mode === 'signup' ? 'seg-btn active' : 'seg-btn'}
-              onClick={() => { setMode('signup'); setTab('otp'); setError(''); setOtpSent(false); }}>Sign up</button>
+              onClick={() => { setMode('signup'); setTab('email'); setError(''); setOtpSent(false); }}>Sign up</button>
           </div>
 
           {mode === 'login' && (
             <div className="chip-row" style={{ paddingBottom: 6 }}>
-              <button className={tab === 'otp' ? 'chip active' : 'chip'} onClick={() => { setTab('otp'); setError(''); }}>📱 Phone OTP</button>
               <button className={tab === 'email' ? 'chip active' : 'chip'} onClick={() => { setTab('email'); setError(''); }}>✉️ Email</button>
+              <button className={tab === 'otp' ? 'chip active' : 'chip'} onClick={() => { setTab('otp'); setError(''); }}>📱 Phone OTP</button>
             </div>
           )}
           {mode === 'signup' && (
