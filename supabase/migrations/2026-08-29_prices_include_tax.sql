@@ -1,7 +1,17 @@
 -- "Prices include tax" — the toggle the approved design shows in Settings.
 --
--- NOT YET APPLIED. This file is prepared, not run. It changes the money path,
--- so it needs an explicit go-ahead before it touches production.
+-- DEFERRED, DELIBERATELY, AS OF v20. Not applied, and not shipping in v20.
+--
+-- The decision and its reason, so nobody re-opens this without the context:
+-- the pilot restaurant's live bills already show SGST and CGST added on top of
+-- the menu price, and the client reconciles against that every night. Changing
+-- how a bill is broken down in the middle of a pilot — even without moving the
+-- total — invites a disagreement with their own books that we would be the
+-- cause of and they would be the ones explaining.
+--
+-- It ships later as an explicit toggle, with the client told what it changes
+-- before they turn it on. Applying this file alone is still safe (it defaults
+-- to false and nothing reads it yet), but there is no reason to.
 --
 -- WHY THIS IS NOT A UI TOGGLE. Today every bill computes
 --     subtotal          = sum(qty * unit_price)
