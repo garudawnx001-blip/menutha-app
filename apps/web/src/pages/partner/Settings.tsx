@@ -86,7 +86,7 @@ export function Settings() {
 
   return (
     <div className="fade-in" style={{ maxWidth: 640 }}>
-      <p className="overline" style={{ marginTop: 12 }}>Settings</p>
+      <p className="overline" style={{ marginTop: 12 }}>Restaurant profile</p>
       <h1 className="display" style={{ fontSize: 26, marginBottom: 14 }}>{restaurant.name}</h1>
       {error && <p style={{ color: 'var(--error)', fontSize: 14, marginBottom: 10 }}>{error}</p>}
 

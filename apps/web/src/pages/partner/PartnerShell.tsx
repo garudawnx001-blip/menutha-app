@@ -48,7 +48,10 @@ const NAV: { to: string; label: string; icon: string; roles: PortalRole[]; prima
   { to: '/partner/reservations', label: 'Reservations', icon: '📅', roles: ['owner', 'manager'] },
   { to: '/partner/staff', label: 'Staff', icon: '👥', roles: ['owner'] },
   { to: '/partner/plan', label: 'Plan', icon: '⭐', roles: ['owner'] },
-  { to: '/partner/settings', label: 'Settings', icon: '⚙️', roles: ['owner', 'manager'] },
+  // "Restaurant profile", not "Settings": the overflow button is Settings now,
+  // and a Settings menu whose contents include Settings is a path nobody reads
+  // twice without pausing. Mirrors the app.
+  { to: '/partner/settings', label: 'Restaurant profile', icon: '⚙️', roles: ['owner', 'manager'] },
 ];
 
 export function PartnerShell() {
@@ -158,7 +161,7 @@ export function PartnerShell() {
               onClick={() => setMoreOpen((o) => !o)}
             >
               <span aria-hidden>⋯</span>
-              <span className="portal-link-label">Sections</span>
+              <span className="portal-link-label">Settings</span>
             </button>
           )}
         </aside>
