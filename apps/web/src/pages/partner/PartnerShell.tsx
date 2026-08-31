@@ -158,7 +158,7 @@ export function PartnerShell() {
               onClick={() => setMoreOpen((o) => !o)}
             >
               <span aria-hidden>⋯</span>
-              <span className="portal-link-label">More</span>
+              <span className="portal-link-label">Sections</span>
             </button>
           )}
         </aside>
