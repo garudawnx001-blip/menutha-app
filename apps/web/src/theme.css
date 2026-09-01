@@ -1445,3 +1445,110 @@ select.code-input {
   outline: none;
 }
 select.code-input:focus { border-color: var(--primary); }
+
+/* ── The Menutha Liquid Lens, on the web ───────────────────────────────────
+   Clear glass. No fill colour, no coloured shadow — the thickness comes from
+   the edge, exactly as it does in the app: a lit hairline along the top, a
+   contact shadow underneath, and a translucent face over whatever is behind
+   it. This is the web half of the client's login-page override ("Instead of
+   open my restaurant we can put login without orange color like if we click
+   on phone and email feel"), so the portal and the app show him one button
+   rather than two that resemble each other.
+
+   SCOPED BY USE, NOT BY PAGE. It is a class, so nothing changes until a
+   button asks for it. The orange primary stays the default everywhere else,
+   which is the rule he overrode for the login screen only. */
+.btn-glass {
+  position: relative;
+  color: var(--ink);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.58), rgba(255, 255, 255, 0.30));
+  border: 1px solid rgba(255, 255, 255, 0.72);
+  box-shadow:
+    /* the lit top edge, inside the border */
+    inset 0 1px 0 rgba(255, 255, 255, 0.95),
+    /* the underside catching a shadow — glass has thickness */
+    inset 0 -1px 0 rgba(120, 90, 70, 0.10),
+    /* the contact shadow: neutral, so no accent leaks back in */
+    0 4px 14px rgba(120, 90, 70, 0.12);
+  backdrop-filter: blur(14px) saturate(1.15);
+  -webkit-backdrop-filter: blur(14px) saturate(1.15);
+}
+
+/* The press: forward, brighter, rim lit. Matches the app's lift rather than
+   the generic scale-down every other button on the site uses. */
+.btn-glass:hover {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.70), rgba(255, 255, 255, 0.40));
+  border-color: rgba(255, 255, 255, 0.92);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 1),
+    inset 0 -1px 0 rgba(120, 90, 70, 0.12),
+    0 8px 22px rgba(120, 90, 70, 0.16);
+}
+.btn-glass:active {
+  transform: translateY(0) scale(0.995);
+  filter: none;
+}
+
+/* The specular sweep, on click. Left to right, LINEAR and a full second —
+   the same correction as the app: an eased sweep front-loads and reads as a
+   flicker however long you make it. A reflection crossing a pane travels at
+   a constant speed. */
+.btn-glass { overflow: hidden; }
+.btn-glass::after {
+  content: '';
+  position: absolute;
+  top: -60%;
+  bottom: -60%;
+  width: 55%;
+  left: -60%;
+  pointer-events: none;
+  transform: rotate(18deg);
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.38) 50%,
+    rgba(255, 255, 255, 0) 100%
+  );
+}
+.btn-glass:active::after { animation: lens-glint 1000ms linear 1; }
+
+@keyframes lens-glint {
+  0%   { left: -60%; opacity: 0; }
+  6%   { opacity: 1; }
+  90%  { opacity: 1; }
+  100% { left: 105%; opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .btn-glass:active::after { animation: none; }
+}
+
+/* ── The login page only: no orange ────────────────────────────────────────
+   The client's page-level override. On this screen the selected chip and the
+   selected segment lose their saffron fill and carry the selection the way
+   the app does — a held lens: brighter glass, a lit rim, full ink on the
+   label against the other one's grey.
+
+   SCOPED TO .login-lens ON PURPOSE. `.chip.active` is saffron across the
+   whole portal and it should stay saffron; the override is for the front
+   door, not for the product behind it. */
+.login-lens .chip.active {
+  background: linear-gradient(180deg, rgba(255,255,255,0.72), rgba(255,255,255,0.44));
+  border-color: rgba(255, 255, 255, 0.95);
+  color: var(--ink);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 1),
+    inset 0 -1px 0 rgba(120, 90, 70, 0.10),
+    0 4px 14px rgba(120, 90, 70, 0.14);
+}
+.login-lens .chip.active:hover { color: var(--ink); }
+
+.login-lens .seg-btn.active {
+  background: linear-gradient(180deg, rgba(255,255,255,0.72), rgba(255,255,255,0.44));
+  color: var(--ink);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 1),
+    0 3px 12px rgba(120, 90, 70, 0.13);
+}

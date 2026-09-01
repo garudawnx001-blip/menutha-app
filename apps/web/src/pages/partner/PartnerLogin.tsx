@@ -58,7 +58,8 @@ export function PartnerLogin() {
   };
 
   return (
-    <div className="page fade-in" style={{ display: 'flex', flexDirection: 'column', minHeight: '100dvh' }}>
+    // login-lens scopes the no-orange override to THIS page. See theme.css.
+    <div className="page fade-in login-lens" style={{ display: 'flex', flexDirection: 'column', minHeight: '100dvh' }}>
       <div className="topbar">
         <Wordmark size={24} />
         <span className="badge gold">Restaurant Portal</span>
@@ -102,7 +103,7 @@ export function PartnerLogin() {
                 <input className="code-input" inputMode="tel" placeholder="98765 43210" value={phone}
                   onChange={(e) => setPhone(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && sendOtp()} />
                 {error && <p style={{ color: 'var(--error)', fontSize: 13.5, marginTop: 10 }}>{error}</p>}
-                <button className="btn btn-primary btn-block" style={{ marginTop: 14 }} disabled={busy} onClick={sendOtp}>
+                <button className="btn btn-glass btn-block" style={{ marginTop: 14 }} disabled={busy} onClick={sendOtp}>
                   {busy ? 'Sending…' : mode === 'signup' ? 'Send OTP to sign up' : 'Send OTP'}
                 </button>
               </>
@@ -112,7 +113,7 @@ export function PartnerLogin() {
                 <input className="code-input" inputMode="numeric" autoFocus placeholder="••••••" value={otp}
                   onChange={(e) => setOtp(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && verifyOtp()} />
                 {error && <p style={{ color: 'var(--error)', fontSize: 13.5, marginTop: 10 }}>{error}</p>}
-                <button className="btn btn-primary btn-block" style={{ marginTop: 14 }} disabled={busy || otp.trim().length < 4} onClick={verifyOtp}>
+                <button className="btn btn-glass btn-block" style={{ marginTop: 14 }} disabled={busy || otp.trim().length < 4} onClick={verifyOtp}>
                   {busy ? 'Verifying…' : mode === 'signup' ? 'Verify & create account' : 'Verify & sign in'}
                 </button>
                 <button className="chip" style={{ marginTop: 10 }} onClick={() => { setOtpSent(false); setOtp(''); }}>← Change number</button>
@@ -127,8 +128,14 @@ export function PartnerLogin() {
               <input className="code-input" type="password" autoComplete="current-password" placeholder="••••••••"
                 value={password} onChange={(e) => setPassword(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && signInEmail()} />
               {error && <p style={{ color: 'var(--error)', fontSize: 13.5, marginTop: 10 }}>{error}</p>}
-              <button className="btn btn-primary btn-block" style={{ marginTop: 16 }} disabled={busy || !email || !password} onClick={signInEmail}>
-                {busy ? 'Opening…' : 'Open my restaurant'}
+              {/* "Login", in clear glass — the client's override for this page:
+                  "Instead of open my restaurant we can put login without orange
+                  color like if we click on phone and email feel." The app says
+                  the same word in the same material, so the portal and the
+                  phone are one product rather than two that resemble each
+                  other. The orange primary stays the default everywhere else. */}
+              <button className="btn btn-glass btn-block" style={{ marginTop: 16 }} disabled={busy || !email || !password} onClick={signInEmail}>
+                {busy ? 'Opening…' : 'Login'}
               </button>
             </>
           )}
