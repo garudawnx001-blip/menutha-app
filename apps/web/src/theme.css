@@ -1585,3 +1585,23 @@ select.code-input:focus { border-color: var(--primary); }
 @media (prefers-reduced-motion: reduce) {
   .btn.is-busy::before, .chip.is-busy::before { animation-duration: 2200ms; }
 }
+
+/* ── Clear glass with a terracotta-tinted rim ──────────────────────────────
+   The client's treatment for "Create new account" on the app's login screen:
+   the same clear glass as everything else on that page, and the one place on
+   it that keeps a trace of the accent — as a RIM, never a fill.
+
+   The tint is deliberate rather than the full accent. A hard terracotta
+   outline would be the loudest border on a screen whose hero button just gave
+   up its colour, which inverts the hierarchy. At 0.55 alpha it still reads
+   unmistakably warm against the neutral rims above it.
+
+   NOTE ON PARITY: the portal's login has no "Create new account" anchor to put
+   this on — it uses a Log in / Sign up segment at the top of the card, which
+   is a different shape for the same job. The class is defined so the recipe
+   exists on both surfaces and a future control can take it; nothing on the
+   portal is restructured to invent a matching button. */
+/* Use together with .btn-glass — this only re-tints the rim. `composes:` would
+   be CSS-Modules syntax and this is a plain global stylesheet. */
+.btn-glass.btn-glass-accent { border-color: rgba(217, 119, 87, 0.55); }
+.btn-glass.btn-glass-accent:hover { border-color: rgba(217, 119, 87, 0.78); }
