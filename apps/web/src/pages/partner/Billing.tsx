@@ -269,8 +269,8 @@ export function Billing() {
           <div className="bill-row"><span>SGST ({sgstPct}%)</span><span>{inr(sgst)}</span></div>
           <div className="bill-row"><span>CGST ({cgstPct}%)</span><span>{inr(cgst)}</span></div>
           <div className="bill-row total"><span>Total</span><span>{inr(total)}</span></div>
-          <button className="btn btn-primary btn-block" style={{ marginTop: 12 }} disabled={busy} onClick={generate}>
-            {busy ? 'Creating bill…' : 'Generate bill'}
+          <button className={`btn btn-primary btn-block${busy ? ' is-busy' : ''}`} style={{ marginTop: 12 }} disabled={busy} onClick={generate}>
+            {'Generate bill'}
           </button>
         </div>
       )}

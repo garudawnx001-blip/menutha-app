@@ -103,8 +103,8 @@ export function PartnerLogin() {
                 <input className="code-input" inputMode="tel" placeholder="98765 43210" value={phone}
                   onChange={(e) => setPhone(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && sendOtp()} />
                 {error && <p style={{ color: 'var(--error)', fontSize: 13.5, marginTop: 10 }}>{error}</p>}
-                <button className="btn btn-glass btn-block" style={{ marginTop: 14 }} disabled={busy} onClick={sendOtp}>
-                  {busy ? 'Sending…' : mode === 'signup' ? 'Send OTP to sign up' : 'Send OTP'}
+                <button className={`btn btn-glass btn-block${busy ? ' is-busy' : ''}`} style={{ marginTop: 14 }} disabled={busy} onClick={sendOtp}>
+                  {mode === 'signup' ? 'Send OTP to sign up' : 'Send OTP'}
                 </button>
               </>
             ) : (
@@ -113,8 +113,8 @@ export function PartnerLogin() {
                 <input className="code-input" inputMode="numeric" autoFocus placeholder="••••••" value={otp}
                   onChange={(e) => setOtp(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && verifyOtp()} />
                 {error && <p style={{ color: 'var(--error)', fontSize: 13.5, marginTop: 10 }}>{error}</p>}
-                <button className="btn btn-glass btn-block" style={{ marginTop: 14 }} disabled={busy || otp.trim().length < 4} onClick={verifyOtp}>
-                  {busy ? 'Verifying…' : mode === 'signup' ? 'Verify & create account' : 'Verify & sign in'}
+                <button className={`btn btn-glass btn-block${busy ? ' is-busy' : ''}`} style={{ marginTop: 14 }} disabled={busy || otp.trim().length < 4} onClick={verifyOtp}>
+                  {mode === 'signup' ? 'Verify & create account' : 'Verify & sign in'}
                 </button>
                 <button className="chip" style={{ marginTop: 10 }} onClick={() => { setOtpSent(false); setOtp(''); }}>← Change number</button>
               </>
@@ -134,8 +134,8 @@ export function PartnerLogin() {
                   the same word in the same material, so the portal and the
                   phone are one product rather than two that resemble each
                   other. The orange primary stays the default everywhere else. */}
-              <button className="btn btn-glass btn-block" style={{ marginTop: 16 }} disabled={busy || !email || !password} onClick={signInEmail}>
-                {busy ? 'Opening…' : 'Login'}
+              <button className={`btn btn-glass btn-block${busy ? ' is-busy' : ''}`} style={{ marginTop: 16 }} disabled={busy || !email || !password} onClick={signInEmail}>
+                Login
               </button>
             </>
           )}

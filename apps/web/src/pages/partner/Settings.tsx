@@ -272,8 +272,8 @@ export function Settings() {
         </div>
       </div>
 
-      <button className="btn btn-primary btn-block" disabled={busy} onClick={save}>
-        {busy ? 'Saving…' : saved ? 'Saved ✓' : 'Save settings'}
+      <button className={`btn btn-primary btn-block${busy ? ' is-busy' : ''}`} disabled={busy} onClick={save}>
+        {saved ? 'Saved ✓' : 'Save settings'}
       </button>
     </div>
   );

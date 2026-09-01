@@ -1552,3 +1552,36 @@ select.code-input:focus { border-color: var(--primary); }
     inset 0 1px 0 rgba(255, 255, 255, 1),
     0 3px 12px rgba(120, 90, 70, 0.13);
 }
+
+/* ── Busy, not disabled ────────────────────────────────────────────────────
+   Same rule as the app. His instruction: "even the csv and pdf they are
+   showing preparing once i click i dont want those thing just login and csv
+   only should appear."
+
+   A button's label is its NAME. Swapping it for a status ("Preparing…",
+   "Saving…") means the thing you pressed stops being the thing you pressed,
+   and in a two-button row it reflows both widths mid-press as well. The
+   spinner goes BESIDE the constant label instead — same information, and the
+   button keeps its name.
+
+   Note this is `is-busy`, never `disabled`. A disabled control recedes because
+   it cannot be used; a busy one is the control you just pressed, doing what
+   you asked. */
+.btn.is-busy, .chip.is-busy { position: relative; }
+.btn.is-busy::before, .chip.is-busy::before {
+  content: '';
+  width: 14px;
+  height: 14px;
+  margin-right: 4px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  opacity: 0.85;
+  animation: btn-spin 700ms linear infinite;
+}
+@keyframes btn-spin { to { transform: rotate(360deg); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .btn.is-busy::before, .chip.is-busy::before { animation-duration: 2200ms; }
+}

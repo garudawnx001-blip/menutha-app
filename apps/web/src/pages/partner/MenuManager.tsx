@@ -659,8 +659,8 @@ export function MenuManager() {
               Saved with the dish — remember to press Save dish.
             </p>
             <div style={{ display: 'flex', gap: 8, marginTop: 18 }}>
-              <button className="btn btn-primary" style={{ flex: 1 }} disabled={busy} onClick={save}>
-                {busy ? 'Saving…' : 'Save dish'}
+              <button className={`btn btn-primary${busy ? ' is-busy' : ''}`} style={{ flex: 1 }} disabled={busy} onClick={save}>
+                {'Save dish'}
               </button>
               {draft.id && (
                 <button className="btn btn-ghost" disabled={busy} onClick={async () => {

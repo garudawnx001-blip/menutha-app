@@ -58,8 +58,8 @@ export function Register() {
           <p className="overline" style={{ margin: '12px 0 6px' }}>Address</p>
           <input className="code-input" value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} />
           {error && <p style={{ color: 'var(--error)', fontSize: 13.5, marginTop: 10 }}>{error}</p>}
-          <button className="btn btn-primary btn-block" style={{ marginTop: 16 }} disabled={busy} onClick={submit}>
-            {busy ? 'Creating…' : 'Start free trial'}
+          <button className={`btn btn-primary btn-block${busy ? ' is-busy' : ''}`} style={{ marginTop: 16 }} disabled={busy} onClick={submit}>
+            {'Start free trial'}
           </button>
           <p className="dim" style={{ fontSize: 12, marginTop: 10 }}>
             Full Growth features for 10 days · no card needed · zero commission always.

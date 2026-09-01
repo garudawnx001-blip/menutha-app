@@ -240,13 +240,13 @@ export function Growth({ restaurantId }: { restaurantId: string }) {
               showing — putting it anywhere else invites exporting one range
               while looking at another. */}
           <button
-            className="chip"
+            className={`chip${exporting ? ' is-busy' : ''}`}
             onClick={downloadCsv}
             disabled={exporting || !points}
             style={{ minHeight: 44 }}
             title="Download this report as a CSV for Excel"
           >
-            {exporting ? 'Preparing…' : '⬇ CSV'}
+            {'⬇ CSV'}
           </button>
           {period === 'custom' && (
             <>
