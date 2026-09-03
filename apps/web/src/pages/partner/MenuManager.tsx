@@ -475,14 +475,26 @@ export function MenuManager() {
             onDrop={(e) => { e.preventDefault(); if (dragDish && dragDish !== d.id) moveDishTo(dragDish, i); }}
           >
             <div style={{ display: 'flex', gap: 10, alignItems: 'center', minWidth: 0 }}>
-              {/* Arrows as well as drag: dragging is unreliable on a phone, and
-                  this menu is arranged from behind the counter. */}
-              <span className="cat-nudge" aria-hidden>
-                <button className="chip" disabled={i === 0} title="Move up"
-                  onClick={() => moveDishTo(d.id, i - 1)}>▲</button>
-                <button className="chip" disabled={i === visible.length - 1} title="Move down"
-                  onClick={() => moveDishTo(d.id, i + 1)}>▼</button>
-              </span>
+              {/* THE DISH ARROWS ARE GONE at the partner's request -- "please
+                  remove this arrow buttons".
+                  Worth knowing what went with them: the note here used to say
+                  they existed because dragging is unreliable on a phone and
+                  this menu is arranged from behind the counter. That reasoning
+                  was not wrong, so dish reordering is now drag-only and will be
+                  harder on a touch screen. He asked directly and specifically,
+                  so this follows the ask -- but if reordering starts feeling
+                  fiddly on his phone, this is why, and the fix is a better
+                  touch drag rather than putting the arrows back.
+                  CONCRETELY: categories were migrated to POINTER events (see
+                  the note at `drag` up top, which says HTML5 drag-and-drop is
+                  unreliable on touch). Dishes were never migrated -- the row
+                  below still uses HTML5 draggable/onDrop. So dish reordering
+                  now rests on the one primitive this file already documents as
+                  unreliable on a phone. Migrating dishes to the same pointer
+                  drag categories use is the real follow-up here.
+                  The CATEGORY arrows above are deliberately kept: he named the
+                  buttons next to menu items, and category order is a different
+                  control in a different part of the screen. */}
               {d.photo_url
                 ? <img className="dish-thumb" src={d.photo_url} alt="" loading="lazy" />
                 : <span className="dish-thumb empty" aria-hidden>🍽</span>}
@@ -516,7 +528,7 @@ export function MenuManager() {
         ))}
         {visible.length > 1 && (
           <p className="dim" style={{ fontSize: 12.5, padding: '4px 0 12px' }}>
-            Drag a dish, or use ▲▼, to set the order diners see.
+            Drag a dish to set the order diners see.
             {activeCat !== 'all' && ' Within a category, the rest of the menu stays put.'}
           </p>
         )}
