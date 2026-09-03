@@ -3,7 +3,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import QRCode from 'qrcode';
-import { fetchTables, createTable, removeTable, type PortalTable } from '../../lib/portalApi';
+import { fetchTables, createTable, removeTable, setTableCapacity, type PortalTable } from '../../lib/portalApi';
 import { usePartner } from './PartnerShell';
 import { Spinner } from '../../components';
 
@@ -175,6 +175,33 @@ export function TablesQR() {
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <p style={{ fontWeight: 700 }}>{t.label}</p>
                   <p className="dim" style={{ fontSize: 12, wordBreak: 'break-all' }}>{t.qr_token}</p>
+                  {/* SEATS, so a reservation can be matched to a table. The
+                      booking already captures party size; without this, "party
+                      of 6" is a number nobody can act on unless they know the
+                      room by heart.
+                      Blank is a real value meaning not recorded -- a
+                      restaurant that never fills this in keeps working exactly
+                      as it does now. */}
+                  {!t.is_parcel && (
+                    <label className="dim" style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 6, marginTop: 6 }}>
+                      Seats
+                      <input
+                        className="code-input"
+                        inputMode="numeric"
+                        placeholder="—"
+                        defaultValue={t.seating_capacity ?? ''}
+                        style={{ width: 62, padding: '4px 8px', fontSize: 12.5 }}
+                        onBlur={async (e) => {
+                          const raw = e.target.value.trim();
+                          const next = raw === '' ? null : Number(raw);
+                          if (next !== null && !Number.isFinite(next)) return;
+                          if ((t.seating_capacity ?? null) === next) return;
+                          try { await setTableCapacity(t.id, next); load(); }
+                          catch { /* the field keeps what was typed; next blur retries */ }
+                        }}
+                      />
+                    </label>
+                  )}
                   <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
                     <button className="chip" onClick={() => setPrintTables([t])}>🖨 Print</button>
                     <button className="chip" onClick={() => navigator.clipboard?.writeText(qrLink(t.qr_token))}>Copy link</button>

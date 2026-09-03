@@ -32,6 +32,27 @@ export function Reservations() {
                 {new Date(r.booked_for).toLocaleString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}
               </strong>
               <span className="muted" style={{ fontSize: 13.5 }}> · party of {r.party_size}</span>
+              {/* WHO IT IS FOR. The booking has always carried a name and a
+                  phone -- create_reservation requires both from an anonymous
+                  diner -- and this page never showed either. Staff had a
+                  "party of 4 at 7:30" they could not attribute at the door or
+                  ring when nobody arrived, which is most of what a
+                  reservations list is for.
+                  The phone is a tel: link, because the moment staff want it is
+                  the moment they want to call it. */}
+              {(r.guest_name || r.guest_phone) && (
+                <div className="dim" style={{ fontSize: 13 }}>
+                  {r.guest_name ?? 'Guest'}
+                  {r.guest_phone && (
+                    <>
+                      {' · '}
+                      <a href={`tel:${r.guest_phone}`} style={{ color: 'inherit' }}>
+                        {r.guest_phone}
+                      </a>
+                    </>
+                  )}
+                </div>
+              )}
             </span>
             <span style={{ display: 'flex', gap: 6 }}>
               {(['confirmed', 'seated', 'no_show'] as const).map((s) => (

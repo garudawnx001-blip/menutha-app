@@ -179,12 +179,18 @@ export async function listDishImages(): Promise<Map<string, string>> {
 
 // ── Tables & QR ────────────────────────────────────────────────────────────
 
-export interface PortalTable { id: string; label: string; room: string | null; is_parcel: boolean; qr_token: string; is_active: boolean }
+export interface PortalTable {
+  id: string; label: string; room: string | null; is_parcel: boolean;
+  qr_token: string; is_active: boolean;
+  /** How many this table seats. NULL means not recorded -- treat as unknown,
+   *  never as zero. */
+  seating_capacity: number | null;
+}
 
 export async function fetchTables(restaurantId: string): Promise<PortalTable[]> {
   const { data, error } = await supabase
     .from('dining_table')
-    .select('id, label, room, is_parcel, qr_token, is_active')
+    .select('id, label, room, is_parcel, qr_token, is_active, seating_capacity')
     .eq('restaurant_id', restaurantId)
     .eq('is_active', true)
     .order('created_at');
@@ -239,11 +245,17 @@ export async function fetchPnl(restaurantId: string, monthISO: string) {
 
 // ── Reservations ───────────────────────────────────────────────────────────
 
-export interface Reservation { id: string; party_size: number; booked_for: string; status: string }
+/** Includes WHO booked. The staff page showed date, party size and status but
+ *  never the name or phone, so a booking could not be attributed or called --
+ *  the two things staff actually need when someone does not turn up. */
+export interface Reservation {
+  id: string; party_size: number; booked_for: string; status: string;
+  guest_name: string | null; guest_phone: string | null;
+}
 
 export async function fetchReservations(restaurantId: string): Promise<Reservation[]> {
   const { data, error } = await supabase
-    .from('table_booking').select('id, party_size, booked_for, status')
+    .from('table_booking').select('id, party_size, booked_for, status, guest_name, guest_phone')
     .eq('restaurant_id', restaurantId)
     .gte('booked_for', new Date(Date.now() - 864e5).toISOString())
     .order('booked_for');
@@ -741,5 +753,16 @@ export async function addMedia(
 
 export async function deleteMedia(id: string): Promise<void> {
   const { error } = await supabase.from('restaurant_media').delete().eq('id', id);
+  if (error) throw error;
+}
+
+/** How many a table seats. Null clears it back to "not recorded", which is a
+ *  real state -- a restaurant that never fills this in should keep working
+ *  exactly as it does today rather than matching against an invented number. */
+export async function setTableCapacity(id: string, seats: number | null): Promise<void> {
+  const { error } = await supabase
+    .from('dining_table')
+    .update({ seating_capacity: seats == null ? null : Math.min(40, Math.max(1, Math.round(seats))) })
+    .eq('id', id);
   if (error) throw error;
 }
