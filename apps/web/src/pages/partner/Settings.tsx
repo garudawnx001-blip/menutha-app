@@ -6,6 +6,7 @@ import {
   updateRestaurant, uploadImage,
 } from '../../lib/portalApi';
 import { usePartner } from './PartnerShell';
+import { BillCharges } from './BillCharges';
 
 export function Settings() {
   const { restaurant, role, can, reload } = usePartner();
@@ -29,6 +30,17 @@ export function Settings() {
     cgst_pct: String((restaurant as any).cgst_pct ?? 2.5),
     service_charge_pct: String((restaurant as any).service_charge_pct ?? 0),
     grace_seconds: String((restaurant as any).grace_seconds ?? 60),
+    /* Bill options -- "please give all the options". FSSAI sits with GSTIN
+       because both are licence numbers a bill has to carry; thanks and terms
+       are the two halves of a footer restaurants actually write. */
+    fssai_no: (restaurant as any).fssai_no ?? '',
+    bill_thanks: (restaurant as any).bill_thanks ?? '',
+    bill_terms: (restaurant as any).bill_terms ?? '',
+    /* Off unless the restaurant genuinely charges differently for AC seating.
+       A charge nobody asked for appearing on a bill is worse than one
+       missing, so this stays opt-in and the per-table AC flag is only read
+       when it is on. */
+    ac_pricing: (restaurant as any).ac_pricing === true,
   });
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -43,6 +55,12 @@ export function Settings() {
         phone: form.phone.trim() || null,
         gstin: form.gstin.trim().toUpperCase() || null,
         bill_footer: form.bill_footer.trim() || null,
+        // Uppercased like GSTIN: a licence number printed in mixed case on a
+        // bill reads as a typo even when it is correct.
+        fssai_no: form.fssai_no.trim().toUpperCase() || null,
+        bill_thanks: form.bill_thanks.trim() || null,
+        bill_terms: form.bill_terms.trim() || null,
+        ac_pricing: form.ac_pricing,
         city: form.city.trim() || null,
         cuisine_tags: form.cuisine_tags.trim() || null,
         open_time: form.open_time || null,
@@ -109,6 +127,12 @@ export function Settings() {
             <input className="code-input" placeholder="29ABCDE1234F1Z5"
               value={form.gstin} onChange={(e) => setForm({ ...form, gstin: e.target.value })} />
           </F>
+          {/* Beside GSTIN because both are licence numbers a bill carries, and
+              an owner filling one in is the person who knows the other. */}
+          <F label="FSSAI licence (on bill)">
+            <input className="code-input" placeholder="12345678901234"
+              value={form.fssai_no} onChange={(e) => setForm({ ...form, fssai_no: e.target.value })} />
+          </F>
         </div>
         <F label="Bill footer message">
           <input className="code-input" placeholder="Thank you — please visit again!"
@@ -116,6 +140,40 @@ export function Settings() {
           <span className="dim" style={{ fontSize: 12 }}>
             Printed at the bottom of every bill. Leave blank for none.
           </span>
+        </F>
+        {/* THREE FOOTER FIELDS, NOT ONE. A restaurant's footer is really three
+            different things -- a warm sign-off, the legal small print, and the
+            licence numbers above. Cramming them into one line is why owners
+            end up with "Thank you! GST 29ABC... no refunds" as a single
+            sentence. Separate fields let the bill lay each one out properly. */}
+        <F label="Thank-you line">
+          <input className="code-input" placeholder="Thank you — please visit again!"
+            value={form.bill_thanks} onChange={(e) => setForm({ ...form, bill_thanks: e.target.value })} />
+        </F>
+        <F label="Terms / small print">
+          <textarea className="code-input" rows={2}
+            placeholder="No refunds on packed items. Taxes as applicable."
+            value={form.bill_terms} onChange={(e) => setForm({ ...form, bill_terms: e.target.value })} />
+        </F>
+        {/* AC pricing is a toggle rather than a charge, because it decides
+            whether the per-table AC flag and the ac/non_ac custom charges mean
+            anything at all. Off, they are ignored entirely. */}
+        <F label="Air-conditioned pricing">
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14 }}>
+            <input type="checkbox" checked={form.ac_pricing}
+              onChange={(e) => setForm({ ...form, ac_pricing: e.target.checked })} />
+            Charge differently for AC tables
+          </label>
+          <span className="dim" style={{ fontSize: 12 }}>
+            Off unless you actually do. When on, mark which tables are AC in
+            Tables &amp; QR, and add an AC charge below.
+          </span>
+        </F>
+        {/* Charges save themselves as they are added, so they sit outside the
+            form's own Save. Mixing the two would mean adding a charge and then
+            wondering whether Save was still required for it. */}
+        <F label="Custom charges">
+          <BillCharges restaurantId={restaurant.id} acPricing={form.ac_pricing} />
         </F>
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
           <div style={{ flex: '1 1 140px', minWidth: 0 }}>

@@ -529,3 +529,64 @@ export async function staffCancelOrder(orderId: string) {
   const { error } = await supabase.rpc('staff_cancel_order', { p_order_id: orderId });
   if (error) throw error;
 }
+
+/* ── Custom bill charges ───────────────────────────────────────────────────
+   Rows, not columns, so the owner can add a charge without us shipping code.
+   See the 2026-09-03_bill_options migration for why.
+
+   The AMOUNT is never computed here. `order_charges(order_id)` resolves what
+   applies and what it comes to, server-side, for both this portal and the app
+   -- a bill that differs between the laptop and the phone is the fastest way
+   to lose trust in the totals. This module only manages the DEFINITIONS. */
+
+export type ChargeKind = 'flat' | 'percent';
+export type ChargeScope = 'all' | 'dine_in' | 'parcel' | 'ac' | 'non_ac';
+
+export interface RestaurantCharge {
+  id: string;
+  restaurant_id: string;
+  label: string;
+  kind: ChargeKind;
+  value: number;
+  applies_to: ChargeScope;
+  is_active: boolean;
+  sort_order: number;
+}
+
+export async function fetchCharges(restaurantId: string): Promise<RestaurantCharge[]> {
+  const { data, error } = await supabase
+    .from('restaurant_charge')
+    .select('id, restaurant_id, label, kind, value, applies_to, is_active, sort_order')
+    .eq('restaurant_id', restaurantId)
+    .order('sort_order')
+    .order('label');
+  if (error) throw error;
+  return (data ?? []) as RestaurantCharge[];
+}
+
+export async function saveCharge(
+  restaurantId: string,
+  c: Partial<RestaurantCharge> & { label: string; kind: ChargeKind; value: number },
+): Promise<void> {
+  const row = {
+    restaurant_id: restaurantId,
+    label: c.label.trim(),
+    kind: c.kind,
+    // Clamped here as well as in the check constraint: a negative charge is a
+    // discount, and a discount that arrives through the charges table would
+    // bypass every place a discount is meant to be recorded.
+    value: Math.max(0, Number(c.value) || 0),
+    applies_to: c.applies_to ?? 'all',
+    is_active: c.is_active ?? true,
+    sort_order: c.sort_order ?? 0,
+  };
+  const { error } = c.id
+    ? await supabase.from('restaurant_charge').update(row).eq('id', c.id)
+    : await supabase.from('restaurant_charge').insert(row);
+  if (error) throw error;
+}
+
+export async function deleteCharge(id: string): Promise<void> {
+  const { error } = await supabase.from('restaurant_charge').delete().eq('id', id);
+  if (error) throw error;
+}
