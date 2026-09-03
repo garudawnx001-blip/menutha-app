@@ -1683,3 +1683,28 @@ select.code-input:focus { border-color: var(--primary); }
 @media (prefers-reduced-motion: reduce) {
   .sheet-scrim, .sheet { animation: none; }
 }
+
+/* ── Public profile showcase ───────────────────────────────────────────────
+   A horizontal strip that scrolls, not a grid that wraps. On a phone -- which
+   is where a diner reads this -- a wrapping grid pushes the reservation form
+   below the fold the moment a restaurant adds a fourth photo, and the form is
+   the thing the page is for. */
+.showcase-strip {
+  display: flex; gap: 10px; overflow-x: auto;
+  padding-bottom: 6px; margin-bottom: 18px;
+  scroll-snap-type: x proximity;
+  -webkit-overflow-scrolling: touch;
+}
+.showcase-item {
+  flex: 0 0 auto; width: 150px; margin: 0;
+  scroll-snap-align: start;
+}
+.showcase-item img {
+  width: 150px; height: 150px; object-fit: cover;
+  border-radius: 14px; display: block;
+  background: var(--sand, #F3EADA);
+}
+.showcase-item figcaption {
+  font-size: 12px; color: var(--text-muted);
+  margin-top: 5px; line-height: 1.3;
+}

@@ -33,6 +33,23 @@ export function PublicRestaurant() {
       .then(({ data, error: e }) => (e || !data ? setFailed(true) : setR(data as PublicRest)));
   }, [slug]);
 
+  /* The showcase. Loaded SEPARATELY from the restaurant itself and failing
+     silently to an empty list, so a page still renders in full if the
+     showcase table is not there yet -- which is the state today, until the
+     migration is run. A public page that 500s because an optional gallery is
+     missing would be a poor trade for a nice-to-have. */
+  const [media, setMedia] = useState<{ id: string; url: string; caption: string | null }[]>([]);
+  useEffect(() => {
+    if (!r?.id) return;
+    supabase
+      .from('restaurant_media')
+      .select('id, url, caption, kind, sort_order')
+      .eq('restaurant_id', r.id)
+      .order('kind')
+      .order('sort_order')
+      .then(({ data, error: e }) => setMedia(e ? [] : (data ?? []) as any));
+  }, [r?.id]);
+
   // SEO: title, description, and Restaurant JSON-LD.
   useEffect(() => {
     if (!r) return;
@@ -153,6 +170,27 @@ export function PublicRestaurant() {
           </div>
         ))}
       </div>
+
+      {/* THE SHOWCASE, between the menu and the booking form.
+          That position is deliberate: someone has just read what the place
+          serves and is deciding whether to come. The room, the menu card and
+          the licences are exactly what answers that, and they answer it
+          immediately before the button that asks them to commit.
+          Silent when the restaurant has added nothing, so a page that has not
+          been filled in does not show an empty gallery. */}
+      {media.length > 0 && (
+        <>
+          <h2 className="cat-heading">About this place</h2>
+          <div className="showcase-strip">
+            {media.map((m) => (
+              <figure key={m.id} className="showcase-item">
+                <img src={m.url} alt={m.caption ?? 'Restaurant photo'} loading="lazy" />
+                {m.caption && <figcaption>{m.caption}</figcaption>}
+              </figure>
+            ))}
+          </div>
+        </>
+      )}
 
       <h2 className="cat-heading">Reserve a table</h2>
       {reserved ? (

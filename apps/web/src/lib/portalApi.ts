@@ -161,7 +161,7 @@ export async function deleteDish(id: string) {
   if (error) throw error;
 }
 
-export async function uploadImage(folder: 'dishes' | 'logos' | 'banners' | 'receipts', file: File): Promise<string> {
+export async function uploadImage(folder: 'dishes' | 'logos' | 'banners' | 'receipts' | 'showcase', file: File): Promise<string> {
   const path = `${folder}/${Date.now()}_${file.name.replace(/[^\w.\-]/g, '_')}`;
   const { error } = await supabase.storage.from('restaurant').upload(path, file, { upsert: true });
   if (error) throw error;
@@ -698,3 +698,48 @@ export const SERVICE_LABEL: Record<string, string> = {
   cutlery: 'Cutlery',
   assistance: 'Wants someone',
 };
+
+/* ── Profile showcase: menu cards, certificates, photos ────────────────────
+   The restaurant's shop window, shown on its public page. A LIST rather than
+   fixed columns, because it grows: three certificates today, a new licence
+   next year, a second menu card when the bar menu arrives. See the
+   2026-09-03_profile_showcase migration. */
+
+export type MediaKind = 'menu_card' | 'certificate' | 'photo';
+
+export interface RestaurantMedia {
+  id: string;
+  restaurant_id: string;
+  kind: MediaKind;
+  url: string;
+  caption: string | null;
+  sort_order: number;
+}
+
+export async function fetchMedia(restaurantId: string): Promise<RestaurantMedia[]> {
+  const { data, error } = await supabase
+    .from('restaurant_media')
+    .select('id, restaurant_id, kind, url, caption, sort_order')
+    .eq('restaurant_id', restaurantId)
+    .order('kind')
+    .order('sort_order');
+  // Soft-fail: an app deployed before the migration should show a profile
+  // without a showcase, not a broken page.
+  if (error) return [];
+  return (data ?? []) as RestaurantMedia[];
+}
+
+export async function addMedia(
+  restaurantId: string, kind: MediaKind, url: string, caption?: string,
+): Promise<void> {
+  const { error } = await supabase.from('restaurant_media').insert({
+    restaurant_id: restaurantId, kind, url,
+    caption: caption?.trim() || null,
+  });
+  if (error) throw error;
+}
+
+export async function deleteMedia(id: string): Promise<void> {
+  const { error } = await supabase.from('restaurant_media').delete().eq('id', id);
+  if (error) throw error;
+}

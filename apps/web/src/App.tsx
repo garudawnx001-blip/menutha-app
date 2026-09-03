@@ -16,6 +16,7 @@ import { TablesQR } from './pages/partner/TablesQR';
 import { Billing } from './pages/partner/Billing';
 import { Reservations } from './pages/partner/Reservations';
 import { Buffets } from './pages/partner/Buffets';
+import { Showcase } from './pages/partner/Showcase';
 import { Staff } from './pages/partner/Staff';
 import { Settings } from './pages/partner/Settings';
 import { Menu } from './pages/Menu';
@@ -51,6 +52,7 @@ export function App() {
 
             <Route path="/partner/reports" element={<Reports />} />
             <Route path="/partner/buffets" element={<Buffets />} />
+            <Route path="/partner/showcase" element={<Showcase />} />
             <Route path="/partner/reservations" element={<Reservations />} />
             <Route path="/partner/staff" element={<Staff />} />
             <Route path="/partner/settings" element={<Settings />} />
