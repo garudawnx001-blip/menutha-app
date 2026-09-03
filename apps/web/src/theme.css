@@ -863,9 +863,31 @@ input.code-input::placeholder { color: var(--text-dim); }
   display: flex;
   align-items: flex-end;
   gap: 3px;
-  height: 132px;
+  /* 132 -> 156: the value labels above each bar need their own band, and
+     taking it out of the bar height would have made the bars shorter every
+     time the numbers were switched on. */
+  height: 156px;
   margin-top: 14px;
   padding-top: 4px;
+}
+/** The amount and the order count printed above each bar.
+ *
+ *  Fixed height whether or not a column prints a value, so the bars all start
+ *  from the same baseline -- otherwise columns with labels would be shorter
+ *  than columns without, and the chart would read as noise.
+ *  `b` is the money, `i` the order count under it, both non-italic and
+ *  non-bold: the elements are chosen for brevity, the styling says what they
+ *  mean. */
+.growth-val {
+  height: 24px;
+  display: flex; flex-direction: column; align-items: center; justify-content: flex-end;
+  line-height: 1.1; white-space: nowrap; overflow: visible;
+}
+.growth-val b {
+  font-size: 9.5px; font-weight: 650; color: var(--text);
+}
+.growth-val i {
+  font-size: 9px; font-style: normal; color: var(--text-muted);
 }
 .growth-col { flex: 1; min-width: 0; display: flex; flex-direction: column; height: 100%; }
 .growth-bar-wrap { flex: 1; display: flex; align-items: flex-end; }

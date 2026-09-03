@@ -106,11 +106,30 @@ function Bars({ points, metric }: { points: GrowthPoint[]; metric: 'revenue' | '
         const pct = (v / peak) * 100;
         return (
           <div key={i} className="growth-col">
+            {/* THE NUMBERS ON THE BARS. His reference showed the value printed
+                on the chart, and the figures were previously only in a `title`
+                tooltip -- invisible on a touch screen, which is where he reads
+                this.
+                Both figures, because he asked for the amount AND the order
+                count: money on top, orders under it.
+                Printed on the same cadence as the tick labels. At 30 bars
+                every column would otherwise carry two numbers roughly eleven
+                pixels apart, which is the "overlap into mush" the tick step
+                already exists to avoid. Empty bars stay blank rather than
+                printing a row of zeroes. */}
+            <span className="growth-val" aria-hidden>
+              {i % step === 0 && v > 0 ? (
+                <>
+                  <b>{short(p.revenue)}</b>
+                  <i>{p.orders}</i>
+                </>
+              ) : null}
+            </span>
             <span className="growth-bar-wrap">
               <span
                 className={v > 0 ? 'growth-bar' : 'growth-bar empty'}
                 style={{ height: `${Math.max(pct, v > 0 ? 4 : 1)}%` }}
-                title={`${p.label}: ${metric === 'revenue' ? inr(p.revenue) : `${p.orders} orders`}`}
+                title={`${p.label}: ${inr(p.revenue)}, ${p.orders} order${p.orders === 1 ? '' : 's'}`}
               />
             </span>
             <span className="growth-tick">{i % step === 0 ? p.label : ''}</span>
@@ -123,6 +142,9 @@ function Bars({ points, metric }: { points: GrowthPoint[]; metric: 'revenue' | '
 
 export function Growth({ restaurantId }: { restaurantId: string }) {
   const [period, setPeriod] = useState<GrowthPeriod>('week');
+  /** Single-day mode: a custom range whose ends match. UI-only, so no new
+   *  GrowthPeriod key and nothing changes server-side. */
+  const [single, setSingle] = useState(false);
   // Default the custom range to the last 7 days so the pickers open populated.
   const iso = (d: Date) => d.toISOString().slice(0, 10);
   const [from, setFrom] = useState(() => { const d = new Date(); d.setDate(d.getDate() - 6); return iso(d); });
@@ -250,15 +272,39 @@ export function Growth({ restaurantId }: { restaurantId: string }) {
           </button>
           {period === 'custom' && (
             <>
+              {/* ONE DAY vs A RANGE. He asked for a single-date option; the
+                  control only offered a range, so picking one day meant setting
+                  the same date twice and hoping you had.
+                  No new period key and no API change: a single day IS a custom
+                  range whose ends match, which fetchGrowth already handles. The
+                  toggle just collapses the two inputs into one and keeps `to`
+                  pinned to `from`. */}
+              <button
+                className={single ? 'chip active' : 'chip'}
+                onClick={() => {
+                  const next = !single;
+                  setSingle(next);
+                  if (next) setTo(from);
+                }}
+                title={single ? 'Switch back to a date range' : 'Report on one day'}
+              >
+                {single ? 'One day' : 'Range'}
+              </button>
               {/* Native date inputs: a real calendar on every platform, and no
                   date-picker dependency in the bundle. */}
-              <input type="date" className="code-input" aria-label="From date"
+              <input type="date" className="code-input"
+                aria-label={single ? 'Date' : 'From date'}
                 style={{ padding: '7px 8px', fontSize: 12.5, width: 'auto' }}
-                value={from} max={to} onChange={(e) => setFrom(e.target.value)} />
-              <span className="dim" style={{ fontSize: 12 }}>to</span>
-              <input type="date" className="code-input" aria-label="To date"
-                style={{ padding: '7px 8px', fontSize: 12.5, width: 'auto' }}
-                value={to} min={from} max={iso(new Date())} onChange={(e) => setTo(e.target.value)} />
+                value={from} max={single ? iso(new Date()) : to}
+                onChange={(e) => { setFrom(e.target.value); if (single) setTo(e.target.value); }} />
+              {!single && (
+                <>
+                  <span className="dim" style={{ fontSize: 12 }}>to</span>
+                  <input type="date" className="code-input" aria-label="To date"
+                    style={{ padding: '7px 8px', fontSize: 12.5, width: 'auto' }}
+                    value={to} min={from} max={iso(new Date())} onChange={(e) => setTo(e.target.value)} />
+                </>
+              )}
             </>
           )}
         </div>
