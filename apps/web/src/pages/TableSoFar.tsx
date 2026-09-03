@@ -28,7 +28,23 @@ export function TableSoFar({ session }: { session: Session }) {
   const [mine, setMine] = useState<OpenOrder[]>([]);
   const [cancelling, setCancelling] = useState<string | null>(null);
   useEffect(() => {
-    if (session.table.is_parcel || session.demo) return;
+    /**
+     * PARCEL ORDERS GET THE CANCEL WINDOW TOO -- this is "cancel timing is not
+     * working" on takeaway.
+     *
+     * This used to bail out on `is_parcel`, and so did the bill poll below and
+     * the render in Menu.tsx. Between them a takeaway diner never saw the
+     * pending-order block at all, so there was no countdown and no cancel
+     * button: the feature was not broken for parcel, it was absent.
+     *
+     * The exclusion made sense for the half of this component that summarises
+     * the TABLE's bill -- there is no shared table on a takeaway, so that
+     * stays parcel-guarded below. It was never right for the half that lists
+     * MY not-yet-released orders. A takeaway diner has exactly the same grace
+     * window (the trigger stamps released_at on every order regardless of
+     * type) and exactly the same reason to pull an order back.
+     */
+    if (session.demo) return;
     let alive = true;
     const load = () => fetchMyOpenOrders(session).then((o) => alive && setMine(o)).catch(() => {});
     load();
@@ -46,6 +62,10 @@ export function TableSoFar({ session }: { session: Session }) {
   };
 
   useEffect(() => {
+    // STILL parcel-guarded, and deliberately so: this half summarises the
+    // TABLE's bill, and a takeaway has no shared table to summarise. `rows`
+    // therefore stays empty for parcel and the summary block below is already
+    // `hidden={!rows.length}`, so a takeaway diner sees the cancel block alone.
     if (session.table.is_parcel || session.demo) return;
     let alive = true;
     const load = () =>

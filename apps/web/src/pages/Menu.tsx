@@ -301,7 +301,7 @@ export function Menu() {
 
       {/* What the table has already ordered — on the menu itself, because
           leaving to the bill screen to check is what caused double-ordering. */}
-      {!session.demo && !session.table.is_parcel && <TableSoFar session={session} />}
+      {!session.demo && <TableSoFar session={session} />}
 
       {items === null && !failed && <Spinner label={t('menu.loading')} />}
       {failed && (
