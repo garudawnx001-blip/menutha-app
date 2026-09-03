@@ -590,3 +590,69 @@ export async function deleteCharge(id: string): Promise<void> {
   const { error } = await supabase.from('restaurant_charge').delete().eq('id', id);
   if (error) throw error;
 }
+
+/* ── Buffets ───────────────────────────────────────────────────────────────
+   The table, the two kinds and the per-person price have existed since the
+   original schema; what has never existed is a way for an owner to CREATE one.
+   The diner side can already select a buffet, so this is the missing half
+   rather than a new feature.
+
+   `items` is a jsonb array of menu_item ids -- what is ON the buffet today.
+   Stored as ids rather than copied names so a price or spelling fix on a dish
+   flows through, and so a dish removed from the menu cannot linger on a
+   buffet as a stale string. */
+
+export type BuffetKind = 'complimentary' | 'paid';
+
+export interface Buffet {
+  id: string;
+  restaurant_id: string;
+  name: string;
+  kind: BuffetKind;
+  price: number;
+  items: string[] | null;
+  starts_at: string | null;
+  ends_at: string | null;
+  is_active: boolean;
+}
+
+export async function fetchBuffets(restaurantId: string): Promise<Buffet[]> {
+  const { data, error } = await supabase
+    .from('buffet')
+    .select('id, restaurant_id, name, kind, price, items, starts_at, ends_at, is_active')
+    .eq('restaurant_id', restaurantId)
+    .order('name');
+  if (error) throw error;
+  return (data ?? []).map((b: any) => ({
+    ...b,
+    items: Array.isArray(b.items) ? b.items : [],
+  })) as Buffet[];
+}
+
+export async function saveBuffet(
+  restaurantId: string,
+  b: Partial<Buffet> & { name: string; kind: BuffetKind },
+): Promise<void> {
+  const row = {
+    restaurant_id: restaurantId,
+    name: b.name.trim(),
+    kind: b.kind,
+    // A complimentary buffet is always zero. Letting a price linger on one
+    // after switching kind is how an in-hotel guest gets charged for the
+    // breakfast that comes with the room.
+    price: b.kind === 'complimentary' ? 0 : Math.max(0, Number(b.price) || 0),
+    items: b.items ?? [],
+    starts_at: b.starts_at || null,
+    ends_at: b.ends_at || null,
+    is_active: b.is_active ?? true,
+  };
+  const { error } = b.id
+    ? await supabase.from('buffet').update(row).eq('id', b.id)
+    : await supabase.from('buffet').insert(row);
+  if (error) throw error;
+}
+
+export async function deleteBuffet(id: string): Promise<void> {
+  const { error } = await supabase.from('buffet').delete().eq('id', id);
+  if (error) throw error;
+}

@@ -46,6 +46,7 @@ const NAV: { to: string; label: string; icon: string; roles: PortalRole[]; prima
   { to: '/partner/billing', label: 'Billing', icon: '💳', roles: ['owner', 'manager', 'waiter'], primary: true },
   { to: '/partner/reports', label: 'Reports', icon: '📈', roles: ['owner', 'manager'] },
   { to: '/partner/reservations', label: 'Reservations', icon: '📅', roles: ['owner', 'manager'] },
+  { to: '/partner/buffets', label: 'Buffets', icon: '🍽', roles: ['owner', 'manager'] },
   { to: '/partner/staff', label: 'Staff', icon: '👥', roles: ['owner'] },
   { to: '/partner/plan', label: 'Plan', icon: '⭐', roles: ['owner'] },
   // "Restaurant profile", not "Settings": the overflow button is Settings now,
