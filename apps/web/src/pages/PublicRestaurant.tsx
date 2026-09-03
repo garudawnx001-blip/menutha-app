@@ -16,6 +16,16 @@ interface PublicRest {
   own_website: string | null; rating: number | null; menu: PublicDish[];
 }
 
+/** Diner-facing headings for the three kinds the portal files uploads under.
+ *  Menu card first: it is what a diner opening a restaurant page came for.
+ *  Ordered here rather than by the query, so the page reads the same however
+ *  the rows happen to come back. */
+const SHOWCASE_KINDS: [string, string][] = [
+  ['menu_card', 'The menu card'],
+  ['certificate', 'Licences & awards'],
+  ['photo', 'About this place'],
+];
+
 export function PublicRestaurant() {
   const { slug = '' } = useParams();
   const nav = useNavigate();
@@ -38,7 +48,7 @@ export function PublicRestaurant() {
      showcase table is not there yet -- which is the state today, until the
      migration is run. A public page that 500s because an optional gallery is
      missing would be a poor trade for a nice-to-have. */
-  const [media, setMedia] = useState<{ id: string; url: string; caption: string | null }[]>([]);
+  const [media, setMedia] = useState<{ id: string; url: string; caption: string | null; kind: string }[]>([]);
   useEffect(() => {
     if (!r?.id) return;
     supabase
@@ -178,19 +188,31 @@ export function PublicRestaurant() {
           immediately before the button that asks them to commit.
           Silent when the restaurant has added nothing, so a page that has not
           been filled in does not show an empty gallery. */}
-      {media.length > 0 && (
-        <>
-          <h2 className="cat-heading">About this place</h2>
-          <div className="showcase-strip">
-            {media.map((m) => (
-              <figure key={m.id} className="showcase-item">
-                <img src={m.url} alt={m.caption ?? 'Restaurant photo'} loading="lazy" />
-                {m.caption && <figcaption>{m.caption}</figcaption>}
-              </figure>
-            ))}
-          </div>
-        </>
-      )}
+      {/* GROUPED THE WAY THE OWNER FILED IT.
+          The portal makes them choose a kind for every upload -- menu card,
+          certificate, photo -- and this page then poured all three into one
+          strip under one heading, so the choice they were asked to make changed
+          nothing a diner ever saw. The three are also not the same thing to a
+          reader: a menu card is what they came for, a certificate is what makes
+          them trust the place, and a photo is atmosphere. Menu first for that
+          reason. A kind with nothing in it prints no heading. */}
+      {SHOWCASE_KINDS.map(([kind, heading]) => {
+        const of = media.filter((m) => m.kind === kind);
+        if (!of.length) return null;
+        return (
+          <React.Fragment key={kind}>
+            <h2 className="cat-heading">{heading}</h2>
+            <div className="showcase-strip">
+              {of.map((m) => (
+                <figure key={m.id} className="showcase-item">
+                  <img src={m.url} alt={m.caption ?? heading} loading="lazy" />
+                  {m.caption && <figcaption>{m.caption}</figcaption>}
+                </figure>
+              ))}
+            </div>
+          </React.Fragment>
+        );
+      })}
 
       <h2 className="cat-heading">Reserve a table</h2>
       {reserved ? (

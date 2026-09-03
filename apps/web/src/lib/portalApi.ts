@@ -12,6 +12,7 @@ export interface Membership {
     gstin?: string | null;
     upi_vpa?: string | null;
     cuisine_tags?: string | null;
+    slug?: string | null;
     own_website?: string | null;
     gateway_key_id?: string | null;
     pnl_visible_to_managers?: boolean;

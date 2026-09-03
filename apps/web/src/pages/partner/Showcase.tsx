@@ -68,6 +68,13 @@ export function Showcase() {
     finally { setBusy(false); }
   };
 
+  // Same rule as the printed QR links: the portal and the diner app are one
+  // deployment, so the page's own origin is always right — and it cannot drift
+  // the way a hardcoded fallback did, which is how every QR ended up pointing
+  // at a GitHub Pages host with no site on it.
+  const origin = typeof window !== 'undefined' ? window.location.origin : 'https://menutha.com';
+  const publicUrl = `${origin}/r/${restaurant.slug ?? ''}`;
+
   if (loading) return <Spinner />;
 
   return (
@@ -78,6 +85,22 @@ export function Showcase() {
         Shown on your public page, where diners look before they visit. Your
         menu card, your licences, and photos of the place.
       </p>
+
+      {/* THE PAGE THIS FEEDS, AND ITS LINK.
+          The whole point of uploading here is a page the owner never had a way
+          to reach: nothing in the portal opened it, and nothing showed the
+          address to send anyone. So they filled in a showcase and had to take
+          it on trust that it appeared somewhere. Both are here now -- open it,
+          or copy the link to put in a bio or a WhatsApp status. */}
+      {restaurant.slug && (
+        <div className="glass" style={{ padding: 12, marginBottom: 14, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <span className="dim" style={{ fontSize: 12.5, flex: 1, minWidth: 180, wordBreak: 'break-all' }}>
+            {publicUrl}
+          </span>
+          <a className="chip" href={publicUrl} target="_blank" rel="noreferrer">Open my page ↗</a>
+          <button className="chip" onClick={() => navigator.clipboard?.writeText(publicUrl)}>Copy link</button>
+        </div>
+      )}
       {error && <p style={{ color: 'var(--error)', fontSize: 14, marginBottom: 10 }}>{error}</p>}
 
       {KINDS.map((k) => {
