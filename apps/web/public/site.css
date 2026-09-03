@@ -252,7 +252,7 @@ body {
 @media (max-width: 680px) {
   .nav-inner { padding: 12px 0; gap: 10px; }
   .nav-links { gap: 10px; }
-  .nav-links a:not(.btn-solid) { display: none; }
+  .nav-links > a:not(.btn-solid) { display: none; }
   .nav .btn { padding: 10px 16px; font-size: 14px; }
 }
 
@@ -536,5 +536,81 @@ body::before {
     display: inline-flex;
     align-items: center;
     min-height: 40px;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   LOG IN AND SIGN UP, BOTH VISIBLE THE MOMENT THE PAGE OPENS
+   ───────────────────────────────────────────────────────────────────────────
+   The nav carried a single "Owner login" button. A restaurant arriving here
+   for the first time has no account to log into, so the only door on the page
+   was one they could not walk through -- and the way in was buried: press
+   Owner login, land on a login form, notice a small "Sign up" tab, press that.
+   Three steps and a wrong-looking screen before the thing they actually came
+   to do appears.
+
+   Both choices now sit in the nav from the first paint, as one segmented unit
+   rather than two loose buttons -- deliberately, because the nav row on a
+   phone must never exceed the viewport (that overflow was a real regression
+   once) and one compact control is easier to hold inside the row than two.
+
+   Sign up carries the orange because it is the primary action for a visitor
+   who does not have an account yet; Log in is the quieter half.
+
+   SELECTED / PRESSED IS ORANGE, which is the client's rule for this site.
+   Pressing either half fills it saffron, and the nav link for the page you are
+   already on is saffron too instead of the near-black it used to be -- so
+   "where am I" and "what did I just press" are answered in the same colour.
+
+   NOTE ON SCOPE: this is the marketing site only. The portal's own login page
+   keeps its no-orange treatment (.login-lens in theme.css), which the client
+   asked for separately and by name. */
+.auth-switch {
+  display: inline-flex; align-items: center; gap: 4px; padding: 4px;
+  background: var(--card); border: 1px solid var(--line);
+  border-radius: 999px; white-space: nowrap;
+}
+.auth-switch a {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-height: 38px; padding: 0 15px; border-radius: 999px;
+  font-weight: 700; font-size: 14px; color: var(--ink-soft); background: transparent;
+  transition: background .18s ease, color .18s ease, box-shadow .18s ease, transform .14s ease;
+}
+.nav-links .auth-switch a:hover { color: var(--ink); }
+
+/* Orange: the primary half, and EITHER half while it is being pressed. */
+.auth-switch a.is-primary,
+.nav-links .auth-switch a.is-primary,
+.auth-switch a:active,
+.nav-links .auth-switch a:active {
+  background: linear-gradient(135deg, var(--saffron), var(--saffron-deep));
+  color: #fff;
+  box-shadow: 0 5px 14px rgba(217, 119, 87, 0.30);
+}
+.auth-switch a:active { transform: scale(0.97); }
+
+/* The page you are on, in the same orange as the press. */
+.nav-links > a.active { color: var(--saffron-deep); }
+
+/* Every other CTA answers a press in orange too. btn-solid already is; the
+   outline and ghost variants used to reply with nothing but a scale. */
+.btn-line:active,
+.band .btn-line.ghost:active {
+  background: linear-gradient(135deg, var(--saffron), var(--saffron-deep));
+  border-color: var(--saffron-deep);
+  color: #fff;
+}
+
+@media (max-width: 680px) {
+  /* Compact enough to sit beside the wordmark (and the Back pill on inner
+     pages) without pushing the row past the viewport. */
+  .auth-switch { gap: 2px; padding: 3px; }
+  .auth-switch a { min-height: 36px; padding: 0 12px; font-size: 13.5px; }
+
+  /* Inside the hamburger drawer the switch is a full-width two-up row, not
+     two stacked blocks -- the drawer forces display:block on every anchor. */
+  .nav:has(.nav-toggle) .nav-links .auth-switch { display: flex; margin-top: 6px; width: 100%; }
+  .nav:has(.nav-toggle) .nav-links .auth-switch a {
+    display: flex !important; flex: 1; text-align: center; padding: 0 12px; min-height: 42px;
   }
 }

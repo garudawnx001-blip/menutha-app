@@ -9,7 +9,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Inter:wght@400;600;700&display=swap" rel="stylesheet" />
-<link rel="stylesheet" href="/site.css?v=11" />
+<link rel="stylesheet" href="/site.css?v=12" />
 </head>
 <body>
 <nav class="nav"><div class="wrap nav-inner"><a class="nav-back" href="/" onclick="if(history.length>1){history.back();return false}" aria-label="Go back">&larr; Back</a>
@@ -18,7 +18,7 @@
     <a href="/restaurants">Restaurants</a>
     <a href="/">Home</a><a href="/pricing/">Pricing</a><a class="hide-m" href="/about/">About</a>
     <a class="active" href="/for-restaurants/">For restaurants</a><a class="hide-m" href="/contact/">Contact</a>
-    <a class="btn btn-solid" href="/partner">Owner login</a>
+    <span class="auth-switch"><a href="/partner">Log in</a><a class="is-primary" href="/partner?mode=signup">Sign up</a></span>
   </div>
 </div></nav>
 <header class="wrap" style="padding:64px 0 10px"><div class="stagger" style="max-width:660px">
@@ -26,7 +26,7 @@
   <h1>Keep 100% of every payment. Run everything from your phone.</h1>
   <p class="lede">Sign up with your mobile number, add your dishes (or upload the whole menu from Excel), print your table QRs — and you're taking orders tonight. Your team gets roles; you get the numbers.</p>
   <div class="hero-ctas">
-    <a class="btn btn-solid" href="/partner">Start your 10-day free trial</a>
+    <a class="btn btn-solid" href="/partner?mode=signup">Start your 10-day free trial</a>
     <a class="btn btn-line" href="/pricing/">See plans →</a>
   </div>
   <p class="hero-note">No card needed for the trial · full Growth features included.</p>
@@ -40,7 +40,7 @@
     <div class="card reveal"><h3>Know your profit</h3><p>Log expenses with receipt photos and see monthly Revenue − Expenses = Profit. Export to Excel or PDF for your CA.</p></div>
     <div class="card reveal"><h3>Your team, your rules</h3><p>Invite staff by phone number as Manager or Waiter. Owners decide who sees the money. Everything is permission-locked, not just hidden.</p></div>
   </div>
-  <div class="band reveal"><div><h2>From first QR to first order: about 15 minutes.</h2></div><a class="btn btn-solid" href="/partner">Get started →</a></div>
+  <div class="band reveal"><div><h2>From first QR to first order: about 15 minutes.</h2></div><a class="btn btn-solid" href="/partner?mode=signup">Get started →</a></div>
 </div></section>
 <footer><div class="wrap foot">
   <div><span class="wordmark" style="font-size:18px"><b>menu</b>tha</span><p style="margin-top:6px">Menutha Technologies · Hospet &amp; Hubli, Karnataka</p></div>

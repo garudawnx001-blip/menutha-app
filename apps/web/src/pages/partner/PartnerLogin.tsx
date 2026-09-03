@@ -1,13 +1,27 @@
 /** Restaurant Portal sign-in: phone OTP (owners & invited staff) or
  *  email + password (existing Menuva staff credentials). */
 import React, { useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { Wordmark } from '../../components';
 
 export function PartnerLogin() {
   const nav = useNavigate();
-  const [mode, setMode] = useState<'login' | 'signup'>('login');
+  /** THE SIGN-UP LINKS HAVE TO LAND ON SIGN UP.
+   *
+   *  The marketing site now offers Log in and Sign up side by side, and its
+   *  trial CTAs ("Start your 10-day free trial", "Get started") mean sign up
+   *  too. Every one of them used to arrive here on the LOGIN state, so a
+   *  restaurant that pressed "start free trial" was shown a password field for
+   *  an account it does not have yet — the link went somewhere, but not where
+   *  it said it went.
+   *
+   *  Read once, on arrival. After that the toggle owns the mode, so pressing
+   *  "Log in" is not undone by the URL that brought you here. */
+  const [params] = useSearchParams();
+  const [mode, setMode] = useState<'login' | 'signup'>(
+    params.get('mode') === 'signup' ? 'signup' : 'login',
+  );
   // Email, not OTP. Phone OTP is still a UI stub — SMS is not configured, and
   // the send fails with "SMS login is not configured yet". Defaulting the
   // portal to it stranded the one real user, who signs in with email and
@@ -81,6 +95,44 @@ export function PartnerLogin() {
     nav('/partner/orders', { replace: true });
   };
 
+  /**
+   * SIGN UP ACTUALLY CREATED NOTHING.
+   *
+   * Pressing "Sign up" switched the heading and forced the Email tab — and
+   * then rendered the same email + password form with the same "Login" button
+   * calling the same signInEmail. A restaurant with no account typed one in
+   * and was told "Email or password is incorrect", which is true and useless:
+   * there was no control anywhere on this page that would have made the
+   * account. The only working path was phone OTP, and SMS is not configured.
+   *
+   * supabase.auth.signUp is the missing half. Where email confirmation is off
+   * the call returns a session and the new owner goes straight to registering
+   * the restaurant; where it is on there is no session yet, so we say so
+   * plainly and put them on the Log in side rather than dropping them on a
+   * screen that will reject them.
+   */
+  const signUpEmail = async () => {
+    const em = (emailRef.current?.value || email).trim();
+    const pw = passwordRef.current?.value || password;
+    if (!em || !pw) { setError('Enter your email and choose a password.'); return; }
+    if (pw.length < 6) { setError('Choose a password of at least 6 characters.'); return; }
+    setBusy(true); setError('');
+    const { data, error: err } = await supabase.auth.signUp({ email: em, password: pw });
+    setBusy(false);
+    if (err) {
+      setError(/already registered|already been registered/i.test(err.message)
+        ? 'That email already has an account — switch to “Log in” above.'
+        : err.message);
+      return;
+    }
+    if (!data.session) {
+      setMode('login');
+      setError('Account created. Confirm the email we just sent, then log in here.');
+      return;
+    }
+    nav('/partner/register', { replace: true });
+  };
+
   return (
     // login-lens scopes the no-orange override to THIS page. See theme.css.
     <div className="page fade-in login-lens" style={{ display: 'flex', flexDirection: 'column', minHeight: '100dvh' }}>
@@ -95,7 +147,7 @@ export function PartnerLogin() {
         </h1>
         <p className="muted" style={{ maxWidth: 440, fontSize: 14.5 }}>
           {mode === 'signup'
-            ? 'Create your account with your phone number, then register your restaurant — QR ordering, live kitchen board and billing. 10-day free trial, no card, zero commission.'
+            ? 'Create your account with an email and a password, then register your restaurant — QR ordering, live kitchen board and billing. 10-day free trial, no card, zero commission.'
             : 'Live orders, menu, billing, QR codes and your plan — from any phone or computer. Zero commission: diners always pay you directly.'}
         </p>
 
@@ -149,8 +201,11 @@ export function PartnerLogin() {
               <input className="code-input" type="email" autoComplete="email" placeholder="you@restaurant.com"
                 ref={emailRef} value={email} onChange={(e) => setEmail(e.target.value)} />
               <p className="overline" style={{ margin: '14px 0 6px' }}>Password</p>
-              <input className="code-input" type="password" autoComplete="current-password" placeholder="••••••••"
-                ref={passwordRef} value={password} onChange={(e) => setPassword(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && signInEmail()} />
+              <input className="code-input" type="password"
+                autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
+                placeholder={mode === 'signup' ? 'At least 6 characters' : '••••••••'}
+                ref={passwordRef} value={password} onChange={(e) => setPassword(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && (mode === 'signup' ? signUpEmail() : signInEmail())} />
               {error && <p style={{ color: 'var(--error)', fontSize: 13.5, marginTop: 10 }}>{error}</p>}
               {/* "Login", in clear glass — the client's override for this page:
                   "Instead of open my restaurant we can put login without orange
@@ -158,8 +213,9 @@ export function PartnerLogin() {
                   the same word in the same material, so the portal and the
                   phone are one product rather than two that resemble each
                   other. The orange primary stays the default everywhere else. */}
-              <button className={`btn btn-glass btn-block${busy ? ' is-busy' : ''}`} style={{ marginTop: 16 }} disabled={busy} onClick={signInEmail}>
-                Login
+              <button className={`btn btn-glass btn-block${busy ? ' is-busy' : ''}`} style={{ marginTop: 16 }} disabled={busy}
+                onClick={mode === 'signup' ? signUpEmail : signInEmail}>
+                {mode === 'signup' ? 'Create account' : 'Login'}
               </button>
             </>
           )}
