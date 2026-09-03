@@ -1,6 +1,6 @@
 /** Restaurant Portal sign-in: phone OTP (owners & invited staff) or
  *  email + password (existing Menuva staff credentials). */
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { Wordmark } from '../../components';
@@ -49,9 +49,33 @@ export function PartnerLogin() {
     nav(mode === 'signup' ? '/partner/register' : '/partner/orders', { replace: true });
   };
 
+  /**
+   * READ THE DOM, NOT JUST STATE -- this is the blocked Login button.
+   *
+   * He reported the button showing the not-allowed cursor with both fields
+   * visibly filled. `busy` cannot be the cause (every handler clears it before
+   * returning) and the inputs are correctly controlled, which leaves
+   * `!email || !password` evaluating truthy while the fields LOOK full.
+   *
+   * That is Chrome's saved-credential autofill: the browser paints the value
+   * into the field but does not fire an input event or expose the value until
+   * the user interacts with the page. React state stays empty, so the old
+   * the old `disabled={busy || !email || !password}` kept the button dead on
+   * exactly the machine where the password was already saved.
+   *
+   * So the gate is gone (see the button) and the values are read from the
+   * inputs at submit, falling back to state. Validation moved in here, where
+   * it can say what is wrong instead of silently refusing to be pressed.
+   */
+  const emailRef = useRef<HTMLInputElement>(null);
+  const passwordRef = useRef<HTMLInputElement>(null);
+
   const signInEmail = async () => {
+    const em = (emailRef.current?.value || email).trim();
+    const pw = passwordRef.current?.value || password;
+    if (!em || !pw) { setError('Enter your email and password.'); return; }
     setBusy(true); setError('');
-    const { error: err } = await supabase.auth.signInWithPassword({ email, password });
+    const { error: err } = await supabase.auth.signInWithPassword({ email: em, password: pw });
     setBusy(false);
     if (err) { setError(err.message === 'Invalid login credentials' ? 'Email or password is incorrect.' : err.message); return; }
     nav('/partner/orders', { replace: true });
@@ -123,10 +147,10 @@ export function PartnerLogin() {
             <>
               <p className="overline" style={{ margin: '8px 0 6px' }}>Email</p>
               <input className="code-input" type="email" autoComplete="email" placeholder="you@restaurant.com"
-                value={email} onChange={(e) => setEmail(e.target.value)} />
+                ref={emailRef} value={email} onChange={(e) => setEmail(e.target.value)} />
               <p className="overline" style={{ margin: '14px 0 6px' }}>Password</p>
               <input className="code-input" type="password" autoComplete="current-password" placeholder="••••••••"
-                value={password} onChange={(e) => setPassword(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && signInEmail()} />
+                ref={passwordRef} value={password} onChange={(e) => setPassword(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && signInEmail()} />
               {error && <p style={{ color: 'var(--error)', fontSize: 13.5, marginTop: 10 }}>{error}</p>}
               {/* "Login", in clear glass — the client's override for this page:
                   "Instead of open my restaurant we can put login without orange
@@ -134,7 +158,7 @@ export function PartnerLogin() {
                   the same word in the same material, so the portal and the
                   phone are one product rather than two that resemble each
                   other. The orange primary stays the default everywhere else. */}
-              <button className={`btn btn-glass btn-block${busy ? ' is-busy' : ''}`} style={{ marginTop: 16 }} disabled={busy || !email || !password} onClick={signInEmail}>
+              <button className={`btn btn-glass btn-block${busy ? ' is-busy' : ''}`} style={{ marginTop: 16 }} disabled={busy} onClick={signInEmail}>
                 Login
               </button>
             </>
