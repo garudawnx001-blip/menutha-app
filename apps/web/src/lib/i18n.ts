@@ -461,10 +461,29 @@ export function getLang(): Lang {
   try {
     const saved = localStorage.getItem(KEY) as Lang | null;
     if (saved && STRINGS[saved]) return saved;
-    // Kannada and Hindi speakers usually already have the phone set that way.
-    const nav = (navigator.language || 'en').slice(0, 2);
-    if (nav === 'kn' || nav === 'hi') return nav as Lang;
   } catch { /* private mode */ }
+  /**
+   * ENGLISH UNLESS THE DINER CHOOSES OTHERWISE.
+   *
+   * This used to read navigator.language and open in Kannada or Hindi when the
+   * phone was set that way. The reasoning was that Kannada speakers already
+   * have their phone in Kannada -- true, and still the wrong call:
+   *
+   *   - A phone's locale says what its OWNER reads, not what the person
+   *     holding it at a restaurant table reads, and one phone gets passed
+   *     around a table.
+   *   - Menutha's own menus are written in English by the restaurant. Opening
+   *     in Kannada showed a Kannada frame around English dish names, which
+   *     reads as broken rather than translated.
+   *   - It was undiscoverable in the worst way: a diner who did not want it had
+   *     to find a language switcher in a language they had not chosen -- and
+   *     that switcher was itself broken, so they could not get back.
+   *
+   * English is the neutral default here, and switching is one tap and
+   * remembered. A restaurant-level default is the natural next step if he
+   * wants one; the column does not exist yet, so this does not pretend to read
+   * it.
+   */
   return 'en';
 }
 

@@ -234,6 +234,9 @@ export function LanguagePicker() {
   const [lang, setL] = useState<Lang>(getLang);
   const [open, setOpen] = useState(false);
   const btnRef = useRef<HTMLButtonElement>(null);
+  // The listbox, so the outside-click handler can tell a selection from a
+  // dismissal. See the note in  below.
+  const menuRef = useRef<HTMLSpanElement>(null);
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
   const current = LANGS.find((l) => l.key === lang) ?? LANGS[0];
 
@@ -261,8 +264,25 @@ export function LanguagePicker() {
   useEffect(() => {
     if (!open) return;
     place();
+    /**
+     * THE MENU COUNTS AS "INSIDE" TOO -- and this is why the switcher did
+     * nothing.
+     *
+     * This checked only `btnRef`, which is the TRIGGER button. The listbox is
+     * rendered as a fixed-position sibling, not a child of it, so a tap on a
+     * language option looked like an outside click. mousedown fired first,
+     * setOpen(false) unmounted the listbox, and the click event that would
+     * have called setLang never reached anything. The menu opened, and every
+     * tap inside it simply dismissed it.
+     *
+     * Reported as "tapping Kannada does not change the language" -- which was
+     * exactly true, and had nothing to do with the translations.
+     */
     const close = (e: MouseEvent) => {
-      if (!btnRef.current?.contains(e.target as Node)) setOpen(false);
+      const t = e.target as Node;
+      if (btnRef.current?.contains(t)) return;
+      if (menuRef.current?.contains(t)) return;
+      setOpen(false);
     };
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
     // Reposition rather than drift: the header is not fixed, so the button moves.
@@ -292,6 +312,7 @@ export function LanguagePicker() {
       </button>
       {open && pos && (
         <span
+          ref={menuRef}
           role="listbox"
           style={{
             position: 'fixed', top: pos.top, left: pos.left, zIndex: 60,
