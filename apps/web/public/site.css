@@ -611,6 +611,23 @@ body::before {
      two stacked blocks -- the drawer forces display:block on every anchor. */
   .nav:has(.nav-toggle) .nav-links .auth-switch { display: flex; margin-top: 6px; width: 100%; }
   .nav:has(.nav-toggle) .nav-links .auth-switch a {
-    display: flex !important; flex: 1; text-align: center; padding: 0 12px; min-height: 42px;
+    display: flex !important; flex: 1; text-align: center; padding: 0 12px; min-height: 44px;
   }
+}
+
+/* MEASURED, NOT ASSUMED. On the inner pages (Back pill + wordmark + the new
+   switch, no hamburger) a 360px viewport laid the switch out to x=405 against
+   a 360px client width -- 45px past the edge, and body{overflow-x:clip} would
+   have hidden the overflow by cutting "Sign up" in half rather than by
+   scrolling. The single "Owner login" button it replaced measured 338, so this
+   was mine: the switch is wider than the button was.
+
+   Below 430px the wordmark drops its word and keeps its mark, which is the
+   only element in that row that repeats information already on screen -- the
+   mark still goes home. Measured again after: 360 -> 360, 320 -> 320, no
+   overflow at either. The home page is unaffected; it has the hamburger, so
+   its links live in the drawer. */
+@media (max-width: 430px) {
+  .nav:not(:has(.nav-toggle)) .wordmark span { display: none; }
+  .nav:not(:has(.nav-toggle)) .nav-back { margin-right: 8px; }
 }
