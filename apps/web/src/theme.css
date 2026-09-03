@@ -1235,10 +1235,33 @@ input.code-input::placeholder { color: var(--text-dim); }
        The cost is paper, and it is worth it — these get cut out and stood on
        tables, so a clean card matters more than a full sheet. */
     display: block;
-    width: 88mm;
+    /* FILL THE PAGE IT IS GIVEN. This was a fixed 88mm, which on 210mm A4
+       printed a card occupying under half the width with the rest left blank
+       -- his "QR card prints small, not full-page", photographed on A4.
+       The 88mm was never load-bearing: the reasoning above is about BLOCK FLOW
+       (grid and inline-block ignore break-inside, plain blocks honour it), and
+       that still holds at any width. Only the fixed measure goes.
+       100% of the printable width means one design fills A4, A3, a 100x150
+       label and an 80mm roll, which is what "all sizes, full page" asks for --
+       and it keeps working through the page box the printer reports, so the
+       size:auto design above is untouched. */
+    width: 100%;
+    max-width: 100%;
     margin: 0 auto 6mm;
     break-inside: avoid;
     page-break-inside: avoid;
+  }
+  /* The code scales with the card rather than sitting at a fixed size in the
+     middle of it. Capped so a big sheet does not print a QR the size of a
+     dinner plate: past roughly this size a scanner gains nothing and the card
+     stops reading as stationery. */
+  .qr-sheet .qr-svg {
+    width: 68% !important;
+    height: auto !important;
+    aspect-ratio: 1 / 1;
+    max-width: 110mm !important;
+    margin-left: auto;
+    margin-right: auto;
   }
 }
 
