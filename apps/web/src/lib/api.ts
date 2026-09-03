@@ -476,3 +476,43 @@ export async function fetchSessionBill(session: Session): Promise<SessionBill> {
   if (error) throw error;
   return data as SessionBill;
 }
+
+/* ── Call for service ──────────────────────────────────────────────────────
+   Tissues, sauce, plates, a wipe of the table. Not an order: nothing is
+   charged, nothing is cooked, and none of it reaches a bill. See the
+   2026-09-03_service_requests migration for why it is a separate table rather
+   than a zero-priced order. */
+
+export type ServiceKind =
+  | 'clean_table' | 'tissues' | 'sauce' | 'plates'
+  | 'water' | 'cutlery' | 'assistance';
+
+export const SERVICE_OPTIONS: { kind: ServiceKind; label: string; icon: string }[] = [
+  { kind: 'clean_table', label: 'Clean the table', icon: '🧽' },
+  { kind: 'tissues',     label: 'Tissues',         icon: '🧻' },
+  { kind: 'water',       label: 'Water',           icon: '💧' },
+  { kind: 'sauce',       label: 'Sauce',           icon: '🥫' },
+  { kind: 'plates',      label: 'Extra plates',    icon: '🍽' },
+  { kind: 'cutlery',     label: 'Cutlery',         icon: '🍴' },
+  { kind: 'assistance',  label: 'Call someone',    icon: '🙋' },
+];
+
+/** Ask for something. Returns `deduped` when the same request is already open
+ *  for this table, so the UI can say "already on its way" instead of
+ *  pretending a fresh one was raised. */
+export async function requestService(
+  session: Session,
+  kind: ServiceKind,
+  note?: string,
+): Promise<{ ok: boolean; deduped: boolean }> {
+  if (session.demo || !session.table?.id) return { ok: false, deduped: false };
+  const { data, error } = await supabase.rpc('request_service', {
+    p_table_id: session.table.id,
+    p_kind: kind,
+    p_note: note ?? null,
+    p_name: session.guest?.name ?? null,
+    p_phone: session.guest?.phone ?? null,
+  });
+  if (error) throw error;
+  return (data ?? { ok: false, deduped: false }) as { ok: boolean; deduped: boolean };
+}

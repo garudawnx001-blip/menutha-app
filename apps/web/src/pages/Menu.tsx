@@ -15,6 +15,7 @@ import { IdentityGate, ItemSheet, LanguagePicker, Spinner, Stepper, VegMark, Wor
 import { useT, useLang, translateCategory, translateTableLabel } from '../lib/i18n';
 import { dishName } from '../lib/translit';
 import { TableSoFar } from './TableSoFar';
+import { CallService } from './CallService';
 
 export function Menu() {
   const nav = useNavigate();
@@ -302,6 +303,11 @@ export function Menu() {
       {/* What the table has already ordered — on the menu itself, because
           leaving to the bill screen to check is what caused double-ordering. */}
       {!session.demo && <TableSoFar session={session} />}
+      {/* Beside the table summary: both are "things about this table" rather
+          than things on the menu, so they belong together. */}
+      <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '6px 0' }}>
+        <CallService session={session} />
+      </div>
 
       {items === null && !failed && <Spinner label={t('menu.loading')} />}
       {failed && (

@@ -1650,3 +1650,36 @@ select.code-input:focus { border-color: var(--primary); }
    be CSS-Modules syntax and this is a plain global stylesheet. */
 .btn-glass.btn-glass-accent { border-color: rgba(217, 119, 87, 0.55); }
 .btn-glass.btn-glass-accent:hover { border-color: rgba(217, 119, 87, 0.78); }
+
+/* ── Bottom sheet (call-for-service) ───────────────────────────────────────
+   A sheet rather than a page: asking for tissues is a thirty-second thing from
+   the middle of reading a menu, and sending someone to another screen and back
+   is how a feature stops being used.
+
+   The scrim is deliberately as heavy as the app's modal scrim. A translucent
+   panel over sharp menu text is the exact defect that made the Edit-order
+   sheet unreadable on the phone -- same mistake, so the same fix up front. */
+.sheet-scrim {
+  position: fixed; inset: 0; z-index: 60;
+  background: rgba(0, 0, 0, 0.58);
+  display: flex; align-items: flex-end; justify-content: center;
+  animation: sheet-fade 0.14s ease;
+}
+.sheet {
+  width: 100%; max-width: 520px;
+  background: var(--card, #FFFDF8);
+  border-radius: 18px 18px 0 0;
+  padding: 10px 16px calc(18px + env(safe-area-inset-bottom));
+  box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.18);
+  animation: sheet-rise 0.18s ease;
+}
+.sheet-grabber {
+  width: 38px; height: 4px; border-radius: 2px;
+  background: var(--line, #E7DECC);
+  margin: 0 auto 12px;
+}
+@keyframes sheet-fade { from { opacity: 0 } to { opacity: 1 } }
+@keyframes sheet-rise { from { transform: translateY(14px) } to { transform: none } }
+@media (prefers-reduced-motion: reduce) {
+  .sheet-scrim, .sheet { animation: none; }
+}

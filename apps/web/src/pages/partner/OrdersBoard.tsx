@@ -12,6 +12,7 @@ import {
 } from '../../lib/portalApi';
 import { inr } from '../../lib/types';
 import { usePartner } from './PartnerShell';
+import { ServiceStrip } from './ServiceStrip';
 import { Spinner, VegMark } from '../../components';
 
 const LIVE = ['placed', 'accepted', 'preparing', 'ready'];
@@ -241,6 +242,10 @@ export function OrdersBoard() {
 
   return (
     <div className="fade-in">
+      {/* Requests sit ABOVE the tickets: not orders, and more urgent in the
+          moment -- an order has a kitchen working on it, a diner waiting for a
+          napkin is waiting on nobody. */}
+      <ServiceStrip restaurantId={restaurant.id} />
       <div className="topbar" style={{ alignItems: 'flex-end' }}>
         <div>
           <p className="overline">Live orders</p>

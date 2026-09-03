@@ -656,3 +656,45 @@ export async function deleteBuffet(id: string): Promise<void> {
   const { error } = await supabase.from('buffet').delete().eq('id', id);
   if (error) throw error;
 }
+
+/* ── Service requests, staff side ──────────────────────────────────────────
+   Open requests for the board. Kept separate from orders on purpose: a request
+   for tissues is not a ticket, must not be cooked, and must never reach a
+   bill. See 2026-09-03_service_requests. */
+
+export interface ServiceRequestRow {
+  id: string;
+  table_id: string | null;
+  kind: string;
+  note: string | null;
+  guest_name: string | null;
+  created_at: string;
+  dining_table?: { label: string } | null;
+}
+
+export async function fetchOpenServiceRequests(restaurantId: string): Promise<ServiceRequestRow[]> {
+  const { data, error } = await supabase
+    .from('service_request')
+    .select('id, table_id, kind, note, guest_name, created_at, dining_table(label)')
+    .eq('restaurant_id', restaurantId)
+    .eq('status', 'open')
+    .order('created_at', { ascending: true });
+  if (error) throw error;
+  return (data ?? []) as any as ServiceRequestRow[];
+}
+
+export async function resolveServiceRequest(id: string): Promise<void> {
+  const { error } = await supabase.rpc('resolve_service_request', { p_id: id });
+  if (error) throw error;
+}
+
+/** Oldest first, and labelled in staff language rather than the enum. */
+export const SERVICE_LABEL: Record<string, string> = {
+  clean_table: 'Clean the table',
+  tissues: 'Tissues',
+  sauce: 'Sauce',
+  plates: 'Extra plates',
+  water: 'Water',
+  cutlery: 'Cutlery',
+  assistance: 'Wants someone',
+};
