@@ -36,11 +36,58 @@ export function PartnerLogin() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
+  /**
+   * AND THEN THE RESET LINK HAD TO LAND SOMEWHERE.
+   *
+   * Adding "Forgot password" sends an email whose link comes back HERE with a
+   * recovery token in the fragment. Two things would have happened without
+   * this, and both are worse than not offering the reset at all:
+   *
+   *   1. Supabase exchanges that token for a real session, and the effect
+   *      below would have seen a session and bounced straight to the orders
+   *      board — logged in, with the password still the one they forgot, and
+   *      no screen anywhere that lets them change it.
+   *   2. There was no set-a-new-password form in this product on any surface.
+   *      The app's reset opens a browser, so this page is the recovery screen
+   *      for the phone as well as the laptop.
+   *
+   * The hash is read SYNCHRONOUSLY, before the session check runs, because the
+   * PASSWORD_RECOVERY event can arrive after that check — and losing the race
+   * means the redirect wins and the reader never sees this form.
+   */
+  const [recovery, setRecovery] = useState(
+    typeof window !== 'undefined' && window.location.hash.includes('type=recovery'),
+  );
+  const [newPassword, setNewPassword] = useState('');
+  const [done, setDone] = useState(false);
+
   useEffect(() => {
+    const { data: sub } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'PASSWORD_RECOVERY') setRecovery(true);
+    });
+    return () => sub.subscription.unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    if (recovery) return;
     supabase.auth.getSession().then(({ data }) => {
       if (data.session) nav('/partner/orders', { replace: true });
     });
-  }, []);
+  }, [recovery]);
+
+  const saveNewPassword = async () => {
+    if (newPassword.length < 8) { setError('Choose a password of at least 8 characters.'); return; }
+    setBusy(true); setError('');
+    const { error: err } = await supabase.auth.updateUser({ password: newPassword });
+    setBusy(false);
+    if (err) {
+      setError(/expired|invalid/i.test(err.message)
+        ? 'That reset link has expired — request a new one below.'
+        : err.message);
+      return;
+    }
+    setDone(true);
+  };
 
   const e164 = () => '+91' + phone.replace(/\D/g, '').slice(-10);
 
@@ -115,7 +162,12 @@ export function PartnerLogin() {
     const em = (emailRef.current?.value || email).trim();
     const pw = passwordRef.current?.value || password;
     if (!em || !pw) { setError('Enter your email and choose a password.'); return; }
-    if (pw.length < 6) { setError('Choose a password of at least 6 characters.'); return; }
+    // EIGHT, TO MATCH THE APP. The phone's signup has always demanded 8 and
+    // this had none until a moment ago — the same account, two different rules,
+    // so an owner who signed up here with six characters would meet a form on
+    // their phone that rejects what the laptop just accepted. Converged on the
+    // stricter of the two, which is also the one already shipping.
+    if (pw.length < 8) { setError('Choose a password of at least 8 characters.'); return; }
     setBusy(true); setError('');
     const { data, error: err } = await supabase.auth.signUp({ email: em, password: pw });
     setBusy(false);
@@ -132,6 +184,77 @@ export function PartnerLogin() {
     }
     nav('/partner/register', { replace: true });
   };
+
+  /**
+   * FORGOT PASSWORD — the app had it, the portal did not.
+   *
+   * Same account, same email-based reset, and only one of the two surfaces
+   * offered a way back in. An owner locked out at the laptop had to find their
+   * phone to recover a password they use on both. That is the kind of gap that
+   * looks small until it is 9pm and the till is the laptop.
+   *
+   * Word-for-word the same behaviour as StaffLoginScreen's: it reads the email
+   * already typed above rather than asking for it twice, and it says the same
+   * thing whether or not that address has an account — telling a stranger which
+   * emails are registered is not something a login form should do.
+   */
+  const [sent, setSent] = useState(false);
+  const forgotPassword = async () => {
+    const em = (emailRef.current?.value || email).trim();
+    if (!em) { setError('Type your account email above first, then use “Forgot password”.'); return; }
+    setBusy(true); setError('');
+    const { error: err } = await supabase.auth.resetPasswordForEmail(em);
+    setBusy(false);
+    if (err) { setError(err.message); return; }
+    setSent(true);
+  };
+
+  // The recovery screen replaces the login card rather than sitting beside it.
+  // Someone who followed a reset link came to do exactly one thing, and putting
+  // a login form they cannot use next to it is how they end up typing the old
+  // password again.
+  if (recovery) {
+    return (
+      <div className="page fade-in login-lens" style={{ display: 'flex', flexDirection: 'column', minHeight: '100dvh' }}>
+        <div className="topbar">
+          <Wordmark size={24} />
+          <span className="badge gold">Restaurant Portal</span>
+        </div>
+        <div className="center-fill" style={{ gap: 14 }}>
+          <p className="overline">Password reset</p>
+          <h1 className="display" style={{ fontSize: 'clamp(26px, 5vw, 36px)' }}>
+            {done ? 'Password changed' : 'Choose a new password'}
+          </h1>
+          <div className="glass" style={{ width: '100%', maxWidth: 420, padding: 20, textAlign: 'left' }}>
+            {done ? (
+              <>
+                <p className="muted" style={{ fontSize: 14 }}>
+                  Use it on the portal and in the Menutha app — it is the same account.
+                </p>
+                <button className="btn btn-glass btn-block" style={{ marginTop: 16 }}
+                  onClick={() => nav('/partner/orders', { replace: true })}>
+                  Open my orders
+                </button>
+              </>
+            ) : (
+              <>
+                <p className="overline" style={{ margin: '2px 0 6px' }}>New password</p>
+                <input className="code-input" type="password" autoComplete="new-password"
+                  placeholder="At least 8 characters" autoFocus
+                  value={newPassword} onChange={(e) => setNewPassword(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && saveNewPassword()} />
+                {error && <p style={{ color: 'var(--error)', fontSize: 13.5, marginTop: 10 }}>{error}</p>}
+                <button className={`btn btn-glass btn-block${busy ? ' is-busy' : ''}`} style={{ marginTop: 16 }}
+                  disabled={busy} onClick={saveNewPassword}>
+                  Save new password
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     // login-lens scopes the no-orange override to THIS page. See theme.css.
@@ -217,6 +340,17 @@ export function PartnerLogin() {
                 onClick={mode === 'signup' ? signUpEmail : signInEmail}>
                 {mode === 'signup' ? 'Create account' : 'Login'}
               </button>
+              {mode === 'login' && (
+                sent ? (
+                  <p className="dim" style={{ fontSize: 12.5, marginTop: 10, textAlign: 'center' }}>
+                    If that address has an account, a reset link is on its way to it.
+                  </p>
+                ) : (
+                  <button className="chip" style={{ marginTop: 10, width: '100%' }} disabled={busy} onClick={forgotPassword}>
+                    Forgot password?
+                  </button>
+                )
+              )}
             </>
           )}
         </div>
