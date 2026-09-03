@@ -101,6 +101,16 @@ export interface Session {
   orderingDisabled?: boolean;
   /** Who's ordering at this table (persists across re-scans in the session). */
   guest?: Guest;
+  /**
+   * When this identity was established, epoch ms. Drives the re-auth clock --
+   * see IDENTITY_TTL_MS in store.tsx.
+   *
+   * Optional because sessions saved before this shipped will not have it; the
+   * reader treats a missing stamp as expired, which asks for a name once and
+   * then stamps it. Better than treating it as fresh, which would leave every
+   * existing session immortal.
+   */
+  guestAt?: number;
 }
 
 // ── Table bill (get_table_bill RPC) ────────────────────────────────────────
