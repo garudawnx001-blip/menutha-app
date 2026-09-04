@@ -77,11 +77,26 @@ jobs:
           # Printed table QRs point here: many phone QR scanners refuse to open a
           # URL that returns 404 — which is exactly what /scan/<token> did.
           cp dist/index.html dist/scan.html         # QR target -> always 200
+          # THE DINER ROUTES ANSWER 200 TOO, for the same reason scan.html does.
+          # Pages serves 404.html for any path that is not a real file, so
+          # /table and /menu rendered correctly but with an HTTP 404 status.
+          # The SPA shell is in the 404 body so a normal browser is fine -- but
+          # an in-app browser or a proxy that substitutes its own error page for
+          # a 404 shows a diner an error instead of their menu, and #O is that
+          # the diner surface must never glitch. A directory index makes each
+          # one a real file.
+          for r in table menu cart bill restaurants; do
+            mkdir -p "dist/$r" && cp dist/index.html "dist/$r/index.html"
+          done
           cp dist/index.html dist/404.html          # unmatched paths -> ordering app
           cp dist/home/index.html dist/index.html   # premium marketing at /
           test -f dist/index.html || { echo "no index.html"; exit 1; }
           test -f dist/404.html   || { echo "no 404.html";   exit 1; }
           test -f dist/scan.html  || { echo "no scan.html";  exit 1; }
+          for r in table menu cart bill restaurants; do
+            test -f "dist/$r/index.html" || { echo "no dist/$r/index.html"; exit 1; }
+            grep -q "id=\"root\"" "dist/$r/index.html" || { echo "dist/$r is not the SPA shell"; exit 1; }
+          done
           test -f dist/CNAME      || { echo "no CNAME";       exit 1; }
           test -f dist/site.css   || { echo "no site.css";    exit 1; }
           grep -q "The menu is on the table" dist/index.html || { echo "root is not the marketing landing"; exit 1; }
