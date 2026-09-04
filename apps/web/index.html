@@ -9,6 +9,14 @@
       content="Scan the QR at your table, browse the live menu, and order — no app, no sign-up."
     />
     <title>Menutha — Order at your table</title>
+    <!-- THE TAB ICON. Without these the browser asks for /favicon.ico, gets a
+         404, and logs an error on every diner page load -- and a diner who
+         adds the menu to their home screen gets a blank square. The mark is
+         already deployed and already answers 200; it was simply never
+         declared. SVG first for the tab, and the same file as the Apple touch
+         icon so an iPhone home-screen shortcut carries the brand too. -->
+    <link rel="icon" type="image/svg+xml" href="/menutha-mark.svg" />
+    <link rel="apple-touch-icon" href="/menutha-mark.svg" />
     <!-- SPA on GitHub Pages: restore the deep-link path stashed by 404.html so
          /scan/<token>, /track/<id> etc. load with HTTP 200. (rafgraph/spa-github-pages, MIT) -->
     <script>
