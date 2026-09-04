@@ -188,15 +188,49 @@ export interface PortalTable {
   seating_capacity: number | null;
 }
 
+/**
+ * A PAGE MUST NOT DIE BECAUSE AN OPTIONAL COLUMN IS NOT THERE YET.
+ *
+ * This selected `seating_capacity` unconditionally the moment that field was
+ * added to the UI — and the migration adding the column is staged, not run. So
+ * PostgREST answered the whole query with 42703 "column
+ * dining_table.seating_capacity does not exist", fetchTables threw, and Tables
+ * & QR — the page an owner opens to PRINT THEIR QR CARDS — showed an error
+ * instead of loading. Verified against production, not inferred: the same
+ * select without that one column returns 200.
+ *
+ * That was mine, and it is the same mistake the public showcase page was
+ * already written to avoid: the gallery there loads separately and fails to an
+ * empty list precisely so a missing table cannot take a whole page down.
+ *
+ * So seats are OPTIONAL here in the real sense. The base columns always load;
+ * the capacity column is asked for once and, if the database does not have it
+ * yet, dropped for the rest of the session. Nothing to undo after the
+ * migration runs — the first successful attempt simply keeps it.
+ */
+let seatsColumnMissing = false;
+
 export async function fetchTables(restaurantId: string): Promise<PortalTable[]> {
-  const { data, error } = await supabase
+  const BASE = 'id, label, room, is_parcel, qr_token, is_active';
+  const run = (cols: string) => supabase
     .from('dining_table')
-    .select('id, label, room, is_parcel, qr_token, is_active, seating_capacity')
+    .select(cols)
     .eq('restaurant_id', restaurantId)
     .eq('is_active', true)
     .order('created_at');
+
+  if (!seatsColumnMissing) {
+    const { data, error } = await run(`${BASE}, seating_capacity`);
+    if (!error) return (data ?? []) as unknown as PortalTable[];
+    // 42703 is "undefined_column". Anything else is a real failure and must
+    // surface — a network error dressed up as a missing column would hide it.
+    if (error.code !== '42703') throw error;
+    seatsColumnMissing = true;
+  }
+
+  const { data, error } = await run(BASE);
   if (error) throw error;
-  return (data ?? []) as PortalTable[];
+  return (data ?? []).map((t: any) => ({ ...t, seating_capacity: null })) as PortalTable[];
 }
 
 export async function createTable(restaurantId: string, label: string, room: string | null) {
