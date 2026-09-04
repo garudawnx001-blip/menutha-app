@@ -1,5 +1,8 @@
 export interface Restaurant {
   id: string;
+  /** Public URL key. create_reservation is addressed by slug, and a diner
+   *  reserving from a scanned table only ever has the restaurant's id. */
+  slug?: string | null;
   name: string;
   city?: string | null;
   banner_url?: string | null;

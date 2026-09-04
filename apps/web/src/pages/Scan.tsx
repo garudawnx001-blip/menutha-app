@@ -21,7 +21,12 @@ export function Scan() {
         const session = await resolveToken(token);
         if (cancelled) return;
         startSession(session);
-        nav('/menu', { replace: true });
+        // /start, not /menu. The same QR is how someone asks about the buffet
+        // and how someone books a table for Saturday -- going straight to the
+        // menu made two of the three things this restaurant sells unreachable
+        // from the one link printed on the table. See DinerStart. Menu is the
+        // first and primary card there, so ordering is still one obvious tap.
+        nav('/start', { replace: true });
       } catch (e) {
         if (cancelled) return;
         if (e instanceof ScanError && e.kind === 'not_accepting') {

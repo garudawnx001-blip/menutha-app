@@ -28,7 +28,9 @@ export async function resolveToken(token: string): Promise<Session> {
   const { data, error } = await supabase
     .from('dining_table')
     .select(
-      'id, restaurant_id, label, is_parcel, restaurant(id, name, city, banner_url, logo_url, is_open, status, trial_ends_at, parcel_charge, gst_pct, service_charge_pct)',
+      // slug comes along now: create_reservation is addressed by slug, and the
+      // diner reserving from a scanned table only has the restaurant's id.
+      'id, restaurant_id, label, is_parcel, restaurant(id, slug, name, city, banner_url, logo_url, is_open, status, trial_ends_at, parcel_charge, gst_pct, service_charge_pct)',
     )
     .eq('qr_token', token)
     .eq('is_active', true)
@@ -515,4 +517,71 @@ export async function requestService(
   });
   if (error) throw error;
   return (data ?? { ok: false, deduped: false }) as { ok: boolean; deduped: boolean };
+}
+
+/* ── Buffets and reservations, from the diner side ─────────────────────────
+ *
+ * #P: a diner landing on a restaurant gets three doors, not one. Both of these
+ * read and write as the ANONYMOUS diner, which was checked against production
+ * before building rather than assumed: `buffet` and `restaurant.slug` are both
+ * readable with the publishable key, and create_reservation is already the RPC
+ * the public restaurant page uses. So neither needed a migration.
+ */
+
+export interface DinerBuffet {
+  id: string;
+  name: string;
+  kind: 'complimentary' | 'paid';
+  price: number;
+  items: string[];
+  starts_at: string | null;
+  ends_at: string | null;
+}
+
+/** What is on offer TODAY. Inactive plans are the owner's drafts and a diner
+ *  should never see one; a failure returns an empty list rather than throwing,
+ *  because a buffet page that cannot load must degrade to "nothing today" and
+ *  not to a broken screen. */
+export async function fetchDinerBuffets(restaurantId: string): Promise<DinerBuffet[]> {
+  const { data, error } = await supabase
+    .from('buffet')
+    .select('id, name, kind, price, items, starts_at, ends_at, is_active')
+    .eq('restaurant_id', restaurantId)
+    .eq('is_active', true)
+    .order('name');
+  if (error) return [];
+  return (data ?? []).map((b: any) => ({
+    id: b.id, name: b.name, kind: b.kind, price: Number(b.price ?? 0),
+    items: Array.isArray(b.items) ? b.items : [],
+    starts_at: b.starts_at ?? null, ends_at: b.ends_at ?? null,
+  }));
+}
+
+/** The names of the dishes on a buffet. `items` holds menu_item IDS on purpose
+ *  -- so a price or spelling fix on a dish flows through and a deleted dish
+ *  cannot linger as a stale string -- which means the names have to be looked
+ *  up. Empty on failure: a buffet with its price and window but no checklist is
+ *  still worth showing. */
+export async function fetchBuffetItemNames(ids: string[]): Promise<Record<string, string>> {
+  if (!ids.length) return {};
+  const { data, error } = await supabase
+    .from('menu_item').select('id, name').in('id', ids);
+  if (error) return {};
+  return Object.fromEntries((data ?? []).map((r: any) => [r.id, r.name]));
+}
+
+/** The same RPC the public restaurant page books through, so a reservation
+ *  made from a scanned table and one made from the web listing are the same
+ *  row, with the same validation, landing in the same partner Bookings list. */
+export async function createReservation(args: {
+  slug: string; partySize: number; bookedFor: Date; name: string; phone: string;
+}): Promise<void> {
+  const { error } = await supabase.rpc('create_reservation', {
+    p_slug: args.slug,
+    p_party_size: args.partySize,
+    p_booked_for: args.bookedFor.toISOString(),
+    p_guest_name: args.name.trim(),
+    p_guest_phone: args.phone.replace(/\D/g, ''),
+  });
+  if (error) throw error;
 }

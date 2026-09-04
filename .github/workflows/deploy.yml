@@ -85,7 +85,7 @@ jobs:
           # a 404 shows a diner an error instead of their menu, and #O is that
           # the diner surface must never glitch. A directory index makes each
           # one a real file.
-          for r in table menu cart bill restaurants; do
+          for r in table start reserve buffet menu cart bill restaurants; do
             mkdir -p "dist/$r" && cp dist/index.html "dist/$r/index.html"
           done
           cp dist/index.html dist/404.html          # unmatched paths -> ordering app
@@ -93,7 +93,7 @@ jobs:
           test -f dist/index.html || { echo "no index.html"; exit 1; }
           test -f dist/404.html   || { echo "no 404.html";   exit 1; }
           test -f dist/scan.html  || { echo "no scan.html";  exit 1; }
-          for r in table menu cart bill restaurants; do
+          for r in table start reserve buffet menu cart bill restaurants; do
             test -f "dist/$r/index.html" || { echo "no dist/$r/index.html"; exit 1; }
             grep -q "id=\"root\"" "dist/$r/index.html" || { echo "dist/$r is not the SPA shell"; exit 1; }
           done
