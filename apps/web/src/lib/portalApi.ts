@@ -68,21 +68,50 @@ export interface PortalOrder {
   pendingPayment?: { id: string; provider: string } | null;
 }
 
+/** Set once if the database has no food_order.settled_at yet (#V is a staged
+ *  migration run by hand). Module scope: a fact about the server. */
+let settledColumnMissing = false;
+
 export async function fetchLiveOrders(restaurantId: string, statuses: string[]): Promise<PortalOrder[]> {
-  const { data, error } = await supabase
-    .from('food_order')
-    .select(// service_charge rides along now: the printed bill sums it off the orders
-    // (#R -- the AC rate is already inside it), and it was silently printing
-    // as zero while the total included it.
-    'id, order_no, status, is_parcel, subtotal, packing_charge, service_charge, gst_amount, total, notes, placed_at, ready_at, released_at, guest_name, guest_phone, dining_table(label), order_item(id, name, qty, unit_price, is_veg), payment(id, status, provider)')
-    .eq('restaurant_id', restaurantId)
-    .in('status', statuses)
-    // The grace window is a query predicate, not a job: an order becomes
-    // visible to staff the moment its release time passes, with nothing
-    // scheduled. Orders still inside their window have not reached the
-    // restaurant yet and must not appear on the board.
-    .lte('released_at', new Date().toISOString())
-    .order('placed_at', { ascending: true });
+  // service_charge rides along: the printed bill sums it off the orders
+  // (#R -- the AC rate is already inside it), and it was silently printing as
+  // zero while the total included it.
+  const COLS = 'id, order_no, status, is_parcel, subtotal, packing_charge, service_charge, gst_amount, total, notes, placed_at, ready_at, released_at, guest_name, guest_phone, dining_table(label), order_item(id, name, qty, unit_price, is_veg), payment(id, status, provider)';
+
+  /**
+   * #V â A SETTLED ORDER IS NEITHER LIVE WORK NOR BILLABLE.
+   *
+   * mark_bill_paid has never written food_order.status, so a paid-for order
+   * keeps a live status for ever and stays on the board. Both callers want the
+   * same thing from this: the Orders board wants what is still being cooked or
+   * carried, and Billing wants what is still owed. A settled order is neither.
+   *
+   * SETTLEMENT, not payment: a diner can pay before the food is cooked, so a
+   * payment filter would hide real work from the kitchen.
+   */
+  const run = (withSettled: boolean) => {
+    let q = supabase
+      .from('food_order')
+      .select(COLS)
+      .eq('restaurant_id', restaurantId)
+      .in('status', statuses)
+      // The grace window is a query predicate, not a job: an order becomes
+      // visible to staff the moment its release time passes, with nothing
+      // scheduled. Orders still inside their window have not reached the
+      // restaurant yet and must not appear on the board.
+      .lte('released_at', new Date().toISOString());
+    if (withSettled) q = q.is('settled_at', null);
+    return q.order('placed_at', { ascending: true });
+  };
+
+  let { data, error } = settledColumnMissing ? await run(false) : await run(true);
+  // Until the migration runs, the board behaves exactly as it does today
+  // rather than failing. Losing the live board because a filter column is
+  // absent would be far worse than showing a settled ticket on it.
+  if (error && error.code === '42703') {
+    settledColumnMissing = true;
+    ({ data, error } = await run(false));
+  }
   if (error) throw error;
   return (data ?? []).map((row: any) => ({
     ...row,
