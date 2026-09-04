@@ -3,7 +3,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import QRCode from 'qrcode';
-import { fetchTables, createTable, removeTable, setTableCapacity, type PortalTable } from '../../lib/portalApi';
+import { fetchTables, createTable, removeTable, setTableCapacity, setTableAc, type PortalTable } from '../../lib/portalApi';
 import { usePartner } from './PartnerShell';
 import { Spinner } from '../../components';
 
@@ -182,6 +182,29 @@ export function TablesQR() {
                       Blank is a real value meaning not recorded -- a
                       restaurant that never fills this in keeps working exactly
                       as it does now. */}
+                  {/* AC, AND IT IS THE SWITCH THAT MAKES AC PRICING REAL.
+                      order_charges() already resolves a charge scoped to "AC
+                      tables" — but only when the restaurant has AC pricing on
+                      AND the table is marked here. Nothing on any surface could
+                      set that flag, so the charge matched nothing and the
+                      feature added nothing to any bill. Same row as Seats
+                      because they are the same kind of fact about a table, and
+                      hidden on the parcel row, which is not a table anyone sits
+                      at — air-conditioned or otherwise. */}
+                  {!t.is_parcel && (
+                    <label className="dim" style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 6, marginTop: 6 }}>
+                      <input
+                        type="checkbox"
+                        checked={!!t.is_ac}
+                        onChange={async (e) => {
+                          const on = e.target.checked;
+                          try { await setTableAc(t.id, on); load(); }
+                          catch (err: any) { setError(err?.message ?? 'Could not change the AC setting.'); }
+                        }}
+                      />
+                      Air-conditioned
+                    </label>
+                  )}
                   {!t.is_parcel && (
                     <label className="dim" style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 6, marginTop: 6 }}>
                       Seats

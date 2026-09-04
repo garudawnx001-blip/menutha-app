@@ -227,6 +227,8 @@ export interface PortalTable {
   /** How many this table seats. NULL means not recorded -- treat as unknown,
    *  never as zero. */
   seating_capacity: number | null;
+  /** Air-conditioned. Drives the 'AC tables' charge scope -- see setTableAc. */
+  is_ac?: boolean | null;
 }
 
 /**
@@ -261,7 +263,7 @@ export async function fetchTables(restaurantId: string): Promise<PortalTable[]> 
     .order('created_at');
 
   if (!seatsColumnMissing) {
-    const { data, error } = await run(`${BASE}, seating_capacity`);
+    const { data, error } = await run(`${BASE}, seating_capacity, is_ac`);
     if (!error) return (data ?? []) as unknown as PortalTable[];
     // 42703 is "undefined_column". Anything else is a real failure and must
     // surface — a network error dressed up as a missing column would hide it.
@@ -271,7 +273,7 @@ export async function fetchTables(restaurantId: string): Promise<PortalTable[]> 
 
   const { data, error } = await run(BASE);
   if (error) throw error;
-  return (data ?? []).map((t: any) => ({ ...t, seating_capacity: null })) as PortalTable[];
+  return (data ?? []).map((t: any) => ({ ...t, seating_capacity: null, is_ac: null })) as PortalTable[];
 }
 
 export async function createTable(restaurantId: string, label: string, room: string | null) {
@@ -835,6 +837,25 @@ export async function deleteMedia(id: string): Promise<void> {
 /** How many a table seats. Null clears it back to "not recorded", which is a
  *  real state -- a restaurant that never fills this in should keep working
  *  exactly as it does today rather than matching against an invented number. */
+/**
+ * IS THIS TABLE AIR-CONDITIONED — the switch that was missing.
+ *
+ * AC pricing looked broken because nothing could ever satisfy it. The MODEL was
+ * already complete: order_charges() resolves a charge scoped to 'ac' when the
+ * restaurant has ac_pricing on AND the order's table is_ac, in flat or percent,
+ * and the charges page already offers "AC tables" as a scope. But no screen on
+ * any surface could set dining_table.is_ac, so that last clause never matched
+ * and an AC charge added nothing to any bill.
+ *
+ * One switch, not a new field: the column has existed since the bill_options
+ * migration, which is now applied.
+ */
+export async function setTableAc(id: string, isAc: boolean): Promise<void> {
+  const { error } = await supabase
+    .from('dining_table').update({ is_ac: isAc }).eq('id', id);
+  if (error) throw error;
+}
+
 export async function setTableCapacity(id: string, seats: number | null): Promise<void> {
   const { error } = await supabase
     .from('dining_table')
