@@ -51,6 +51,8 @@ export interface PortalOrder {
   is_parcel: boolean;
   subtotal: number;
   packing_charge: number;
+  /** Already carries the AC-or-normal rate the server resolved (#R). */
+  service_charge?: number;
   gst_amount: number;
   total: number;
   notes?: string | null;
@@ -69,7 +71,10 @@ export interface PortalOrder {
 export async function fetchLiveOrders(restaurantId: string, statuses: string[]): Promise<PortalOrder[]> {
   const { data, error } = await supabase
     .from('food_order')
-    .select('id, order_no, status, is_parcel, subtotal, packing_charge, gst_amount, total, notes, placed_at, ready_at, released_at, guest_name, guest_phone, dining_table(label), order_item(id, name, qty, unit_price, is_veg), payment(id, status, provider)')
+    .select(// service_charge rides along now: the printed bill sums it off the orders
+    // (#R -- the AC rate is already inside it), and it was silently printing
+    // as zero while the total included it.
+    'id, order_no, status, is_parcel, subtotal, packing_charge, service_charge, gst_amount, total, notes, placed_at, ready_at, released_at, guest_name, guest_phone, dining_table(label), order_item(id, name, qty, unit_price, is_veg), payment(id, status, provider)')
     .eq('restaurant_id', restaurantId)
     .in('status', statuses)
     // The grace window is a query predicate, not a job: an order becomes
@@ -933,4 +938,26 @@ export async function saveBillLayout(restaurantId: string, layout: any): Promise
     }
     throw error;
   }
+}
+
+/** #R — the staff fallback for AC.
+ *
+ *  The automatic path needs none of this: the order's table carries is_ac and
+ *  the server resolves the service rate from it with nobody choosing anything.
+ *  This exists for when the automatic answer is wrong -- a party moved to the
+ *  AC room, a table flagged after the order went in -- and it sets an override
+ *  and re-totals, so the "Service charge" line changes before the bill prints.
+ *
+ *  Tolerates the function not existing: it arrives with a staged migration, and
+ *  until that runs the automatic path is simply the only path, which is the
+ *  behaviour today. Returns false so the caller can say so rather than claim a
+ *  change that did not happen. */
+export async function setOrdersAc(orderIds: string[], isAc: boolean): Promise<boolean> {
+  if (!orderIds.length) return false;
+  const { error } = await supabase.rpc('set_orders_ac', {
+    p_order_ids: orderIds, p_is_ac: isAc,
+  });
+  if (!error) return true;
+  if (error.code === 'PGRST202') return false;
+  throw error;
 }

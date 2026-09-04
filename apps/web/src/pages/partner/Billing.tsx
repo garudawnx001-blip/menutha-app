@@ -4,7 +4,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import QRCode from 'qrcode';
-import { fetchLiveOrders, createBill, payBill, fetchBillLayout, type PortalOrder } from '../../lib/portalApi';
+import { fetchLiveOrders, createBill, payBill, fetchBillLayout, setOrdersAc, type PortalOrder } from '../../lib/portalApi';
 import { renderBillHtml, type BillData } from '../../lib/billTemplate';
 import { inr } from '../../lib/types';
 import { usePartner } from './PartnerShell';
@@ -83,6 +83,10 @@ export function Billing() {
   }, [orders, focusTable]);
 
   const chosen = (orders ?? []).filter((o) => selected.has(o.id));
+  // The restaurant-level master. With AC pricing off, the override row is not
+  // shown at all -- a control that cannot change a number is a control that
+  // should not be on the screen.
+  const acPricing = (restaurant as any).ac_pricing === true;
   const subtotal = chosen.reduce((a, o) => a + o.subtotal + o.packing_charge, 0);
   const service = chosen.reduce((a, o) => a + Number((o as any).service_charge ?? 0), 0);
   const disc = Math.min(Number(discount) || 0, subtotal);
@@ -174,6 +178,37 @@ export function Billing() {
    * invoice follows: halving is only correct while the two rates are equal,
    * and 9+9 hides the error where 9+2.5 shows it on every bill.
    */
+  /**
+   * #R — the AC override, and null is the important value.
+   *
+   * null means "auto": nobody has touched it and the server resolves the
+   * service rate from the table's own is_ac flag. That is the normal path and
+   * the one that needs no staff action at all. true/false is a deliberate
+   * correction. The three states are why this is not a boolean.
+   */
+  const [acChoice, setAcChoice] = useState<boolean | null>(null);
+
+  const applyAc = async (v: boolean | null) => {
+    if (busy) return;
+    setAcChoice(v);
+    // null = back to auto, which the server expresses as a null override. The
+    // RPC takes a boolean, so "auto" is not something it can be told -- and
+    // re-deriving it here would be a second implementation of the rate. Auto
+    // is restored by regenerating the bill, which is the honest answer until
+    // the RPC grows a null case.
+    if (v === null) return;
+    setBusy(true); setError('');
+    try {
+      const applied = await setOrdersAc(chosen.map((o) => o.id), v);
+      if (!applied) {
+        setError('AC pricing is not switched on in this database yet — the table’s own setting still applies.');
+      }
+      await load();
+    } catch (e: any) {
+      setError(e?.message ?? 'Could not change the AC setting.');
+    } finally { setBusy(false); }
+  };
+
   const printData = (): BillData => {
     const b = bill!;
     const rateSum = (sgstPct + cgstPct) || 1;
@@ -210,8 +245,17 @@ export function Billing() {
       }))),
       subtotal: b.subtotal,
       discount: b.discount,
-      packing: 0,
-      service: 0,
+      // SUMMED FROM THE ORDERS, not zero. I had hardcoded both when moving the
+      // printed bill onto the shared template, which meant a restaurant with a
+      // parcel charge or a service charge printed a bill that silently omitted
+      // them while the total still included them -- the lines would not add up.
+      // The orders carry the real figures; create_table_bill only returns the
+      // subtotal, discount, GST and total.
+      packing: b.orders.reduce((a, o) => a + Number(o.packing_charge ?? 0), 0),
+      // The AC rate is already inside this number (#R): the server resolved
+      // which service percentage applied from the table's own AC flag. It
+      // prints as the ordinary "Service charge" line, with no mention of AC.
+      service: b.orders.reduce((a, o) => a + Number((o as any).service_charge ?? 0), 0),
       sgstPct, cgstPct,
       sgst: Math.round(b.gst_amount * (sgstPct / rateSum) * 100) / 100,
       cgst: Math.round(b.gst_amount * (cgstPct / rateSum) * 100) / 100,
@@ -330,6 +374,33 @@ export function Billing() {
           )}
           {service > 0 && (
             <div className="bill-row"><span>Service charge</span><span>{inr(service)}</span></div>
+          )}
+          {/* #R — THE FALLBACK, and it is only a fallback.
+              The AC rate applies AUTOMATICALLY from the table's own is_ac flag:
+              the QR already knows which room it is in, the server resolves the
+              service percentage from it, and staff do nothing. This row exists
+              for when that answer is wrong — a party moved into the AC room, a
+              table flagged after the order went in — and flipping it re-totals
+              the orders so the Service charge line is right before anything
+              prints.
+
+              It says "Air-conditioned", never "AC charge", and it changes a
+              RATE rather than adding a line: nothing here reaches the diner's
+              bill as its own row. */}
+          {acPricing && (
+            <div className="bill-row">
+              <span>Air-conditioned table</span>
+              <span style={{ display: 'flex', gap: 6 }}>
+                {([['Auto', null], ['Yes', true], ['No', false]] as [string, boolean | null][]).map(([lbl, v]) => (
+                  <button
+                    key={lbl}
+                    className={acChoice === v ? 'chip active' : 'chip'}
+                    disabled={busy}
+                    onClick={() => applyAc(v)}
+                  >{lbl}</button>
+                ))}
+              </span>
+            </div>
           )}
           <div className="bill-row"><span>SGST ({sgstPct}%)</span><span>{inr(sgst)}</span></div>
           <div className="bill-row"><span>CGST ({cgstPct}%)</span><span>{inr(cgst)}</span></div>

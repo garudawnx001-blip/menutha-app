@@ -18,17 +18,30 @@ import {
   type RestaurantCharge, type ChargeKind, type ChargeScope,
 } from '../../lib/portalApi';
 
+/**
+ * #R REMOVED THE AC SCOPES. A charge scoped to "AC tables" printed on the bill
+ * under the OWNER'S OWN LABEL, so an owner typing "AC charge" put exactly that
+ * in front of a diner — and the rule is that the customer never sees the word
+ * AC on a bill. AC now selects which SERVICE CHARGE RATE applies (Settings has
+ * two), and that prints as the ordinary "Service charge" line.
+ *
+ * There were no AC-scoped rows on any restaurant in production, so nothing an
+ * owner made is being taken away. The migration deactivates any that appear
+ * later and narrows the CHECK constraint, so the database refuses them too —
+ * this list is the courtesy, the constraint is the guarantee.
+ */
 const SCOPES: { key: ChargeScope; label: string }[] = [
   { key: 'all', label: 'Every order' },
   { key: 'dine_in', label: 'Dine-in only' },
   { key: 'parcel', label: 'Takeaway only' },
-  { key: 'ac', label: 'AC tables' },
-  { key: 'non_ac', label: 'Non-AC tables' },
 ];
 
 const blank = { label: '', kind: 'flat' as ChargeKind, value: '', applies_to: 'all' as ChargeScope };
 
-export function BillCharges({ restaurantId, acPricing }: { restaurantId: string; acPricing: boolean }) {
+/** acPricing is no longer read here: it used to gate the AC scopes, and #R
+ *  removed those. Kept in the signature because Settings passes it, and a
+ *  churned prop is a diff nobody asked for. */
+export function BillCharges({ restaurantId }: { restaurantId: string; acPricing?: boolean }) {
   const [rows, setRows] = useState<RestaurantCharge[]>([]);
   const [draft, setDraft] = useState(blank);
   const [busy, setBusy] = useState(false);
@@ -108,7 +121,6 @@ export function BillCharges({ restaurantId, acPricing }: { restaurantId: string;
             // AC scopes are meaningless until AC pricing is on, and offering
             // them anyway is how someone creates a charge that silently never
             // applies and then reports it as a bug.
-            .filter((s) => acPricing || (s.key !== 'ac' && s.key !== 'non_ac'))
             .map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
         </select>
         <button className="chip" disabled={busy} onClick={add}>Add charge</button>

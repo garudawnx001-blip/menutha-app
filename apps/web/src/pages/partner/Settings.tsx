@@ -30,6 +30,10 @@ export function Settings() {
     sgst_pct: String((restaurant as any).sgst_pct ?? 2.5),
     cgst_pct: String((restaurant as any).cgst_pct ?? 2.5),
     service_charge_pct: String((restaurant as any).service_charge_pct ?? 0),
+    // Blank, not 0: an empty AC rate means "same as non-AC", and 0 would mean
+    // "AC tables pay no service charge" -- a different, and expensive, answer.
+    service_charge_ac_pct: (restaurant as any).service_charge_ac_pct == null
+      ? '' : String((restaurant as any).service_charge_ac_pct),
     grace_seconds: String((restaurant as any).grace_seconds ?? 60),
     /* Bill options -- "please give all the options". FSSAI sits with GSTIN
        because both are licence numbers a bill has to carry; thanks and terms
@@ -49,6 +53,18 @@ export function Settings() {
 
   const save = async () => {
     setBusy(true); setError(''); setSaved(false);
+    /**
+     * THE AC RATE IS SENT SEPARATELY, and only when the column is there.
+     *
+     * service_charge_ac_pct arrives with a staged migration that is run by
+     * hand, so there is a window in which this page is deployed and the column
+     * is not. Sending it then would fail the WHOLE update -- and losing a
+     * GSTIN, an address and a thank-you line because one new percentage could
+     * not be stored is the wrong way round. It goes in a second, tolerated
+     * update instead, and the page says which half was kept.
+     */
+    const acRaw = form.service_charge_ac_pct.trim();
+    const acPct = acRaw === '' ? null : Math.min(25, Math.max(0, Number(acRaw) || 0));
     try {
       await updateRestaurant(restaurant.id, {
         name: form.name.trim() || restaurant.name,
@@ -80,9 +96,24 @@ export function Settings() {
         grace_seconds: Math.min(900, Math.max(0, Math.round(Number(form.grace_seconds) || 0))),
         ...(can('white_label') || can('basic_theme') ? { brand_color: form.brand_color } : {}),
       });
+      // The AC rate, tolerated. A missing column is the expected state until
+      // 2026-09-04_ac_service_rate.sql is run, and it must not cost the owner
+      // everything else on this page.
+      let acKept = true;
+      try {
+        await updateRestaurant(restaurant.id, { service_charge_ac_pct: acPct } as any);
+      } catch (e: any) {
+        if (e?.code === 'PGRST204' || e?.code === '42703' || /service_charge_ac_pct/.test(e?.message ?? '')) {
+          acKept = false;
+        } else { throw e; }
+      }
       await reload();
-      setSaved(true);
-      setTimeout(() => setSaved(false), 2500);
+      if (acKept) {
+        setSaved(true);
+        setTimeout(() => setSaved(false), 2500);
+      } else {
+        setError('Everything saved except the AC service charge — this restaurant’s database is still being updated.');
+      }
     } catch (e: any) { setError(e?.message ?? 'Save failed.'); }
     finally { setBusy(false); }
   };
@@ -249,9 +280,25 @@ export function Settings() {
             </F>
           </div>
           <div style={{ flex: '1 1 140px', minWidth: 0 }}>
-            <F label="Service charge %">
+            <F label="Service charge (non-AC) %">
               <input className="code-input" inputMode="decimal" value={form.service_charge_pct}
                 onChange={(e) => setForm({ ...form, service_charge_pct: e.target.value })} />
+            </F>
+          </div>
+          {/* #R — AC IS A RATE, NOT A LINE. The customer never sees the word
+              "AC" on a bill: an AC table is charged this percentage instead of
+              the one beside it, and both print as the same ordinary "Service
+              charge" line. Which one applies is resolved from the table's own
+              AC flag automatically — the QR already knows — so nobody has to
+              choose anything at the till.
+
+              Blank means "same as non-AC", which is what every restaurant is
+              until it fills this in. */}
+          <div style={{ flex: '1 1 140px', minWidth: 0 }}>
+            <F label="Service charge (AC) %">
+              <input className="code-input" inputMode="decimal" placeholder="same as non-AC"
+                value={form.service_charge_ac_pct}
+                onChange={(e) => setForm({ ...form, service_charge_ac_pct: e.target.value })} />
             </F>
           </div>
         </div>
