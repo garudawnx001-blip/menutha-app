@@ -93,7 +93,12 @@ export function Bill() {
 
   useEffect(() => {
     if (!session) {
-      nav('/', { replace: true });
+      // /table, not / --  is the marketing landing on the deployed site.
+      // /table, not '/'. On the deployed site the site root is the MARKETING
+      // landing, not this app — so sending a session-less diner there and
+      // rewriting their URL to it means one reload puts them on a page with a
+      // restaurant LOGIN and SIGNUP on it. #O: a diner must never see that.
+      nav('/table', { replace: true });
       return;
     }
     let alive = true;
@@ -122,7 +127,9 @@ export function Bill() {
     }).then(setPayQr).catch(() => setPayQr(''));
   }, [vpa, bill, session?.guest?.phone]);
 
-  if (!session) return null;
+  // A Spinner, not null: the redirect runs in an effect, after this render,
+  // so null paints a blank white frame on the way to the gate.
+  if (!session) return <Spinner label="…" />;
   if (!bill && !failed) return <Spinner label={t('bill.loading')} />;
 
   if (failed && !bill) {

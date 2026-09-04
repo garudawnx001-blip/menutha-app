@@ -122,7 +122,14 @@ export function Menu() {
 
   useEffect(() => {
     if (!session) {
-      nav('/', { replace: true });
+      // /table, not / -- see TableGate.  is the MARKETING landing on the
+      // deployed site, so sending a diner there and rewriting their URL to it
+      // means one reload puts them on a restaurant login page.
+      // /table, not '/'. On the deployed site the site root is the MARKETING
+      // landing, not this app — so sending a session-less diner there and
+      // rewriting their URL to it means one reload puts them on a page with a
+      // restaurant LOGIN and SIGNUP on it. #O: a diner must never see that.
+      nav('/table', { replace: true });
       return;
     }
     let alive = true;
@@ -183,7 +190,11 @@ export function Menu() {
       .map(([cat, v]) => [cat, v.items] as [string, MenuItem[]]);
   }, [visible]);
 
-  if (!session) return null;
+  // A Spinner, not null. The redirect above runs in an effect, which is AFTER
+  // this render, so returning null paints one blank white frame on the way to
+  // the gate -- a flash of nothing is exactly the "glitch" the diner surface
+  // is not allowed to have.
+  if (!session) return <Spinner label={t('menu.loading')} />;
   const { restaurant, table } = session;
   // Anything still inside its window: the one thing the diner may still undo.
   const pending = openOrders.filter((o) => o.editable);

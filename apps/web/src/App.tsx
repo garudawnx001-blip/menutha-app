@@ -4,6 +4,7 @@ import { StoreProvider } from './store';
 import { Landing } from './pages/Landing';
 import { Restaurants } from './pages/Restaurants';
 import { Scan } from './pages/Scan';
+import { TableGate } from './pages/TableGate';
 import { PublicRestaurant } from './pages/PublicRestaurant';
 import { PartnerLogin } from './pages/partner/PartnerLogin';
 import { PlanScreen } from './pages/partner/PlanScreen';
@@ -37,6 +38,9 @@ export function App() {
           <Route path="/" element={<Landing />} />
           <Route path="/restaurants" element={<Restaurants />} />
           <Route path="/r/:slug" element={<PublicRestaurant />} />
+          {/* THE DINER FALLBACK. Every session-less diner path lands here --
+              see TableGate for why it is not '/'. */}
+          <Route path="/table" element={<TableGate />} />
           <Route path="/scan/:token" element={<Scan />} />
           <Route path="/menu" element={<Menu />} />
           <Route path="/cart" element={<Cart />} />
@@ -58,7 +62,14 @@ export function App() {
             <Route path="/partner/settings" element={<Settings />} />
           </Route>
           <Route path="/partner/plan" element={<PlanScreen />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
+          {/* UNKNOWN PATHS GO TO THE TABLE GATE, not to '/'.
+              '/' is the marketing landing on the deployed site, so a diner who
+              mistypes a URL or follows a stale link would have been dropped on
+              a page selling restaurant accounts. The gate is the safe default:
+              it explains how to get to a menu and offers nothing else. Anyone
+              actually after the marketing site loads '/' directly and gets it,
+              because that is a real file served by Pages. */}
+          <Route path="*" element={<Navigate to="/table" replace />} />
         </Routes>
       </Router>
     </StoreProvider>

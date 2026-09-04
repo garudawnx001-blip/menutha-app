@@ -6,6 +6,7 @@ import { placeOrder } from '../lib/api';
 import { calcBill, inr } from '../lib/types';
 import { useStore } from '../store';
 import { useT, translateTableLabel } from '../lib/i18n';
+import { Spinner } from '../components';
 import { Stepper, VegMark, Wordmark } from '../components';
 
 export function Cart() {
@@ -19,9 +20,14 @@ export function Cart() {
 
 
   useEffect(() => {
-    if (!session) nav('/', { replace: true });
+    // /table, not / --  is the marketing landing on the deployed site.
+    // /table, not '/' -- the site root is the marketing landing on the
+    // deployed site, and a diner must never be sent to a restaurant login.
+    if (!session) nav('/table', { replace: true });
   }, [session]);
-  if (!session) return null;
+  // A Spinner, not null: the redirect runs in an effect, after this render,
+  // so null paints a blank white frame on the way to the gate.
+  if (!session) return <Spinner label="…" />;
 
   const packing = session.table.is_parcel ? Number(session.restaurant.parcel_charge ?? 0) : 0;
   const sgstPct = Number(session.restaurant.sgst_pct ?? 2.5);
