@@ -98,6 +98,10 @@ export function TablesQR() {
   const [tables, setTables] = useState<PortalTable[] | null>(null);
   const [label, setLabel] = useState('');
   const [section, setSection] = useState('');
+  // Seats at creation (see createTable). A string, not a number, so the field
+  // can be genuinely EMPTY -- 0 is not the same answer as "not recorded", and
+  // a numeric state would have to pick one of them to start from.
+  const [seats, setSeats] = useState('');
   const [printTables, setPrintTables] = useState<PortalTable[] | null>(null);
   const [error, setError] = useState('');
 
@@ -121,8 +125,11 @@ export function TablesQR() {
       return;
     }
     try {
-      await createTable(restaurant.id, label.trim(), section.trim() || null);
+      const n = seats.trim() === '' ? null : Number(seats.trim());
+      if (n !== null && !Number.isFinite(n)) { setError('Seats must be a number.'); return; }
+      await createTable(restaurant.id, label.trim(), section.trim() || null, n);
       setLabel('');
+      setSeats('');
       load();
     } catch (e: any) { setError(e?.message ?? 'Could not add the table.'); }
   };
@@ -157,6 +164,14 @@ export function TablesQR() {
         <input className="code-input" style={{ flex: 1, minWidth: 120 }}
           placeholder={can('multi_qr') ? 'Section (Bar / Rooftop…)' : 'Section — Growth plan'}
           value={section} onChange={(e) => setSection(e.target.value)} disabled={!can('multi_qr')} />
+        {/* SEATS, ASKED ONCE, WHILE HE IS ADDING THE TABLE. Narrow and
+            optional -- it sits between the section and the button because
+            that is the order the questions come in his head: what is it
+            called, where is it, how many sit at it. */}
+        <input className="code-input" style={{ width: 92 }} inputMode="numeric"
+          placeholder="Seats" value={seats}
+          onChange={(e) => setSeats(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && add()} />
         <button className="btn btn-primary" style={{ padding: '12px 18px' }} disabled={!label.trim()} onClick={add}>Add table</button>
       </div>
       {!can('multi_qr') && (

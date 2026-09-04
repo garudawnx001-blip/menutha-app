@@ -276,11 +276,41 @@ export async function fetchTables(restaurantId: string): Promise<PortalTable[]> 
   return (data ?? []).map((t: any) => ({ ...t, seating_capacity: null, is_ac: null })) as PortalTable[];
 }
 
-export async function createTable(restaurantId: string, label: string, room: string | null) {
+/** SEATS AT CREATION, not only afterwards.
+ *
+ *  The per-row Seats field could always edit a table's capacity, but a table
+ *  was born with none -- so the number existed only for tables somebody
+ *  remembered to go back and fill in, and reservations had nothing to match a
+ *  party size against for the rest. Asking once, while the owner is already
+ *  thinking about the table they are adding, is the only point at which this
+ *  gets answered for every table rather than for some.
+ *
+ *  Optional, and null is a real value meaning not recorded: a restaurant that
+ *  leaves it blank keeps working exactly as it does now. Clamped to the same
+ *  1..40 as setTableCapacity, so the two ways in cannot disagree.
+ *
+ *  A resilient insert, for the reason fetchTables is resilient: sending a
+ *  column PostgREST has not seen yet fails the WHOLE insert, and failing to
+ *  create a table is a great deal worse than creating one without a seat
+ *  count. It falls back once, then remembers.
+ */
+export async function createTable(
+  restaurantId: string,
+  label: string,
+  room: string | null,
+  seats?: number | null,
+) {
   const token = 'qr_' + crypto.randomUUID().replace(/-/g, '').slice(0, 12);
-  const { error } = await supabase.from('dining_table').insert({
-    restaurant_id: restaurantId, label, room, qr_token: token,
-  });
+  const base = { restaurant_id: restaurantId, label, room, qr_token: token };
+  const capped = seats == null ? null : Math.min(40, Math.max(1, Math.round(seats)));
+
+  if (capped != null && !seatsColumnMissing) {
+    const { error } = await supabase.from('dining_table').insert({ ...base, seating_capacity: capped });
+    if (!error) return;
+    if (error.code !== '42703') throw error;
+    seatsColumnMissing = true;
+  }
+  const { error } = await supabase.from('dining_table').insert(base);
   if (error) throw error;
 }
 
