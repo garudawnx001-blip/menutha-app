@@ -893,3 +893,44 @@ export async function setTableCapacity(id: string, seats: number | null): Promis
     .eq('id', id);
   if (error) throw error;
 }
+
+/* ── Bill layout ───────────────────────────────────────────────────────────
+ *
+ * How the bill is typeset: logo on or off and where it comes from, and the
+ * alignment and type size of every section. Stored as one jsonb document --
+ * see 2026-09-04_bill_layout.sql for why one column rather than eighteen.
+ *
+ * BOTH OF THESE TOLERATE THE COLUMN NOT BEING THERE. The migration is staged
+ * and run by hand, so there is a window in which this code is deployed and the
+ * column is not. A missing column must mean "the house layout", not a settings
+ * page that will not open -- the same rule the seats column already follows,
+ * and for the same reason it was written: I once took Tables & QR down by
+ * selecting a column PostgREST had not seen yet.
+ */
+let billLayoutColumnMissing = false;
+
+export async function fetchBillLayout(restaurantId: string): Promise<any | null> {
+  if (billLayoutColumnMissing) return null;
+  const { data, error } = await supabase
+    .from('restaurant').select('bill_layout').eq('id', restaurantId).single();
+  if (error) {
+    if (error.code === '42703') { billLayoutColumnMissing = true; return null; }
+    throw error;
+  }
+  return (data as any)?.bill_layout ?? null;
+}
+
+/** Throws a SENTENCE, not a Postgres code. If the column is not there yet the
+ *  owner needs to know their change was not kept and why, in words that tell
+ *  them who can fix it -- "42703" tells them nothing and looks like a bug. */
+export async function saveBillLayout(restaurantId: string, layout: any): Promise<void> {
+  const { error } = await supabase
+    .from('restaurant').update({ bill_layout: layout }).eq('id', restaurantId);
+  if (error) {
+    if (error.code === '42703' || /bill_layout/.test(error.message ?? '')) {
+      billLayoutColumnMissing = true;
+      throw new Error('Bill layout cannot be saved yet — this restaurant’s database is still being updated. Everything else on this page saves normally.');
+    }
+    throw error;
+  }
+}

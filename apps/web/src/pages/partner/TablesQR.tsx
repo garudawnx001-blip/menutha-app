@@ -4,6 +4,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import QRCode from 'qrcode';
 import { fetchTables, createTable, removeTable, setTableCapacity, setTableAc, type PortalTable } from '../../lib/portalApi';
+import { renderQrSheetHtml, accentFor } from '../../lib/billTemplate';
 import { usePartner } from './PartnerShell';
 import { Spinner } from '../../components';
 
@@ -28,25 +29,6 @@ const ORDER_BASE = (
 /** scan.html is a real file, so this answers HTTP 200 — phone QR scanners
  *  refuse to open a 404, which /scan/<token> used to return. */
 const qrLink = (token: string) => `${ORDER_BASE}/scan.html?t=${encodeURIComponent(token)}`;
-
-/** A deterministic accent per table, from a curated in-brand palette. The
- *  point is practical, not decorative: a printed stack of table tents is
- *  otherwise identical apart from a small label, and staff have to read every
- *  one to sort them. Same label always yields the same colour, so a reprinted
- *  card matches the one already on the table. */
-const CARD_ACCENTS = [
-  '#D97757', // terracotta — the house colour
-  '#1B5E3F', // forest
-  '#C9A04E', // gold
-  '#9B4B3F', // clay
-  '#3E6B63', // teal
-  '#8A5A83', // plum
-];
-function accentFor(label: string) {
-  let h = 0;
-  for (let i = 0; i < label.length; i++) h = (h * 31 + label.charCodeAt(i)) >>> 0;
-  return CARD_ACCENTS[h % CARD_ACCENTS.length];
-}
 
 /* No paper picker any more. The printer knows what paper it has and the
    browser's print dialog already asks; making the owner declare it a second
@@ -102,7 +84,6 @@ export function TablesQR() {
   // can be genuinely EMPTY -- 0 is not the same answer as "not recorded", and
   // a numeric state would have to pick one of them to start from.
   const [seats, setSeats] = useState('');
-  const [printTables, setPrintTables] = useState<PortalTable[] | null>(null);
   const [error, setError] = useState('');
 
   const load = () => fetchTables(restaurant.id).then(setTables).catch((e) => setError(e.message));
@@ -134,14 +115,54 @@ export function TablesQR() {
     } catch (e: any) { setError(e?.message ?? 'Could not add the table.'); }
   };
 
-  useEffect(() => {
-    if (!printTables) return;
-    // Nothing to inject any more: one stylesheet covers every paper size.
-    // The delay is only so the QR SVGs finish rendering before the dialog
-    // freezes the document.
-    const t = setTimeout(() => { window.print(); setPrintTables(null); }, 350);
-    return () => clearTimeout(t);
-  }, [printTables]);
+
+  /**
+   * THE PRINTED CARDS ARE THE SHARED TEMPLATE NOW.
+   *
+   * They used to be JSX plus rules in theme.css, while the phone built its own
+   * HTML for the same card — so a QR card reprinted from the phone was not the
+   * card already on the table. renderQrSheetHtml is what both surfaces call,
+   * accentFor moved into it as well (each surface had its own copy of the
+   * palette, so a table could get two different colours), and the sheet is
+   * written into a hidden iframe and printed from there.
+   *
+   * An iframe rather than this document: printing the page means the portal's
+   * own stylesheet is in play and every rule in it is a chance for the card to
+   * come out differently here than on the phone. An empty iframe has no
+   * stylesheet but the one the template carries, which is exactly the point.
+   */
+  const printCards = async (list: PortalTable[]) => {
+    setError('');
+    try {
+      const cards = await Promise.all(list.map(async (t) => ({
+        restaurantName: restaurant.name,
+        tableLabel: t.is_parcel ? 'Takeaway' : t.label,
+        qrSvg: await QRCode.toString(qrLink(t.qr_token), {
+          type: 'svg', margin: 1, errorCorrectionLevel: 'H',
+          color: { dark: '#1C1A15', light: '#FFFDF8' },
+        }),
+        accent: accentFor(t.label),
+      })));
+
+      const frame = document.createElement('iframe');
+      frame.setAttribute('aria-hidden', 'true');
+      frame.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;';
+      document.body.appendChild(frame);
+      const doc = frame.contentDocument;
+      if (!doc) { document.body.removeChild(frame); setError('Could not open the print sheet.'); return; }
+      doc.open();
+      doc.write(renderQrSheetHtml(cards));
+      doc.close();
+      // The QRs are inline SVG and parse with the document, so there is nothing
+      // to wait on but layout. The frame is removed after the dialog returns;
+      // removing it sooner cancels the print on some browsers.
+      frame.contentWindow?.focus();
+      frame.contentWindow?.print();
+      setTimeout(() => { try { document.body.removeChild(frame); } catch { /* already gone */ } }, 1000);
+    } catch (e: any) {
+      setError(e?.message ?? 'Could not prepare the cards for printing.');
+    }
+  };
 
   if (!tables) return <Spinner label="Loading tables…" />;
 
@@ -153,7 +174,7 @@ export function TablesQR() {
           <h1 className="display" style={{ fontSize: 26 }}>{tables.length} QR codes</h1>
         </div>
         <span style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-          <button className="chip" onClick={() => setPrintTables(tables)}>🖨 Print all QR cards</button>
+          <button className="chip" onClick={() => printCards(tables)}>🖨 Print all QR cards</button>
         </span>
       </div>
       {error && <p style={{ color: 'var(--error)', fontSize: 14, marginBottom: 10 }}>{error}</p>}
@@ -241,7 +262,7 @@ export function TablesQR() {
                     </label>
                   )}
                   <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
-                    <button className="chip" onClick={() => setPrintTables([t])}>🖨 Print</button>
+                    <button className="chip" onClick={() => printCards([t])}>🖨 Print</button>
                     <button className="chip" onClick={() => navigator.clipboard?.writeText(qrLink(t.qr_token))}>Copy link</button>
                     {!t.is_parcel && (
                       <button className="chip" onClick={async () => {
@@ -256,28 +277,6 @@ export function TablesQR() {
         </section>
       ))}
 
-      {printTables && (
-        <div className="printable">
-          <div className="qr-sheet">
-            {printTables.map((t) => (
-              <div key={t.id} className="qr-card" style={{ ['--card-accent' as any]: accentFor(t.label) }}>
-                <p className="qr-eyebrow">Scan · Order · Relax</p>
-                <p className="qr-house">{restaurant.name}</p>
-                <span className="qr-table">{t.is_parcel ? 'Takeaway' : t.label}</span>
-                <div>
-                  <span className="qr-well"><QrImg token={t.qr_token} size={200} /></span>
-                </div>
-                <p className="qr-cta">Point your camera here</p>
-                <p className="qr-steps">
-                  The menu opens straight away — browse, order,<br />
-                  and pay from your phone. No app to install.
-                </p>
-                <p className="qr-foot">Powered by Menutha</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
     </div>
   );
 }

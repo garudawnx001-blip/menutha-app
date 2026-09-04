@@ -7,6 +7,7 @@ import {
 } from '../../lib/portalApi';
 import { usePartner } from './PartnerShell';
 import { BillCharges } from './BillCharges';
+import { BillLayoutEditor } from './BillLayoutEditor';
 
 export function Settings() {
   const { restaurant, role, can, reload } = usePartner();
@@ -174,6 +175,22 @@ export function Settings() {
             wondering whether Save was still required for it. */}
         <F label="Custom charges">
           <BillCharges restaurantId={restaurant.id} acPricing={form.ac_pricing} />
+        </F>
+        {/* THE LAYOUT EDITOR, in the same card as the charges and the tax
+            rates, because they are the same job: everything that decides what
+            the bill says and how it reads. It saves itself, like the charges
+            above and for the same reason -- mixing it into the form's Save
+            would mean changing an alignment and then wondering whether Save
+            was still required.
+
+            `form` rather than `restaurant` is passed on purpose: the preview
+            has to show the thank-you line he is typing RIGHT NOW, not the one
+            last saved, or it is only telling the truth about half this page. */}
+        <F label="Bill layout">
+          <BillLayoutEditor
+            restaurantId={restaurant.id}
+            restaurant={{ ...(restaurant as any), ...form }}
+          />
         </F>
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
           <div style={{ flex: '1 1 140px', minWidth: 0 }}>

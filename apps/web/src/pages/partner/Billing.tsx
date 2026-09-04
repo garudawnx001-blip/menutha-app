@@ -4,7 +4,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import QRCode from 'qrcode';
-import { fetchLiveOrders, createBill, payBill, type PortalOrder } from '../../lib/portalApi';
+import { fetchLiveOrders, createBill, payBill, fetchBillLayout, type PortalOrder } from '../../lib/portalApi';
+import { renderBillHtml, type BillData } from '../../lib/billTemplate';
 import { inr } from '../../lib/types';
 import { usePartner } from './PartnerShell';
 import { Spinner } from '../../components';
@@ -32,6 +33,10 @@ export function Billing() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [printing, setPrinting] = useState(false);
+  // The owner's bill layout. Null until it loads and null forever if the
+  // column is not there yet -- normaliseLayout inside the template turns both
+  // into the house layout, so printing never waits on this.
+  const [layout, setLayout] = useState<any>(null);
   // Which table has its per-person list expanded.
   const [splitting, setSplitting] = useState<string | null>(null);
   // Opened from a ticket on the Orders board: focus that table straight away
@@ -160,6 +165,66 @@ export function Billing() {
     } catch (e: any) { setError(e?.message ?? 'Could not mark the bill paid.'); }
     finally { setBusy(false); }
   });
+  /**
+   * The bill, in the shape the shared template renders. Everything about how
+   * it LOOKS lives in that template; this only says what the numbers are.
+   *
+   * The SGST/CGST split is apportioned from the stored gst_amount by the two
+   * configured rates rather than halved, which is the same rule the phone's
+   * invoice follows: halving is only correct while the two rates are equal,
+   * and 9+9 hides the error where 9+2.5 shows it on every bill.
+   */
+  const printData = (): BillData => {
+    const b = bill!;
+    const rateSum = (sgstPct + cgstPct) || 1;
+    return {
+      restaurant: {
+        name: restaurant.name ?? '',
+        address: (restaurant as any).address ?? '',
+        city: restaurant.city ?? '',
+        phone: (restaurant as any).phone ?? '',
+        gstin: restaurant.gstin ?? '',
+        fssai: (restaurant as any).fssai_no ?? '',
+        thanks: (restaurant as any).bill_thanks ?? (restaurant as any).bill_footer ?? '',
+        terms: (restaurant as any).bill_terms ?? '',
+        logoUrl: (restaurant as any).logo_url ?? null,
+      },
+      billNo: `Bill #${b.bill_no}`,
+      dateText: new Date().toLocaleString('en-IN'),
+      // The label from the orders themselves. A bill can span several orders
+      // at one table, so the first one's label is the table's; a parcel bill
+      // says so, and 'Dine-in' is the honest answer when nothing carries a
+      // label rather than a table number nobody chose.
+      tableText: b.orders[0]?.is_parcel
+        ? 'Parcel / Takeaway'
+        : (b.orders[0]?.table_label ?? 'Dine-in'),
+      // The diner's own name, where an order carried one -- a bill that says
+      // "Guest" beside a name the kitchen already knew is a bill that looks
+      // like it belongs to somebody else.
+      customer: {
+        name: b.orders.find((o) => o.guest_name)?.guest_name ?? 'Guest',
+        phone: b.orders.find((o) => o.guest_phone)?.guest_phone ?? '',
+      },
+      items: b.orders.flatMap((o) => o.items.map((it) => ({
+        name: it.name, qty: it.qty, unit_price: it.unit_price,
+      }))),
+      subtotal: b.subtotal,
+      discount: b.discount,
+      packing: 0,
+      service: 0,
+      sgstPct, cgstPct,
+      sgst: Math.round(b.gst_amount * (sgstPct / rateSum) * 100) / 100,
+      cgst: Math.round(b.gst_amount * (cgstPct / rateSum) * 100) / 100,
+      total: b.total,
+      payQrDataUri: billQr || null,
+      upiVpa: (restaurant as any).upi_vpa ?? null,
+    };
+  };
+
+  useEffect(() => {
+    fetchBillLayout(restaurant.id).then(setLayout).catch(() => {});
+  }, [restaurant.id]);
+
   useEffect(() => {
     if (!printing) return;
     const t = setTimeout(() => { window.print(); setPrinting(false); }, 300);
@@ -313,63 +378,24 @@ export function Billing() {
       )}
 
       {printing && bill && (
-        <div className="printable" style={{ fontFamily: 'Helvetica, Arial, sans-serif', fontSize: 13 }}>
-          {/* Branded header. The bill is the one thing a diner takes away, so
-              it carries the restaurant's own identity — logo, address, GSTIN,
-              phone — not just a name. All editable in Settings. */}
-          {(restaurant as any).logo_url && (
-            <img className="bill-logo" src={(restaurant as any).logo_url} alt=""
-              style={{ maxHeight: 54, maxWidth: '60%', objectFit: 'contain', margin: '0 auto 6px', display: 'block' }} />
-          )}
-          <h2 style={{ fontFamily: 'Georgia, serif', textAlign: 'center', margin: 0 }}>{restaurant.name}</h2>
-          {((restaurant as any).address || restaurant.city) && (
-            <p style={{ textAlign: 'center', margin: '2px 0' }}>
-              {(restaurant as any).address ?? ''} {restaurant.city ?? ''}
-            </p>
-          )}
-          {(restaurant as any).phone && (
-            <p style={{ textAlign: 'center', margin: '2px 0' }}>Ph: {(restaurant as any).phone}</p>
-          )}
-          {restaurant.gstin && (
-            <p style={{ textAlign: 'center', margin: '2px 0' }}>GSTIN: {restaurant.gstin}</p>
-          )}
-          <hr style={{ margin: '10px 0' }} />
-          <p><strong>TAX INVOICE — Bill #{bill.bill_no}</strong> · {new Date().toLocaleString('en-IN')}</p>
-          <table style={{ width: '100%', marginTop: 8, borderCollapse: 'collapse' }}>
-            <tbody>
-              {bill.orders.flatMap((o) => o.items.map((it, i) => (
-                <tr key={o.id + i}>
-                  <td style={{ padding: '3px 0' }}>{it.qty}× {it.name}</td>
-                  <td style={{ textAlign: 'right' }}>{inr(it.unit_price * it.qty)}</td>
-                </tr>
-              )))}
-              <tr><td style={{ paddingTop: 8 }}>Subtotal</td><td style={{ textAlign: 'right', paddingTop: 8 }}>{inr(bill.subtotal)}</td></tr>
-              {bill.discount > 0 && <tr><td>Discount</td><td style={{ textAlign: 'right' }}>− {inr(bill.discount)}</td></tr>}
-              <tr><td>SGST {sgstPct}%</td><td style={{ textAlign: 'right' }}>{inr(bill.gst_amount * (sgstPct / (sgstPct + cgstPct || 1)))}</td></tr>
-              <tr><td>CGST {cgstPct}%</td><td style={{ textAlign: 'right' }}>{inr(bill.gst_amount * (cgstPct / (sgstPct + cgstPct || 1)))}</td></tr>
-              <tr style={{ fontWeight: 700 }}><td style={{ paddingTop: 6 }}>TOTAL</td><td style={{ textAlign: 'right', paddingTop: 6 }}>{inr(bill.total)}</td></tr>
-            </tbody>
-          </table>
-          {/* Scan-to-pay QR embedded IN the printed/shared bill itself */}
-          {billQr && (
-            <div style={{ marginTop: 14, display: 'flex', gap: 12, alignItems: 'center' }}>
-              <img src={billQr} width={120} height={120} alt="" style={{ border: '1px solid #ddd', borderRadius: 8 }} />
-              <div style={{ fontSize: 12, lineHeight: 1.5 }}>
-                <strong>Scan to pay {inr(bill.total)}</strong><br />
-                Any UPI app · pays {restaurant.name} directly<br />
-                <span style={{ color: '#666' }}>{(restaurant as any).upi_vpa}</span>
-              </div>
-            </div>
-          )}
-          {(restaurant as any).bill_footer && (
-            <p style={{ marginTop: 12, textAlign: 'center', fontSize: 12.5, fontWeight: 600 }}>
-              {(restaurant as any).bill_footer}
-            </p>
-          )}
-          <p style={{ marginTop: 10, fontSize: 11, color: '#666', textAlign: 'center' }}>
-            SAC 996331 · powered by Menutha
-          </p>
-        </div>
+        /**
+         * THE PRINTED BILL IS THE SHARED TEMPLATE NOW, not JSX that happened
+         * to look similar. This block used to be its own markup — a narrow
+         * centred receipt — while the phone printed a wide A4 GST table, so a
+         * diner handed one from the counter and one from the phone was looking
+         * at two products. Both call renderBillHtml today.
+         *
+         * dangerouslySetInnerHTML is doing what it says and it is safe here
+         * for a specific reason rather than a hopeful one: every value the
+         * template interpolates goes through its own `esc`, and the string is
+         * assembled by a function in this repo, not fetched. React's escaping
+         * is not available to us because the thing being inserted IS a
+         * document — that is the point of sharing it.
+         */
+        <div
+          className="printable"
+          dangerouslySetInnerHTML={{ __html: renderBillHtml(printData(), layout) }}
+        />
       )}
     </div>
   );
