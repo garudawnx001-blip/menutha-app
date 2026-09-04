@@ -157,9 +157,50 @@ export async function saveDish(restaurantId: string, dish: Partial<PortalDish> &
   if (error) throw error;
 }
 
+/**
+ * DELETE A DISH — and say what happened, because it used to say nothing.
+ *
+ * Vishal: the Delete button "is not work for any items". Two faults stacked:
+ *
+ *   1. THE DATABASE REFUSED IT. order_item.menu_item_id references menu_item
+ *      with no ON DELETE clause, so NO ACTION applies and any dish that appears
+ *      on a past order cannot be deleted — 23503. In a trading restaurant that
+ *      is every dish, which is why it failed for EVERY item and not for a few.
+ *      Fixed by 2026-09-04_delete_dish_fk.sql, which makes it SET NULL: the
+ *      line item snapshots name and price at order time, so history is intact
+ *      without the link.
+ *   2. NOBODY WAS TOLD. The call site awaited this with no try/catch, so the
+ *      rejection went nowhere: no message, no closed form, no change on screen.
+ *      A button that fails invisibly is indistinguishable from a dead one, and
+ *      that is what he reported.
+ *
+ * `.select()` is what makes a refusal detectable at all. Without it PostgREST
+ * answers a delete that matched nothing with 204 and no error — so a policy
+ * that filtered the row out would look exactly like success, and the dish
+ * would still be there after the form closed.
+ */
 export async function deleteDish(id: string) {
-  const { error } = await supabase.from('menu_item').delete().eq('id', id);
-  if (error) throw error;
+  const { data, error } = await supabase
+    .from('menu_item').delete().eq('id', id).select('id');
+
+  if (error) {
+    // 23503 is foreign_key_violation. Say what it means in the owner's terms
+    // rather than showing them a Postgres code.
+    if ((error as any).code === '23503') {
+      throw new Error(
+        'This dish is on past orders, so the database will not remove it yet. '
+        + 'Run the pending database update (delete_dish_fk) and it will delete '
+        + 'cleanly — your order history is unaffected either way.',
+      );
+    }
+    throw error;
+  }
+
+  // No error and no rows: the row was filtered out rather than deleted. Never
+  // report that as success.
+  if (!data || data.length === 0) {
+    throw new Error('The dish was not deleted — you may not have permission to remove it.');
+  }
 }
 
 export async function uploadImage(folder: 'dishes' | 'logos' | 'banners' | 'receipts' | 'showcase', file: File): Promise<string> {

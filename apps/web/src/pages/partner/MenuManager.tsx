@@ -670,14 +670,38 @@ export function MenuManager() {
             <p className="dim" style={{ fontSize: 12, marginTop: 6 }}>
               Saved with the dish — remember to press Save dish.
             </p>
+            {/* THE REASON, WHERE HE IS LOOKING. The page-level error banner is
+                at the top of the menu screen, behind this panel — so a delete
+                that failed reported itself somewhere he could not see, which is
+                indistinguishable from reporting nothing. */}
+            {error && (
+              <p style={{ color: 'var(--error)', fontSize: 13.5, marginTop: 14 }}>{error}</p>
+            )}
             <div style={{ display: 'flex', gap: 8, marginTop: 18 }}>
               <button className={`btn btn-primary${busy ? ' is-busy' : ''}`} style={{ flex: 1 }} disabled={busy} onClick={save}>
                 {'Save dish'}
               </button>
+              {/* The unguarded await below was half of why Delete "did not
+                  work": the database refused it, the promise rejected, and
+                  nothing on screen changed. The form now stays open with the
+                  reason on it, and closes only when the dish is actually gone.
+
+                  The comment sits ABOVE the `&&` rather than inside it: a JSX
+                  comment block placed directly after an opening parenthesis is
+                  parsed as an object literal rather than a comment, and takes
+                  the file out with a syntax error. Third time in this
+                  codebase, hence the note. */}
               {draft.id && (
                 <button className="btn btn-ghost" disabled={busy} onClick={async () => {
-                  if (!confirm(`Delete "${draft.name}"?`)) return;
-                  await deleteDish(draft.id!); setDraft(null); load();
+                  if (!confirm(`Delete "${draft.name}"?\n\nPast orders keep their record of it.`)) return;
+                  setBusy(true); setError('');
+                  try {
+                    await deleteDish(draft.id!);
+                    setDraft(null);
+                    load();
+                  } catch (err: any) {
+                    setError(err?.message ?? 'Could not delete this dish.');
+                  } finally { setBusy(false); }
                 }}>Delete</button>
               )}
             </div>
