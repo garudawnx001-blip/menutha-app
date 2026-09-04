@@ -6,6 +6,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { inr } from '../lib/types';
+import { createReservation } from '../lib/api';
 import { Spinner, VegMark, Wordmark } from '../components';
 
 interface PublicDish { category: string; category_sort: number; name: string; description: string | null; price: number; is_veg: boolean; photo_url: string | null }
@@ -98,14 +99,25 @@ export function PublicRestaurant() {
       setError('Date, your name, and a 10-digit phone are needed.'); return;
     }
     setBusy(true); setError('');
-    const { error: e } = await supabase.rpc('create_reservation', {
-      p_slug: slug, p_party_size: reserve.party,
-      p_booked_for: new Date(`${reserve.date}T${reserve.time}:00`).toISOString(),
-      p_guest_name: reserve.name.trim(), p_guest_phone: reserve.phone.replace(/\D/g, ''),
-    });
-    setBusy(false);
-    if (e) { setError(e.message); return; }
-    setReserved(true);
+    try {
+      // The SHARED helper, not a second copy of the same rpc() call. This page
+      // and the scanned-table flow book through one function now, so the
+      // PGRST202 translation and any future validation live in one place --
+      // two call sites is two chances for one of them to show a diner a
+      // Postgres identifier.
+      await createReservation({
+        slug,
+        partySize: reserve.party,
+        bookedFor: new Date(`${reserve.date}T${reserve.time}:00`),
+        name: reserve.name,
+        phone: reserve.phone,
+      });
+      setReserved(true);
+    } catch (e: any) {
+      setError(e?.message ?? 'Could not send the booking. Please try again.');
+    } finally {
+      setBusy(false);
+    }
   };
 
   if (failed) {

@@ -583,5 +583,26 @@ export async function createReservation(args: {
     p_guest_name: args.name.trim(),
     p_guest_phone: args.phone.replace(/\D/g, ''),
   });
-  if (error) throw error;
+  if (!error) return;
+
+  /**
+   * PGRST202 IS NOT A DINER'S PROBLEM. It means the function is not in the
+   * schema cache -- which is the state of production today, because
+   * 2026-08-02_public_pages.sql has never been run there. Found by submitting
+   * this form on the live site rather than by reading the code, which is the
+   * only way it could have been found: the call site is correct and the
+   * migration file is correct; the function simply is not deployed.
+   *
+   * Until it is, a diner tapping "Request this table" was shown
+   * "Could not find the function public.create_reservation(p_booked_for, ...)".
+   * Leaking a Postgres identifier to a customer is exactly the glitch #O says
+   * the diner surface must never have, so it becomes a sentence that tells
+   * them what to do instead.
+   */
+  if (error.code === 'PGRST202') {
+    throw new Error('Online booking is not switched on for this restaurant yet — please call them to reserve a table.');
+  }
+  // The RPC's own words where it has them: it validates the party size, the
+  // 60-day window and the date, and its message is more useful than ours.
+  throw error;
 }
