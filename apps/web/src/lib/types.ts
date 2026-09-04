@@ -114,6 +114,20 @@ export interface Session {
    * existing session immortal.
    */
   guestAt?: number;
+  /**
+   * #Q — WHEN THIS DEVICE LAST ORDERED IN THIS SEATING.
+   *
+   * Settlement should end the diner's session: once staff close the table's
+   * bill, the next person to scan that QR must be asked who they are rather
+   * than inheriting the last party's name. The two-hour TTL above already does
+   * that eventually; this does it the moment the money is taken.
+   *
+   * It exists because "the table has no unsettled orders" is TRUE for a diner
+   * who has just scanned and not ordered yet, and clearing their identity then
+   * would re-ask for a name on every single scan. Only a device that actually
+   * ordered can have its seating ended by settlement.
+   */
+  orderedAt?: number;
 }
 
 // ── Table bill (get_table_bill RPC) ────────────────────────────────────────

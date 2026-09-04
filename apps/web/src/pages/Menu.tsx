@@ -6,7 +6,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   fetchMenu, subscribeMenu, placeOrder,
-  fetchMyOpenOrders, updateMyOrderItem, type OpenOrder,
+  fetchMyOpenOrders, updateMyOrderItem, fetchTableBill, type OpenOrder,
 } from '../lib/api';
 import type { CartLine, MenuItem } from '../lib/types';
 import { inr } from '../lib/types';
@@ -19,7 +19,7 @@ import { CallService } from './CallService';
 
 export function Menu() {
   const nav = useNavigate();
-  const { session, setGuest } = useStore();
+  const { session, setGuest, noteOrdered, endSeating } = useStore();
   const t = useT();
   const lang = useLang();
   const [items, setItems] = useState<MenuItem[] | null>(null);
@@ -88,6 +88,8 @@ export function Menu() {
     setPlacing((p) => new Set(p).add(line.menuItemId));
     try {
       await placeOrder(session, [line]);
+      // #Q -- see Cart. One-tap reorder counts as ordering just as much.
+      noteOrdered();
       flash(`${label} ${t('menu.ordered')}`);
       await refreshOpen();
     } catch (e: any) {
@@ -147,6 +149,52 @@ export function Menu() {
       document.removeEventListener('visibilitychange', onFocus);
     };
   }, [session?.restaurant.id]);
+
+
+  /**
+   * #Q — SETTLEMENT LOGS THE DINER OUT OF THIS SEATING.
+   *
+   * When staff close the table's bill, the next person to scan that QR must be
+   * asked who they are rather than inheriting the last party's name. The
+   * two-hour identity TTL gets there eventually; this gets there the moment
+   * the money is taken.
+   *
+   * THE SIGNAL IS THE TABLE, NOT THIS DINER. get_table_bill already scopes to
+   * orders that are not settled -- via a paid payment row or membership in a
+   * paid bill -- so an empty scope means the whole table is closed out. Using
+   * "my orders are settled" instead would end one diner's seating while their
+   * friend is still eating on the same table, which is the mid-meal reset he
+   * warned against. A table with anyone still unsettled stays open for
+   * everyone.
+   *
+   * GUARDED ON orderedAt, and that guard is the difference between this and a
+   * bug: a table with no unsettled orders is also exactly what a diner sees
+   * when they have just scanned and not ordered yet. Without it, every scan
+   * would clear the name it had just asked for.
+   */
+  useEffect(() => {
+    if (!session?.orderedAt || session.demo || !session.table?.id) return;
+    let alive = true;
+    const check = () =>
+      fetchTableBill(session)
+        .then((b) => {
+          if (!alive) return;
+          const stillOpen =
+            (b.per_person ?? []).length > 0 || Number(b.combined?.total ?? 0) > 0;
+          if (!stillOpen) endSeating();
+        })
+        // A failed poll must never log anyone out. Silence is the safe answer:
+        // the seating simply stays open until a poll succeeds.
+        .catch(() => {});
+    check();
+    const t = setInterval(check, 8000);
+    return () => { alive = false; clearInterval(t); };
+    // endSeating is deliberately NOT a dependency. The store object is
+    // useMemo'd on [session, cart], so it is a new reference on every cart
+    // keystroke -- listing it here would tear down and rebuild this interval
+    // while somebody is adding dishes. The closure it captures only calls
+    // setSession, which React keeps stable.
+  }, [session?.table?.id, session?.orderedAt]);
 
   const cats = useMemo(() => {
     const seen = new Map<string, number>();

@@ -12,6 +12,10 @@ interface Store {
   cart: CartLine[];
   startSession: (s: Session) => void;
   setGuest: (guest: Guest) => void;
+  /** #Q -- mark that this device ordered in the current seating. */
+  noteOrdered: () => void;
+  /** #Q -- settlement ended the seating: forget who was sitting here. */
+  endSeating: () => void;
   endSession: () => void;
   addLine: (line: CartLine) => void;
   setQty: (index: number, qty: number) => void;
@@ -96,6 +100,29 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       // Stamped on the way in, so the clock starts when the diner actually
       // identifies themselves rather than when the page happened to load.
       setGuest: (guest) => setSession((prev) => (prev ? { ...prev, guest, guestAt: Date.now() } : prev)),
+      /** #Q — this device has ordered in this seating, so settlement may end it. */
+      noteOrdered: () => setSession((prev) => (prev ? { ...prev, orderedAt: Date.now() } : prev)),
+      /**
+       * #Q — THE SEATING IS OVER, so the diner is logged out of it.
+       *
+       * Clears WHO, and only who: the name, the identity stamp and the ordered
+       * marker. The table, the restaurant and the QR token stay, so the phone
+       * still shows the right restaurant and the next scan of the same table
+       * does not have to resolve the token again -- it simply asks for a name
+       * first, which is the point.
+       *
+       * The cart goes with it. A half-built cart belonging to the party that
+       * just paid and left has no owner, and letting it survive into the next
+       * seating is how somebody else's dosa ends up on your bill.
+       */
+      endSeating: () => {
+        setSession((prev) => {
+          if (!prev) return prev;
+          const { guest, guestAt, orderedAt, ...rest } = prev;
+          return rest as Session;
+        });
+        setCart([]);
+      },
       endSession: () => {
         setSession(null);
         setCart([]);

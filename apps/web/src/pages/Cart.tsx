@@ -11,7 +11,7 @@ import { Stepper, VegMark, Wordmark } from '../components';
 
 export function Cart() {
   const nav = useNavigate();
-  const { session, cart, setQty, clearCart } = useStore();
+  const { session, cart, setQty, clearCart, noteOrdered } = useStore();
   const t = useT();
   const [notes, setNotes] = useState('');
   const [placing, setPlacing] = useState(false);
@@ -41,6 +41,8 @@ export function Cart() {
     setError('');
     try {
       const order = await placeOrder(session, cart, notes.trim() || undefined);
+      // #Q -- this seating is now this device's, so settling the table ends it.
+      noteOrdered();
       clearCart();
       nav(`/track/${order.id}`, { replace: true });
     } catch (e: any) {
