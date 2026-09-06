@@ -869,41 +869,46 @@ input.code-input::placeholder { color: var(--text-dim); }
   gap: 8px;
   margin-top: 14px;
 }
-/* Same height and the same top band as the plot, so the first tick sits on the
-   ceiling line and the last on the baseline. `justify-content: space-between`
-   over that height is what puts each label on its gridline. */
+/* EVERY TICK AND EVERY LINE IS PLACED AT AN EXPLICIT PERCENTAGE, and that is
+   not fussiness -- `justify-content: space-between` cannot align these two.
+   Space-between distributes the FREE space, so where a child lands depends on
+   how many children there are and how tall each one is. The axis has five text
+   labels roughly 9.5px tall; the grid has four hairlines 1px tall. Over the
+   same box those two sets land in completely different places, so the numbers
+   sat between the lines they were labelling.
+   Positioning both from the same formula -- top: i/GRIDLINES as a percentage
+   of the plot band -- makes them agree by construction, whatever either one
+   contains. */
 .growth-axis {
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
+  position: relative;
   /* The plot band only: 156 total, less the 24px value-label band at the top
-     and the 19px tick row at the bottom (6px margin + 13px height). The axis
-     must span exactly what the gridlines span or the labels drift off them. */
-  height: 156px;
-  padding-top: 24px;
-  padding-bottom: 19px;
-  box-sizing: border-box;
+     and the 19px tick row at the bottom (6px margin + 13px height). */
+  height: 113px;
+  margin-top: 24px;
   font-size: 9.5px;
   line-height: 1;
   color: var(--text-muted);
-  text-align: right;
   white-space: nowrap;
-  /* The numbers hang half a line above their gridline otherwise. */
-  transform: translateY(-0.5em);
 }
-/* Behind the bars. Absolutely positioned so it cannot take part in the
-   columns' layout, and inset by the same 24px band. */
+.growth-axis span {
+  position: absolute;
+  right: 0;
+  /* The percentage puts the label's TOP on the line; this lifts it by half its
+     own height so the line runs through the middle of the digits. */
+  transform: translateY(-50%);
+}
+/* Behind the bars, spanning exactly the same band as the axis. */
 .growth-grid {
   position: absolute;
-  /* top: the 24px value-label band, which is not part of the plot.
-     bottom: the tick row, which is its 6px margin plus its 13px height. */
   left: 0; right: 0; top: 24px; bottom: 19px;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
   pointer-events: none;
 }
-.growth-grid span { display: block; border-top: 1px solid var(--line); opacity: 0.55; }
+.growth-grid span {
+  position: absolute;
+  left: 0; right: 0;
+  border-top: 1px solid var(--line);
+  opacity: 0.55;
+}
 
 .growth-chart {
   position: relative;

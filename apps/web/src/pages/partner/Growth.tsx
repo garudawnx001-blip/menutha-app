@@ -163,7 +163,9 @@ function Bars({ points, metric }: { points: GrowthPoint[]; metric: 'revenue' | '
           five axis numbers before reaching the data is worse than not having
           them. */}
       <div className="growth-axis" aria-hidden>
-        {ticks.map((v, i) => <span key={i}>{fmt(v)}</span>)}
+        {ticks.map((v, i) => (
+          <span key={i} style={{ top: `${(i / GRIDLINES) * 100}%` }}>{fmt(v)}</span>
+        ))}
       </div>
 
       <div
@@ -175,10 +177,13 @@ function Bars({ points, metric }: { points: GrowthPoint[]; metric: 'revenue' | '
           + points.map((p) => `${p.label}: ${money ? inr(p.revenue) : p.orders}`).join('; ')
         }
       >
-        {/* Behind the bars, one per tick except the baseline, which the
-            column's own bottom border already draws. */}
+        {/* Behind the bars, at the same percentages as the axis labels. The
+            last tick is the baseline the bars stand on and is left undrawn --
+            it would double with the bottom of the plot. */}
         <div className="growth-grid" aria-hidden>
-          {ticks.slice(0, GRIDLINES).map((_, i) => <span key={i} />)}
+          {ticks.slice(0, GRIDLINES).map((_, i) => (
+            <span key={i} style={{ top: `${(i / GRIDLINES) * 100}%` }} />
+          ))}
         </div>
 
         {points.map((p, i) => {
