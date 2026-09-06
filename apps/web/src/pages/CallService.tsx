@@ -18,25 +18,35 @@
 import React, { useState } from 'react';
 import { requestService, SERVICE_OPTIONS, type ServiceKind } from '../lib/api';
 import type { Session } from '../lib/types';
+import { useT } from '../lib/i18n';
 
 export function CallService({ session }: { session: Session }) {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState<ServiceKind | null>(null);
   const [said, setSaid] = useState<string>('');
+  const t = useT();
 
   if (session.demo || !session.table?.id || session.table.is_parcel) return null;
 
-  const ask = async (kind: ServiceKind, label: string) => {
+  /** "Language for this options also" — this sheet was the last English-only
+   *  surface a diner could reach. The option labels are looked up by KIND
+   *  rather than translated from their English text, so the label a diner reads
+   *  and the value the staff feed stores stay independent: the ticket that
+   *  reaches the counter is unchanged. */
+  const nameOf = (kind: ServiceKind) => t(`svc.${kind}`);
+
+  const ask = async (kind: ServiceKind) => {
+    const label = nameOf(kind);
     setBusy(kind);
     setSaid('');
     try {
       const r = await requestService(session, kind);
-      setSaid(r.deduped ? `${label} is already on the way.` : `${label} — asked.`);
+      setSaid((r.deduped ? t('svc.onWay') : t('svc.asked')).replace('{item}', label));
       // Long enough to read, short enough that the sheet is not left open on a
       // table for the next person to find.
       setTimeout(() => { setOpen(false); setSaid(''); }, 1600);
     } catch {
-      setSaid('Could not reach the counter. Please wave someone down.');
+      setSaid(t('svc.failed'));
     } finally {
       setBusy(null);
     }
@@ -48,21 +58,21 @@ export function CallService({ session }: { session: Session }) {
         className="chip"
         onClick={() => setOpen(true)}
         aria-haspopup="dialog"
-        title="Ask staff for something"
+        title={t('svc.open')}
       >
-        🙋 Call for service
+        🙋 {t('svc.open')}
       </button>
 
       {open && (
         <div
           className="sheet-scrim"
           role="dialog"
-          aria-label="Call for service"
+          aria-label={t('svc.open')}
           onClick={() => setOpen(false)}
         >
           <div className="sheet" onClick={(e) => e.stopPropagation()}>
             <div className="sheet-grabber" />
-            <p className="overline" style={{ marginBottom: 8 }}>Ask for</p>
+            <p className="overline" style={{ marginBottom: 8 }}>{t('svc.title')}</p>
 
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
               {SERVICE_OPTIONS.map((o) => (
@@ -70,10 +80,10 @@ export function CallService({ session }: { session: Session }) {
                   key={o.kind}
                   className="chip"
                   disabled={busy !== null}
-                  onClick={() => ask(o.kind, o.label)}
+                  onClick={() => ask(o.kind)}
                   style={{ minHeight: 44 }}
                 >
-                  <span aria-hidden>{o.icon}</span> {o.label}
+                  <span aria-hidden>{o.icon}</span> {nameOf(o.kind)}
                 </button>
               ))}
             </div>
@@ -85,7 +95,7 @@ export function CallService({ session }: { session: Session }) {
             )}
 
             <button className="chip" style={{ marginTop: 14 }} onClick={() => setOpen(false)}>
-              Close
+              {t('svc.close')}
             </button>
           </div>
         </div>

@@ -213,20 +213,57 @@ export async function saveDish(restaurantId: string, dish: Partial<PortalDish> &
  * that filtered the row out would look exactly like success, and the dish
  * would still be there after the form closed.
  */
+/**
+ * Raised when a dish cannot be removed because it appears on past orders.
+ *
+ * A distinct type rather than a string match, because the UI has to do
+ * something specific about this one and nothing about the others: it offers
+ * Hide instead. Matching on message text would break the moment the wording is
+ * translated, which for this app is a matter of when rather than if.
+ */
+export class DishInUseError extends Error {
+  readonly dishId: string;
+  constructor(dishId: string) {
+    super('on past orders');
+    this.name = 'DishInUseError';
+    this.dishId = dishId;
+  }
+}
+
+/**
+ * HIDE A DISH. Takes it off the diner's menu and leaves the record alone.
+ *
+ * This is the honest destination for a dish that has been sold. `is_available`
+ * is already what the diner menu filters on, so a hidden dish stops being
+ * orderable immediately, keeps its place in the owner's own list, keeps every
+ * bill it appears on readable, and can be brought back by switching it on.
+ */
+export async function hideDish(id: string) {
+  const { data, error } = await supabase
+    .from('menu_item').update({ is_available: false }).eq('id', id).select('id');
+  if (error) throw error;
+  if (!data || data.length === 0) {
+    throw new Error('The dish was not hidden — you may not have permission to change it.');
+  }
+}
+
 export async function deleteDish(id: string) {
   const { data, error } = await supabase
     .from('menu_item').delete().eq('id', id).select('id');
 
   if (error) {
-    // 23503 is foreign_key_violation. Say what it means in the owner's terms
-    // rather than showing them a Postgres code.
-    if ((error as any).code === '23503') {
-      throw new Error(
-        'This dish is on past orders, so the database will not remove it yet. '
-        + 'Run the pending database update (delete_dish_fk) and it will delete '
-        + 'cleanly — your order history is unaffected either way.',
-      );
-    }
+    // 23503 is foreign_key_violation: the dish is referenced by an order line.
+    //
+    // NO MIGRATION FILENAME IN AN OWNER'S FACE. This used to read "Run the
+    // pending database update (delete_dish_fk)" -- my own copy, and an
+    // instruction the person reading it cannot act on and should never have
+    // been shown. Vishal read the whole thing as "Deleting menu items are not
+    // working", which is the correct reading of a message that names a task
+    // for somebody else.
+    //
+    // The caller turns this into an offer to hide the dish instead, which is
+    // the outcome the owner actually wants: off the menu, history intact.
+    if ((error as any).code === '23503') throw new DishInUseError(id);
     throw error;
   }
 

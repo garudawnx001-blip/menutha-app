@@ -489,14 +489,27 @@ export type ServiceKind =
   | 'clean_table' | 'tissues' | 'sauce' | 'plates'
   | 'water' | 'cutlery' | 'assistance';
 
-export const SERVICE_OPTIONS: { kind: ServiceKind; label: string; icon: string }[] = [
-  { kind: 'clean_table', label: 'Clean the table', icon: '🧽' },
-  { kind: 'tissues',     label: 'Tissues',         icon: '🧻' },
-  { kind: 'water',       label: 'Water',           icon: '💧' },
-  { kind: 'sauce',       label: 'Sauce',           icon: '🥫' },
-  { kind: 'plates',      label: 'Extra plates',    icon: '🍽' },
-  { kind: 'cutlery',     label: 'Cutlery',         icon: '🍴' },
-  { kind: 'assistance',  label: 'Call someone',    icon: '🙋' },
+/**
+ * The order they appear in, and an icon each. NO LABEL.
+ *
+ * The English strings that used to live here were the reason this sheet was
+ * the last untranslated thing a diner could reach ("Language for this options
+ * also"). A label here would be a second place for the wording to live, and
+ * the one further from the translations is always the one that goes stale --
+ * so the sheet looks each label up by kind in i18n instead, under `svc.*`.
+ *
+ * The KIND is what travels to the server and onto the staff feed, which keeps
+ * its own English names in portalApi: what a diner reads and what the counter
+ * reads are deliberately independent.
+ */
+export const SERVICE_OPTIONS: { kind: ServiceKind; icon: string }[] = [
+  { kind: 'clean_table', icon: '🧽' },
+  { kind: 'tissues',     icon: '🧻' },
+  { kind: 'water',       icon: '💧' },
+  { kind: 'sauce',       icon: '🥫' },
+  { kind: 'plates',      icon: '🍽' },
+  { kind: 'cutlery',     icon: '🍴' },
+  { kind: 'assistance',  icon: '🙋' },
 ];
 
 /** Ask for something. Returns `deduped` when the same request is already open

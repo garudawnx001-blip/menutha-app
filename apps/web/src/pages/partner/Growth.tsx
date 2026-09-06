@@ -85,12 +85,30 @@ const PERIODS: { key: GrowthPeriod; label: string }[] = [
   { key: 'custom', label: 'Custom range' },
 ];
 
-/** Compact money for axis labels — ₹1,24,500 is unreadable at 11px. */
+/**
+ * Compact money for chart labels.
+ *
+ * THE ₹1k BUG -- "amount is not aligning on bar graph", and it was this line:
+ *
+ *     if (n >= 1000) return `₹${Math.round(n / 1000)}k`;
+ *
+ * Math.round(1050/1000) is 1. Math.round(1480/1000) is 1. Two bars of visibly
+ * different height both printed "₹1k", so the number contradicted the picture
+ * it was sitting on. It is also the likely half of "tickets are not moving to
+ * reports": adding a ₹300 ticket to a ₹1,050 day still reads "₹1k", so a chart
+ * that had moved looked frozen.
+ *
+ * Rounding to the nearest thousand was never the right compression for a
+ * single restaurant's day. A day here is three or four figures, and three or
+ * four figures FIT -- ₹1,480 is six characters. So the full number is printed
+ * up to a lakh, with Indian digit grouping, and abbreviation starts only where
+ * the string genuinely stops fitting. Where it does abbreviate it keeps one
+ * decimal, so ₹1.2L and ₹1.4L stay distinguishable for the same reason.
+ */
 function short(n: number) {
   if (n >= 10000000) return `₹${(n / 10000000).toFixed(1)}Cr`;
   if (n >= 100000) return `₹${(n / 100000).toFixed(1)}L`;
-  if (n >= 1000) return `₹${Math.round(n / 1000)}k`;
-  return `₹${Math.round(n)}`;
+  return `₹${Math.round(n).toLocaleString('en-IN')}`;
 }
 
 function Bars({ points, metric }: { points: GrowthPoint[]; metric: 'revenue' | 'orders' }) {

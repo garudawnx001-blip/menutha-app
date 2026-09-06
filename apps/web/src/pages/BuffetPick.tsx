@@ -122,9 +122,19 @@ export function BuffetPick() {
                     🕒 {window_(p.starts_at, p.ends_at)}
                   </p>
                 )}
+                {/* CLAMPED. Food Jumbo has thirty dishes on it, and printing
+                    all thirty turned the card into a wall of grey text that
+                    buried the name, the price and the fact that the card is a
+                    button. Eight is enough to tell someone what kind of buffet
+                    this is, which is the decision being made here; the rest is
+                    a count, and the full list is one tap away because opening
+                    the card is what the diner was going to do anyway. */}
                 {dishes.length > 0 && (
                   <p className="muted" style={{ fontSize: 13, marginTop: 6, lineHeight: 1.5 }}>
-                    {dishes.join(' · ')}
+                    {(on ? dishes : dishes.slice(0, 8)).join(' · ')}
+                    {!on && dishes.length > 8 && (
+                      <span style={{ fontWeight: 700 }}> · +{dishes.length - 8} more</span>
+                    )}
                   </p>
                 )}
               </button>
@@ -133,9 +143,20 @@ export function BuffetPick() {
 
           {picked && (
             <div className="glass" style={{ padding: 16, display: 'grid', gap: 10 }}>
-              <label>
-                <span className="overline">{t('buffet.heads')}</span>
-                <select className="code-input" value={heads} onChange={(e) => setHeads(Number(e.target.value))}>
+              {/* The overline is a block with its own bottom margin, and the
+                  select is sized to its content -- so the label and the box sat
+                  on one line and collided. Stacking them is what the overline
+                  was always for. */}
+              <label style={{ display: 'block' }}>
+                <span className="overline" style={{ display: 'block', marginBottom: 6 }}>
+                  {t('buffet.heads')}
+                </span>
+                <select
+                  className="code-input"
+                  style={{ width: '100%' }}
+                  value={heads}
+                  onChange={(e) => setHeads(Number(e.target.value))}
+                >
                   {Array.from({ length: 20 }, (_, i) => i + 1).map((n) => (
                     <option key={n} value={n}>{n}</option>
                   ))}

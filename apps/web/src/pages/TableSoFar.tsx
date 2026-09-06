@@ -121,24 +121,41 @@ export function TableSoFar({ session }: { session: Session }) {
           ))}
         </div>
       )}
-      <button
-        className="tsf-head"
-        aria-expanded={open}
-        hidden={!rows.length}
-        onClick={() => setOpen((o) => !o)}
-      >
-        <span style={{ minWidth: 0 }}>
-          <span className="overline" style={{ color: 'var(--primary)' }}>
-            {t('bill.alreadyOrdered')}
-          </span>
-          <span className="tsf-sum">
-            {dishes} dish{dishes === 1 ? '' : 'es'} · {inr(total)}
-          </span>
-        </span>
-        <span className="tsf-toggle" aria-hidden>{open ? '▾' : '▸'}</span>
-      </button>
+      {/* NOT `hidden={!rows.length}`, and the difference is the bug he circled.
+          `.tsf-head` sets `display: flex`, and a class selector beats the user
+          agent's `[hidden] { display: none }` -- so the attribute was set,
+          correctly, and painted anyway. The summary rendered its empty state:
+          "ALREADY ORDERED AT THIS TABLE / 0 dishes · ₹0".
 
-      {open && (
+          Worst on a takeaway, where it was permanent rather than transient: the
+          bill effect above returns early on `is_parcel` (a takeaway has no
+          shared table to summarise), so `rows` is ALWAYS empty there and the
+          strip always read ₹0. That is what "for parcel code amount is not
+          getting affected" was looking at -- the money is right, place_order
+          reads restaurant.parcel_charge and reprice_order carries it into the
+          taxable base; this strip was simply never summarising it.
+
+          Not rendering it is the honest fix. A CSS counter-rule would leave a
+          control in the tree that exists only to be hidden. */}
+      {rows.length > 0 && (
+        <button
+          className="tsf-head"
+          aria-expanded={open}
+          onClick={() => setOpen((o) => !o)}
+        >
+          <span style={{ minWidth: 0 }}>
+            <span className="overline" style={{ color: 'var(--primary)' }}>
+              {t('bill.alreadyOrdered')}
+            </span>
+            <span className="tsf-sum">
+              {dishes} dish{dishes === 1 ? '' : 'es'} · {inr(total)}
+            </span>
+          </span>
+          <span className="tsf-toggle" aria-hidden>{open ? '▾' : '▸'}</span>
+        </button>
+      )}
+
+      {open && rows.length > 0 && (
         <div className="tsf-body">
           {rows.map((r, i) => (
             <div key={i} className="tsf-row">

@@ -4,7 +4,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import {
-  fetchMenuAdmin, upsertCategory, saveDish, deleteDish, uploadImage,
+  fetchMenuAdmin, upsertCategory, saveDish, deleteDish, hideDish, DishInUseError, uploadImage,
   type PortalCategory, type PortalDish,
   deleteCategory, deleteCategoryWithDishes, reorderCategories,
   bulkUploadDishImages, reorderDishes, type BulkImageResult,
@@ -37,6 +37,11 @@ export function MenuManager() {
   const [busy, setBusy] = useState(false);
   const [photoBusy, setPhotoBusy] = useState(false);
   const [error, setError] = useState('');
+  /** Set when a delete was refused because the dish is on past orders. Drives
+   *  the explanation and the Hide offer at the bottom of the editor. Cleared
+   *  by the effect below whenever a different dish is opened, so one refusal
+   *  cannot follow the owner to the next dish. */
+  const [inUse, setInUse] = useState(false);
   const [newCat, setNewCat] = useState('');
   const [editCats, setEditCats] = useState(false);
   // ── Drag to arrange, on pointer events ────────────────────────────────────
@@ -117,6 +122,11 @@ export function MenuManager() {
     finally { setLoading(false); }
   };
   useEffect(() => { load(); }, [restaurant.id]);
+
+  /** A refusal belongs to the dish that was refused. Opening another one — or
+   *  closing the editor — clears it, so the owner never sees "this dish is on
+   *  past orders" on a dish that is not. */
+  useEffect(() => { setInUse(false); }, [draft?.id]);
 
   const visible = useMemo(
     () => (activeCat === 'all' ? items : items.filter((i) => i.category_id === activeCat)),
@@ -677,6 +687,41 @@ export function MenuManager() {
             {error && (
               <p style={{ color: 'var(--error)', fontSize: 13.5, marginTop: 14 }}>{error}</p>
             )}
+            {/* THE DISH IS ON PAST ORDERS. Plain language and a way forward,
+                which is what the old message had neither of — it named a
+                migration file and asked the restaurant owner to run it.
+
+                Not styled as an error, because nothing has gone wrong: a dish
+                that has been sold is supposed to stay attached to the bills it
+                was sold on. What the owner wants is for it to stop appearing
+                on the menu, and that is exactly what Hide does. */}
+            {inUse && (
+              <div className="glass" style={{ padding: 12, marginTop: 14, fontSize: 13.5 }}>
+                <strong>This dish has been ordered before.</strong>
+                <p className="dim" style={{ fontSize: 13, margin: '6px 0 10px' }}>
+                  It stays on those bills, so it can’t be deleted outright. Hiding it
+                  takes it off the menu straight away — no one can order it, and your
+                  past orders are unchanged. You can bring it back any time.
+                </p>
+                <button
+                  className={`btn btn-primary${busy ? ' is-busy' : ''}`}
+                  disabled={busy}
+                  onClick={async () => {
+                    setBusy(true); setError('');
+                    try {
+                      await hideDish(draft.id!);
+                      setInUse(false);
+                      setDraft(null);
+                      load();
+                    } catch (err: any) {
+                      setError(err?.message ?? 'Could not hide this dish.');
+                    } finally { setBusy(false); }
+                  }}
+                >
+                  Hide it instead
+                </button>
+              </div>
+            )}
             <div style={{ display: 'flex', gap: 8, marginTop: 18 }}>
               <button className={`btn btn-primary${busy ? ' is-busy' : ''}`} style={{ flex: 1 }} disabled={busy} onClick={save}>
                 {'Save dish'}
@@ -694,13 +739,16 @@ export function MenuManager() {
               {draft.id && (
                 <button className="btn btn-ghost" disabled={busy} onClick={async () => {
                   if (!confirm(`Delete "${draft.name}"?\n\nPast orders keep their record of it.`)) return;
-                  setBusy(true); setError('');
+                  setBusy(true); setError(''); setInUse(false);
                   try {
                     await deleteDish(draft.id!);
                     setDraft(null);
                     load();
                   } catch (err: any) {
-                    setError(err?.message ?? 'Could not delete this dish.');
+                    // The one refusal with a next step. Everything else is a
+                    // plain message; this one becomes the Hide offer above.
+                    if (err instanceof DishInUseError) setInUse(true);
+                    else setError(err?.message ?? 'Could not delete this dish.');
                   } finally { setBusy(false); }
                 }}>Delete</button>
               )}

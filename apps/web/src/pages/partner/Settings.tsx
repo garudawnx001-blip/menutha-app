@@ -9,6 +9,34 @@ import { usePartner } from './PartnerShell';
 import { BillCharges } from './BillCharges';
 import { BillLayoutEditor } from './BillLayoutEditor';
 
+/**
+ * ONE FIELD: a label over its input.
+ *
+ * DECLARED AT MODULE SCOPE, AND THAT IS THE ENTIRE FIX. This used to be a
+ * `const F = (...) => ...` inside Settings(), which is what he reported as
+ * "typing is difficult for user because for every letter tapping is required".
+ *
+ * A component declared inside a render body gets a NEW function identity on
+ * every render. React compares element types by identity, so on each keystroke
+ * it saw a different component in that slot: it unmounted the old subtree and
+ * mounted a fresh one, destroying and recreating the <input> underneath. A
+ * freshly mounted input is not focused, so the caret was lost after every
+ * single character and the owner had to tap the field again to type the next.
+ *
+ * Not a re-render problem and not solvable with a key or a ref -- the element
+ * TYPE has to be stable across renders, and the only way to make it stable is
+ * to stop creating it during the render. The markup below is untouched; only
+ * its declaration site moved.
+ */
+function F({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div style={{ marginBottom: 12 }}>
+      <p className="overline" style={{ marginBottom: 6 }}>{label}</p>
+      {children}
+    </div>
+  );
+}
+
 export function Settings() {
   const { restaurant, role, can, reload } = usePartner();
   const [form, setForm] = useState({
@@ -126,13 +154,6 @@ export function Settings() {
       await reload();
     } catch { setError('Image upload failed.'); }
   };
-
-  const F = ({ label, children }: { label: string; children: React.ReactNode }) => (
-    <div style={{ marginBottom: 12 }}>
-      <p className="overline" style={{ marginBottom: 6 }}>{label}</p>
-      {children}
-    </div>
-  );
 
   return (
     <div className="fade-in" style={{ maxWidth: 640 }}>

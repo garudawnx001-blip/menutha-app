@@ -467,7 +467,21 @@ export function renderQrSheetHtml(cards: QrCardData[]): string {
   body { margin: 0; background: #fff; color: #1C1A15;
          font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
          -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-  .sheet { display: flex; flex-wrap: wrap; gap: 6mm; }
+  /* CENTRED, because a sheet of one card is the common case and it looked
+     broken. `flex-start` is right when a dozen cards fill the page, but an
+     owner printing ONE table's QR -- or, far more often, screenshotting it to
+     send on WhatsApp, which is exactly how this reached us -- got an 88mm card
+     pinned to the top-left corner of a page of white. Centring costs the
+     multi-card layout nothing: a full row still fills edge to edge, and only a
+     short last row moves.
+     `align-content: flex-start` keeps the rows stacked at the top rather than
+     floating in the middle of a tall page. */
+  .sheet { display: flex; flex-wrap: wrap; gap: 6mm;
+           justify-content: center; align-content: flex-start; }
+  /* On SCREEN -- the share/preview path -- give the page a little air and stop
+     it being a card marooned in a white field. Print is untouched: @page owns
+     the paper margin and this block does not apply to it. */
+  @media screen { body { padding: 6mm; } }
   .card {
     flex: 0 0 88mm; max-width: 100%; padding: 7mm 6mm; text-align: center;
     border: 1.5px solid var(--accent); border-radius: 4mm;
