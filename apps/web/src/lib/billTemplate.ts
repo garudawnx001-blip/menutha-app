@@ -468,14 +468,16 @@ export function renderQrSheetHtml(cards: QrCardData[]): string {
          font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
          -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   /* CENTRED, because a sheet of one card is the common case and it looked
-     broken. `flex-start` is right when a dozen cards fill the page, but an
-     owner printing ONE table's QR -- or, far more often, screenshotting it to
-     send on WhatsApp, which is exactly how this reached us -- got an 88mm card
-     pinned to the top-left corner of a page of white. Centring costs the
+     broken. Packing from the start is right when a dozen cards fill the page,
+     but an owner printing ONE table's QR -- or, far more often, screenshotting
+     it to send on WhatsApp, which is exactly how this reached us -- got an 88mm
+     card pinned to the top-left corner of a page of white. Centring costs the
      multi-card layout nothing: a full row still fills edge to edge, and only a
-     short last row moves.
-     `align-content: flex-start` keeps the rows stacked at the top rather than
-     floating in the middle of a tall page. */
+     short last row moves. align-content keeps the rows stacked at the top
+     rather than floating in the middle of a tall page.
+     NO BACKTICKS IN HERE. This whole document is a template literal, and the
+     first draft of this comment quoted two CSS keywords in backticks, which
+     closed the string and took the file out with three TS1005s. */
   .sheet { display: flex; flex-wrap: wrap; gap: 6mm;
            justify-content: center; align-content: flex-start; }
   /* On SCREEN -- the share/preview path -- give the page a little air and stop
