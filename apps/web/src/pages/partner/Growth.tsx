@@ -111,49 +111,110 @@ function short(n: number) {
   return `₹${Math.round(n).toLocaleString('en-IN')}`;
 }
 
+/**
+ * A ROUND NUMBER AT OR ABOVE THE PEAK, and the gridlines that go with it.
+ *
+ * A chart whose tallest bar is exactly the top of the plot has no headroom and
+ * no scale: you cannot read a height off it, only compare heights to each
+ * other. Rounding the ceiling up to 1/2/5 x 10^n gives an axis whose labels are
+ * numbers a person would actually say -- ₹1,500 rather than ₹1,483 -- and four
+ * evenly spaced lines to read against.
+ */
+function niceCeiling(peak: number): number {
+  if (peak <= 0) return 1;
+  const mag = 10 ** Math.floor(Math.log10(peak));
+  const norm = peak / mag;
+  const step = norm <= 1 ? 1 : norm <= 2 ? 2 : norm <= 5 ? 5 : 10;
+  return step * mag;
+}
+
+const GRIDLINES = 4;
+
+/**
+ * The bar chart. "A clear and perfect graph, more detailed."
+ *
+ * WHAT WAS WRONG, beyond the ₹1k rounding fixed in `short` above: there was no
+ * axis and no gridline of any kind, so a bar's height meant nothing on its own;
+ * a day with no takings drew a one-pixel sliver indistinguishable from a
+ * rendering artefact; and the bars ran the full width of their column with a
+ * 3px gap, which at seven columns is a row of slabs rather than a chart.
+ *
+ * WHAT IT HAS NOW: a labelled Y axis with four gridlines behind the bars, a
+ * ceiling rounded to a number worth reading, zero-days drawn as an explicit
+ * flat marker on the baseline rather than almost-nothing, and bars capped at a
+ * sensible width so a seven-day view does not look like a bar-code.
+ */
 function Bars({ points, metric }: { points: GrowthPoint[]; metric: 'revenue' | 'orders' }) {
-  const vals = points.map((p) => (metric === 'revenue' ? p.revenue : p.orders));
-  const peak = Math.max(1, ...vals);
+  const money = metric === 'revenue';
+  const vals = points.map((p) => (money ? p.revenue : p.orders));
+  const peak = Math.max(...vals, 0);
+  const top = niceCeiling(peak);
+  const fmt = (n: number) => (money ? short(n) : String(Math.round(n)));
   // Fewer labels than bars on the 30-day view, or they overlap into mush.
   const step = points.length > 14 ? Math.ceil(points.length / 8) : 1;
+
+  /* Top to bottom, so the array reads the way the axis is drawn. */
+  const ticks = Array.from({ length: GRIDLINES + 1 }, (_, i) => (top * (GRIDLINES - i)) / GRIDLINES);
+
   return (
-    <div className="growth-chart" role="img"
-      aria-label={`${metric === 'revenue' ? 'Revenue' : 'Orders'} by period, peak ${metric === 'revenue' ? inr(peak) : peak}`}>
-      {points.map((p, i) => {
-        const v = metric === 'revenue' ? p.revenue : p.orders;
-        const pct = (v / peak) * 100;
-        return (
-          <div key={i} className="growth-col">
-            {/* THE NUMBERS ON THE BARS. His reference showed the value printed
-                on the chart, and the figures were previously only in a `title`
-                tooltip -- invisible on a touch screen, which is where he reads
-                this.
-                Both figures, because he asked for the amount AND the order
-                count: money on top, orders under it.
-                Printed on the same cadence as the tick labels. At 30 bars
-                every column would otherwise carry two numbers roughly eleven
-                pixels apart, which is the "overlap into mush" the tick step
-                already exists to avoid. Empty bars stay blank rather than
-                printing a row of zeroes. */}
-            <span className="growth-val" aria-hidden>
-              {i % step === 0 && v > 0 ? (
-                <>
-                  <b>{short(p.revenue)}</b>
-                  <i>{p.orders}</i>
-                </>
-              ) : null}
-            </span>
-            <span className="growth-bar-wrap">
-              <span
-                className={v > 0 ? 'growth-bar' : 'growth-bar empty'}
-                style={{ height: `${Math.max(pct, v > 0 ? 4 : 1)}%` }}
-                title={`${p.label}: ${inr(p.revenue)}, ${p.orders} order${p.orders === 1 ? '' : 's'}`}
-              />
-            </span>
-            <span className="growth-tick">{i % step === 0 ? p.label : ''}</span>
-          </div>
-        );
-      })}
+    <div className="growth-wrap">
+      {/* The scale. `aria-hidden` because the figures are already in the
+          chart's own label and in each bar's title -- a screen reader reading
+          five axis numbers before reaching the data is worse than not having
+          them. */}
+      <div className="growth-axis" aria-hidden>
+        {ticks.map((v, i) => <span key={i}>{fmt(v)}</span>)}
+      </div>
+
+      <div
+        className="growth-chart"
+        role="img"
+        aria-label={
+          `${money ? 'Revenue' : 'Orders'} by period. `
+          + `Peak ${money ? inr(peak) : peak}. `
+          + points.map((p) => `${p.label}: ${money ? inr(p.revenue) : p.orders}`).join('; ')
+        }
+      >
+        {/* Behind the bars, one per tick except the baseline, which the
+            column's own bottom border already draws. */}
+        <div className="growth-grid" aria-hidden>
+          {ticks.slice(0, GRIDLINES).map((_, i) => <span key={i} />)}
+        </div>
+
+        {points.map((p, i) => {
+          const v = money ? p.revenue : p.orders;
+          const pct = top > 0 ? (v / top) * 100 : 0;
+          const label = i % step === 0;
+          return (
+            <div key={i} className="growth-col">
+              {/* THE NUMBERS ON THE BARS. His reference showed the value
+                  printed on the chart, and the figures were previously only in
+                  a `title` tooltip -- invisible on a touch screen, which is
+                  where he reads this. Money on top, order count under it,
+                  because he asked for both.
+                  Printed on the same cadence as the tick labels: at 30 bars
+                  every column would otherwise carry two numbers eleven pixels
+                  apart, which is the mush the tick step already avoids. */}
+              <span className="growth-val" aria-hidden>
+                {label && v > 0 ? (<><b>{short(p.revenue)}</b><i>{p.orders}</i></>) : null}
+              </span>
+              <span className="growth-bar-wrap">
+                {/* A DAY WITH NOTHING TAKEN IS A FACT, not an absence. It used
+                    to render as a 1% sliver -- about a pixel and a half, which
+                    reads as a glitch rather than a zero. It is now a flat
+                    marker sitting on the baseline, wide as the bar, clearly
+                    deliberate and clearly empty. */}
+                <span
+                  className={v > 0 ? 'growth-bar' : 'growth-bar empty'}
+                  style={v > 0 ? { height: `${Math.max(pct, 1.5)}%` } : undefined}
+                  title={`${p.label}: ${inr(p.revenue)}, ${p.orders} order${p.orders === 1 ? '' : 's'}`}
+                />
+              </span>
+              <span className="growth-tick">{label ? p.label : ''}</span>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

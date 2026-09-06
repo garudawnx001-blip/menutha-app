@@ -859,7 +859,54 @@ input.code-input::placeholder { color: var(--text-dim); }
 /* ── Growth charts (Orders page) ────────────────────────────────────────────
    Plain flex bars rather than a charting library: this is a bar chart, and a
    library would be the largest thing in the bundle. */
+/* ── The chart and its Y axis ────────────────────────────────────────────────
+   A grid rather than a flex row, so the axis column and the plot share one
+   baseline: the axis labels must line up with the gridlines exactly, and two
+   independently sized flex children cannot be relied on to agree. */
+.growth-wrap {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 8px;
+  margin-top: 14px;
+}
+/* Same height and the same top band as the plot, so the first tick sits on the
+   ceiling line and the last on the baseline. `justify-content: space-between`
+   over that height is what puts each label on its gridline. */
+.growth-axis {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  /* The plot band only: 156 total, less the 24px value-label band at the top
+     and the 19px tick row at the bottom (6px margin + 13px height). The axis
+     must span exactly what the gridlines span or the labels drift off them. */
+  height: 156px;
+  padding-top: 24px;
+  padding-bottom: 19px;
+  box-sizing: border-box;
+  font-size: 9.5px;
+  line-height: 1;
+  color: var(--text-muted);
+  text-align: right;
+  white-space: nowrap;
+  /* The numbers hang half a line above their gridline otherwise. */
+  transform: translateY(-0.5em);
+}
+/* Behind the bars. Absolutely positioned so it cannot take part in the
+   columns' layout, and inset by the same 24px band. */
+.growth-grid {
+  position: absolute;
+  /* top: the 24px value-label band, which is not part of the plot.
+     bottom: the tick row, which is its 6px margin plus its 13px height. */
+  left: 0; right: 0; top: 24px; bottom: 19px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  pointer-events: none;
+}
+.growth-grid span { display: block; border-top: 1px solid var(--line); opacity: 0.55; }
+
 .growth-chart {
+  position: relative;
   display: flex;
   align-items: flex-end;
   gap: 3px;
@@ -867,7 +914,7 @@ input.code-input::placeholder { color: var(--text-dim); }
      taking it out of the bar height would have made the bars shorter every
      time the numbers were switched on. */
   height: 156px;
-  margin-top: 14px;
+  margin-top: 0;
   padding-top: 4px;
 }
 /** The amount and the order count printed above each bar.
@@ -889,16 +936,30 @@ input.code-input::placeholder { color: var(--text-dim); }
 .growth-val i {
   font-size: 9px; font-style: normal; color: var(--text-muted);
 }
-.growth-col { flex: 1; min-width: 0; display: flex; flex-direction: column; height: 100%; }
-.growth-bar-wrap { flex: 1; display: flex; align-items: flex-end; }
+/* `position: relative` puts the columns above the absolutely positioned grid
+   without needing a z-index on either. */
+.growth-col { position: relative; flex: 1; min-width: 0; display: flex; flex-direction: column; height: 100%; }
+.growth-bar-wrap { flex: 1; display: flex; align-items: flex-end; justify-content: center; }
 .growth-bar {
+  /* CAPPED, and centred in its column. Full-column width at seven bars gave
+     150px slabs with a 3px gutter, which reads as a block diagram rather than
+     a chart. A bar narrower than its column is what makes the gaps legible. */
   width: 100%;
+  max-width: 34px;
   border-radius: 4px 4px 2px 2px;
   background: linear-gradient(180deg, var(--primary), color-mix(in srgb, var(--primary) 72%, transparent));
   transition: filter 0.12s ease;
 }
 .growth-bar:hover { filter: brightness(1.1); }
-.growth-bar.empty { background: var(--line); border-radius: 2px; }
+/* A DAY WITH NOTHING TAKEN. Not a 1% sliver pretending to be a bar — a flat
+   marker on the baseline, so "no takings" is something the chart says rather
+   than something it fails to draw. */
+.growth-bar.empty {
+  height: 3px;
+  background: var(--line);
+  border-radius: 2px;
+  opacity: 0.9;
+}
 .growth-tick {
   font-size: 10.5px; color: var(--text-muted); text-align: center;
   margin-top: 6px; height: 13px; overflow: hidden; white-space: nowrap;
@@ -1130,7 +1191,7 @@ input.code-input::placeholder { color: var(--text-dim); }
     text-align: right;
     font-variant-numeric: tabular-nums;
   }
-  .portal-nav, .cartbar-wrap, .btn, .chip, .seg, .growth-chart { display: none !important; }
+  .portal-nav, .cartbar-wrap, .btn, .chip, .seg, .growth-wrap { display: none !important; }
 }
 
 /* ── Bills on whatever roll is loaded ───────────────────────────────────────

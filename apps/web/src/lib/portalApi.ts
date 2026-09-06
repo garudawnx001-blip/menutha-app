@@ -583,14 +583,37 @@ export async function fetchGrowth(
       cur.setMonth(cur.getMonth() + 1);
     }
   } else {
+    /* THE DAYS FIRST, THE LABELS SECOND -- and that order is a bug fix.
+     *
+     * The label used to be chosen with `spanDays <= 7 ? weekday : number`, and
+     * spanDays is a CEILING over a partial day: "This week" starts at midnight
+     * six days ago and ends at the current time, which is 6 days and a few
+     * hours, so it ceilings to 7 and the +1 makes 8. The week view therefore
+     * failed its own <= 7 test every time and has always shown bare day
+     * numbers -- "30 31 1 2 3 4 5" in his screenshot -- when it was written to
+     * show Mon/Tue/Wed. Counting the buckets that are actually produced asks
+     * the question that was meant.
+     *
+     * AND THE MONTH IS BACK. Bare day numbers running across a month boundary
+     * read as nonsense: 30, 31, then 1. Where a run crosses into a new month
+     * -- and on the first column, which otherwise has no anchor at all -- the
+     * month goes in front of the number, so the axis says where it is. */
+    const days: Date[] = [];
     for (let i = 0; i < spanDays; i++) {
       const d = new Date(start); d.setDate(start.getDate() + i);
       if (d > end) break;
+      days.push(d);
+    }
+    const weekdays = days.length <= 7;
+    days.forEach((d, i) => {
+      const newMonth = i === 0 || d.getDate() === 1;
       buckets.set(dayKey(d), {
-        label: spanDays <= 7 ? DAY[d.getDay()] : String(d.getDate()),
+        label: weekdays
+          ? DAY[d.getDay()]
+          : newMonth ? `${MON[d.getMonth()]} ${d.getDate()}` : String(d.getDate()),
         revenue: 0, orders: 0,
       });
-    }
+    });
   }
 
   for (const row of (data ?? []) as { placed_at: string; total: number }[]) {
