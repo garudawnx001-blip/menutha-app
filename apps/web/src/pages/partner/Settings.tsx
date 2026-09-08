@@ -44,7 +44,6 @@ export function Settings() {
     address: (restaurant as any).address ?? '',
     phone: (restaurant as any).phone ?? '',
     gstin: (restaurant as any).gstin ?? '',
-    bill_footer: (restaurant as any).bill_footer ?? '',
     city: restaurant.city ?? '',
     cuisine_tags: restaurant.cuisine_tags ?? '',
     open_time: restaurant.open_time ?? '',
@@ -54,25 +53,12 @@ export function Settings() {
     own_website: restaurant.own_website ?? '',
     brand_color: (restaurant as any).brand_color ?? '#1B5E3F',
     is_open: restaurant.is_open !== false,
-    sgst_pct: String((restaurant as any).sgst_pct ?? 2.5),
-    cgst_pct: String((restaurant as any).cgst_pct ?? 2.5),
-    service_charge_pct: String((restaurant as any).service_charge_pct ?? 0),
-    // Blank, not 0: an empty AC rate means "same as non-AC", and 0 would mean
-    // "AC tables pay no service charge" -- a different, and expensive, answer.
-    service_charge_ac_pct: (restaurant as any).service_charge_ac_pct == null
-      ? '' : String((restaurant as any).service_charge_ac_pct),
     grace_seconds: String((restaurant as any).grace_seconds ?? 60),
-    /* Bill options -- "please give all the options". FSSAI sits with GSTIN
-       because both are licence numbers a bill has to carry; thanks and terms
-       are the two halves of a footer restaurants actually write. */
-    fssai_no: (restaurant as any).fssai_no ?? '',
-    bill_thanks: (restaurant as any).bill_thanks ?? '',
-    bill_terms: (restaurant as any).bill_terms ?? '',
-    /* Off unless the restaurant genuinely charges differently for AC seating.
-       A charge nobody asked for appearing on a bill is worse than one
-       missing, so this stays opt-in and the per-table AC flag is only read
-       when it is on. */
-    ac_pricing: (restaurant as any).ac_pricing === true,
+    /* The tax and service rates, the FSSAI number, the footer trio and the AC
+       toggle are NOT here any more: they belong to Bill settings, which is the
+       only page that shows or writes them. A page must not carry state it
+       cannot display -- a seeded value saved back from here would silently
+       undo a change made there a minute earlier. */
   });
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -80,59 +66,33 @@ export function Settings() {
 
   const save = async () => {
     setBusy(true); setError(''); setSaved(false);
-    /**
-     * THE AC RATE IS SENT SEPARATELY, and only when the column is there.
-     *
-     * service_charge_ac_pct arrives with a staged migration that is run by
-     * hand, so there is a window in which this page is deployed and the column
-     * is not. Sending it then would fail the WHOLE update -- and losing a
-     * GSTIN, an address and a thank-you line because one new percentage could
-     * not be stored is the wrong way round. It goes in a second, tolerated
-     * update instead, and the page says which half was kept.
-     */
-    const acRaw = form.service_charge_ac_pct.trim();
-    const acPct = acRaw === '' ? null : Math.min(25, Math.max(0, Number(acRaw) || 0));
+    // The AC service rate and its tolerated second write moved to Bill
+    // settings with the rest of the bill's numbers.
     try {
       /**
        * CLAMPED ONCE, AND WRITTEN BACK — the owner has to see what was saved.
        *
-       * These bounds were applied on the way to the database and nowhere else,
-       * and `form` is seeded once from `restaurant` with no re-seed on reload.
-       * So an owner who typed 99 for SGST got a green "Saved", went on looking
-       * at 99, and was invoicing at 14 -- the number on screen was a lie about
-       * the number in force, on the field that decides what diners are taxed.
-       * The phone's twin has always written the clamped values back; this now
-       * does the same, so a correction is visible the moment it happens.
+       * The bound was applied on the way to the database and nowhere else, and
+       * `form` is seeded once from `restaurant` with no re-seed on reload, so a
+       * corrected value stayed invisible: the number on screen was a lie about
+       * the number in force. Writing it back makes the correction show.
+       *
+       * Only the change window is left here. The tax and service rates moved
+       * to Bill settings, and this page no longer sends them -- a field it
+       * does not show must not be written from a seed that may now be stale,
+       * or saving a phone number would quietly undo a GST change made a minute
+       * earlier on the other page.
        */
       const clamped = {
-        sgst_pct: Math.min(14, Math.max(0, Number(form.sgst_pct) || 0)),
-        cgst_pct: Math.min(14, Math.max(0, Number(form.cgst_pct) || 0)),
-        service_charge_pct: Math.min(25, Math.max(0, Number(form.service_charge_pct) || 0)),
         grace_seconds: Math.min(900, Math.max(0, Math.round(Number(form.grace_seconds) || 0))),
       };
-      setForm((f) => ({
-        ...f,
-        sgst_pct: String(clamped.sgst_pct),
-        cgst_pct: String(clamped.cgst_pct),
-        service_charge_pct: String(clamped.service_charge_pct),
-        grace_seconds: String(clamped.grace_seconds),
-        // The AC rate keeps its blank-means-"same as non-AC" state; only a
-        // value that was actually clamped is rewritten.
-        service_charge_ac_pct: acPct == null ? '' : String(acPct),
-      }));
+      setForm((f) => ({ ...f, grace_seconds: String(clamped.grace_seconds) }));
 
       await updateRestaurant(restaurant.id, {
         name: form.name.trim() || restaurant.name,
         address: form.address.trim() || null,
         phone: form.phone.trim() || null,
         gstin: form.gstin.trim().toUpperCase() || null,
-        bill_footer: form.bill_footer.trim() || null,
-        // Uppercased like GSTIN: a licence number printed in mixed case on a
-        // bill reads as a typo even when it is correct.
-        fssai_no: form.fssai_no.trim().toUpperCase() || null,
-        bill_thanks: form.bill_thanks.trim() || null,
-        bill_terms: form.bill_terms.trim() || null,
-        ac_pricing: form.ac_pricing,
         city: form.city.trim() || null,
         cuisine_tags: form.cuisine_tags.trim() || null,
         open_time: form.open_time || null,
@@ -141,33 +101,14 @@ export function Settings() {
         upi_account_type: form.upi_account_type,
         own_website: form.own_website.trim() || null,
         is_open: form.is_open,
-        // gst_pct is kept in sync as sgst+cgst by a DB trigger.
-        sgst_pct: clamped.sgst_pct,
-        cgst_pct: clamped.cgst_pct,
-        service_charge_pct: clamped.service_charge_pct,
         // Same bounds the database enforces, so a typo is corrected here rather
         // than bounced back as a constraint error.
         grace_seconds: clamped.grace_seconds,
         ...(can('white_label') || can('basic_theme') ? { brand_color: form.brand_color } : {}),
       });
-      // The AC rate, tolerated. A missing column is the expected state until
-      // 2026-09-04_ac_service_rate.sql is run, and it must not cost the owner
-      // everything else on this page.
-      let acKept = true;
-      try {
-        await updateRestaurant(restaurant.id, { service_charge_ac_pct: acPct } as any);
-      } catch (e: any) {
-        if (e?.code === 'PGRST204' || e?.code === '42703' || /service_charge_ac_pct/.test(e?.message ?? '')) {
-          acKept = false;
-        } else { throw e; }
-      }
       await reload();
-      if (acKept) {
-        setSaved(true);
-        setTimeout(() => setSaved(false), 2500);
-      } else {
-        setError('Everything saved except the AC service charge — this restaurant’s database is still being updated.');
-      }
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2500);
     } catch (e: any) { setError(e?.message ?? 'Save failed.'); }
     finally { setBusy(false); }
   };
@@ -206,48 +147,7 @@ export function Settings() {
             <input className="code-input" placeholder="29ABCDE1234F1Z5"
               value={form.gstin} onChange={(e) => setForm({ ...form, gstin: e.target.value })} />
           </F>
-          {/* Beside GSTIN because both are licence numbers a bill carries, and
-              an owner filling one in is the person who knows the other. */}
-          <F label="FSSAI licence (on bill)">
-            <input className="code-input" placeholder="12345678901234"
-              value={form.fssai_no} onChange={(e) => setForm({ ...form, fssai_no: e.target.value })} />
-          </F>
         </div>
-        <F label="Bill footer message">
-          <input className="code-input" placeholder="Thank you — please visit again!"
-            value={form.bill_footer} onChange={(e) => setForm({ ...form, bill_footer: e.target.value })} />
-          <span className="dim" style={{ fontSize: 12 }}>
-            Printed at the bottom of every bill. Leave blank for none.
-          </span>
-        </F>
-        {/* THREE FOOTER FIELDS, NOT ONE. A restaurant's footer is really three
-            different things -- a warm sign-off, the legal small print, and the
-            licence numbers above. Cramming them into one line is why owners
-            end up with "Thank you! GST 29ABC... no refunds" as a single
-            sentence. Separate fields let the bill lay each one out properly. */}
-        <F label="Thank-you line">
-          <input className="code-input" placeholder="Thank you — please visit again!"
-            value={form.bill_thanks} onChange={(e) => setForm({ ...form, bill_thanks: e.target.value })} />
-        </F>
-        <F label="Terms / small print">
-          <textarea className="code-input" rows={2}
-            placeholder="No refunds on packed items. Taxes as applicable."
-            value={form.bill_terms} onChange={(e) => setForm({ ...form, bill_terms: e.target.value })} />
-        </F>
-        {/* AC pricing is a toggle rather than a charge, because it decides
-            whether the per-table AC flag and the ac/non_ac custom charges mean
-            anything at all. Off, they are ignored entirely. */}
-        <F label="Air-conditioned pricing">
-          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14 }}>
-            <input type="checkbox" checked={form.ac_pricing}
-              onChange={(e) => setForm({ ...form, ac_pricing: e.target.checked })} />
-            Charge differently for AC tables
-          </label>
-          <span className="dim" style={{ fontSize: 12 }}>
-            Off unless you actually do. When on, mark which tables are AC in
-            Tables &amp; QR, and add an AC charge below.
-          </span>
-        </F>
         {/* CHARGES AND THE BILL LAYOUT MOVED OUT, to their own section.
             They were three scrolls down a form about addresses and opening
             hours, while the phone has kept them as their own screen since
@@ -306,52 +206,6 @@ export function Settings() {
       </div>
 
       <div className="glass" style={{ padding: 16, marginBottom: 14 }}>
-        <h3 style={{ fontWeight: 700, marginBottom: 10 }}>Bill charges</h3>
-        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-          <div style={{ flex: '1 1 140px', minWidth: 0 }}>
-            <F label="SGST %">
-              <input className="code-input" inputMode="decimal" value={form.sgst_pct}
-                onChange={(e) => setForm({ ...form, sgst_pct: e.target.value })} />
-            </F>
-          </div>
-          <div style={{ flex: '1 1 140px', minWidth: 0 }}>
-            <F label="CGST %">
-              <input className="code-input" inputMode="decimal" value={form.cgst_pct}
-                onChange={(e) => setForm({ ...form, cgst_pct: e.target.value })} />
-            </F>
-          </div>
-          <div style={{ flex: '1 1 140px', minWidth: 0 }}>
-            <F label="Service charge (non-AC) %">
-              <input className="code-input" inputMode="decimal" value={form.service_charge_pct}
-                onChange={(e) => setForm({ ...form, service_charge_pct: e.target.value })} />
-            </F>
-          </div>
-          {/* #R — AC IS A RATE, NOT A LINE. The customer never sees the word
-              "AC" on a bill: an AC table is charged this percentage instead of
-              the one beside it, and both print as the same ordinary "Service
-              charge" line. Which one applies is resolved from the table's own
-              AC flag automatically — the QR already knows — so nobody has to
-              choose anything at the till.
-
-              Blank means "same as non-AC", which is what every restaurant is
-              until it fills this in. */}
-          <div style={{ flex: '1 1 140px', minWidth: 0 }}>
-            <F label="Service charge (AC) %">
-              <input className="code-input" inputMode="decimal" placeholder="same as non-AC"
-                value={form.service_charge_ac_pct}
-                onChange={(e) => setForm({ ...form, service_charge_ac_pct: e.target.value })} />
-            </F>
-          </div>
-        </div>
-        <p className="dim" style={{ fontSize: 12, marginBottom: 12 }}>
-          Indian GST convention: SGST + CGST are charged as equal halves (2.5% + 2.5% = 5% for
-          restaurants). Both appear as separate lines on every diner bill, receipt and printed bill —
-          total GST is {(Number(form.sgst_pct) || 0) + (Number(form.cgst_pct) || 0)}%.
-          {' '}<strong>0 is a valid setting</strong> and is saved as zero; a 0% line simply doesn’t
-          appear on the bill. Changes apply to <strong>new orders</strong> — orders already placed
-          keep the rates they were priced at, so an existing bill still shows the old charges.
-        </p>
-
         {/* The grace window, which the portal could not set at all - it had a
             prep-time field instead, and prep time is gone. This is the setting
             that actually changes what a diner experiences. */}
