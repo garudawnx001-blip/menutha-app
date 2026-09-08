@@ -19,9 +19,12 @@
  */
 import React, { useState } from 'react';
 import { usePartner } from './PartnerShell';
-import { updateRestaurant } from '../../lib/portalApi';
+import { updateRestaurant, fetchBillLayout } from '../../lib/portalApi';
 import { BillCharges } from './BillCharges';
 import { BillLayoutEditor } from './BillLayoutEditor';
+import { PrinterIcon } from './Glyphs';
+import { printBillHtml, openBillHtml } from '../../lib/printBill';
+import { normaliseLayout, renderBillHtml, sampleBillData } from '../../lib/billTemplate';
 
 /** A labelled block, matching the phone's Section. */
 function Section({ title, hint, children }: { title: string; hint?: string; children: React.ReactNode }) {
@@ -55,6 +58,17 @@ export function BillSettings() {
   });
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
+
+  /** Builds the sample from the SAVED layout plus the values being edited
+   *  above, so the paper matches the page. */
+  const printSample = async (toPrinter: boolean) => {
+    const layout = normaliseLayout(await fetchBillLayout(restaurant.id).catch(() => null));
+    // The saved layout decides the logo: the "Show the logo" switch lives in
+    // Bill layout below, one control on both surfaces rather than a second
+    // print-only copy of it.
+    const html = renderBillHtml(sampleBillData({ ...r, ...form }), layout);
+    if (toPrinter) printBillHtml(html); else openBillHtml(html);
+  };
   const [error, setError] = useState('');
 
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
@@ -160,6 +174,27 @@ export function BillSettings() {
           Save above -- see the note at the top. */}
       <Section title="Custom charges" hint="Anything you charge beyond the dishes. Percentages are taken on the food subtotal, before tax.">
         <BillCharges restaurantId={restaurant.id} acPricing={r.ac_pricing === true} />
+      </Section>
+
+      {/* PRINT THE SAMPLE, with or without the logo.
+          The same string the app hands expo-print, so what comes out of the
+          counter PC and what comes out of the phone are one document. The
+          logo switch overrides the saved layout FOR THIS PRINT only -- an
+          owner checking how the bill looks bare should not have to change a
+          setting and change it back. */}
+      <Section title="Print a sample" hint="Exactly what a diner's bill will look like on paper. The logo follows the switch in Bill layout below.">
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <button className="btn btn-glass" onClick={() => printSample(true)}>
+            <PrinterIcon size={15} />&nbsp;Print sample bill
+          </button>
+          <button className="btn btn-ghost" onClick={() => printSample(false)}>
+            Open in a new tab
+          </button>
+        </div>
+        <p className="dim" style={{ fontSize: 12, marginTop: 10 }}>
+          The document is text, not an image, so it prints sharp on an 80&nbsp;mm thermal roll
+          and on A4 alike — the printer decides the resolution.
+        </p>
       </Section>
 
       <Section title="Bill layout">
