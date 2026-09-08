@@ -60,6 +60,17 @@ const perMonthOf = (p: Plan) => Math.round(p.price_inr / Math.max(1, p.duration_
 const tierLabel = (p: { tier: string | null; name: string }) =>
   (p.tier ? p.tier[0].toUpperCase() + p.tier.slice(1) : p.name);
 
+/**
+ * Money on the charge itemisation, to the paisa.
+ *
+ * `inr` drops trailing zeros, which is right for a price and wrong for a tax
+ * line: "₹431.1" is not how 431 rupees and 10 paise is written on an invoice,
+ * and "₹-0.2" puts the sign between the symbol and the number. Two decimals
+ * always, sign outside.
+ */
+const paise = (n: number) =>
+  `${n < 0 ? '-' : ''}₹${Math.abs(n).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
 const FEATURE_LABELS: Record<string, string> = {
   qr_ordering: 'QR ordering & billing',
   dynamic_menu: 'Dynamic menu',
@@ -373,10 +384,10 @@ export function PlanScreen({ preview }: { preview?: boolean } = {}) {
                   charged in; the round-off is shown rather than folded into
                   the tax line so the invoice reconciles to the paisa. */}
               <div className="plan-charge">
-                <div><span>Plan{p.duration_months > 1 ? ` · ${p.duration_months} months` : ''}</span><span>{inr(g.base)}</span></div>
-                <div><span>CGST 9%</span><span>{inr(g.cgst)}</span></div>
-                <div><span>SGST 9%</span><span>{inr(g.sgst)}</span></div>
-                {g.roundOff !== 0 && <div><span>Round off</span><span>{inr(g.roundOff)}</span></div>}
+                <div><span>Plan{p.duration_months > 1 ? ` · ${p.duration_months} months` : ''}</span><span>{paise(g.base)}</span></div>
+                <div><span>CGST 9%</span><span>{paise(g.cgst)}</span></div>
+                <div><span>SGST 9%</span><span>{paise(g.sgst)}</span></div>
+                {g.roundOff !== 0 && <div><span>Round off</span><span>{paise(g.roundOff)}</span></div>}
                 <div className="plan-charge-total"><span>Total {p.duration_months === 1 ? 'per month' : `every ${p.duration_months} months`}</span><span>{inr(g.total)}</span></div>
               </div>
 
