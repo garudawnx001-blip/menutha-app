@@ -151,7 +151,11 @@ export function PlanScreen({ preview }: { preview?: boolean } = {}) {
       .from('restaurant_member')
       .select('restaurant_id, restaurant(id, name)')
       .eq('user_id', uid)
-      .eq('member_role', 'manager')
+      // owner OR manager -- the same pair create-subscription accepts. Filtering
+      // to 'manager' alone meant an owner-membership account loaded the portal
+      // shell (which accepts both) and was then told on this page that it
+      // manages no restaurant, with no way to subscribe.
+      .in('member_role', ['owner', 'manager'])
       .limit(1)
       .maybeSingle();
     if (!member) { setError('This account does not manage a restaurant.'); setLoading(false); return; }
