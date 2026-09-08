@@ -29,7 +29,7 @@ import {
 } from '../../lib/authProviders';
 import {
   loginWithIdentifier, resetByIdentifier, completeReset, otpErrorSentence,
-  usernameAvailable, usernameProblem,
+  usernameAvailable, usernameProblem, cleanHandle,
 } from '../../lib/auth';
 import { GoogleMark } from './GoogleMark';
 
@@ -421,7 +421,7 @@ export function PartnerLogin() {
                     id="auth-username"
                     className="code-input" type="text" autoComplete="username"
                     placeholder="ashwamedha_lodge" value={username}
-                    onChange={(e) => setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9._]/g, '').slice(0, 30))} />
+                    onChange={(e) => setUsername(cleanHandle(e.target.value))} />
                 </>
               )}
 

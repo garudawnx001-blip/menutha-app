@@ -93,6 +93,34 @@ export function Settings() {
     const acRaw = form.service_charge_ac_pct.trim();
     const acPct = acRaw === '' ? null : Math.min(25, Math.max(0, Number(acRaw) || 0));
     try {
+      /**
+       * CLAMPED ONCE, AND WRITTEN BACK — the owner has to see what was saved.
+       *
+       * These bounds were applied on the way to the database and nowhere else,
+       * and `form` is seeded once from `restaurant` with no re-seed on reload.
+       * So an owner who typed 99 for SGST got a green "Saved", went on looking
+       * at 99, and was invoicing at 14 -- the number on screen was a lie about
+       * the number in force, on the field that decides what diners are taxed.
+       * The phone's twin has always written the clamped values back; this now
+       * does the same, so a correction is visible the moment it happens.
+       */
+      const clamped = {
+        sgst_pct: Math.min(14, Math.max(0, Number(form.sgst_pct) || 0)),
+        cgst_pct: Math.min(14, Math.max(0, Number(form.cgst_pct) || 0)),
+        service_charge_pct: Math.min(25, Math.max(0, Number(form.service_charge_pct) || 0)),
+        grace_seconds: Math.min(900, Math.max(0, Math.round(Number(form.grace_seconds) || 0))),
+      };
+      setForm((f) => ({
+        ...f,
+        sgst_pct: String(clamped.sgst_pct),
+        cgst_pct: String(clamped.cgst_pct),
+        service_charge_pct: String(clamped.service_charge_pct),
+        grace_seconds: String(clamped.grace_seconds),
+        // The AC rate keeps its blank-means-"same as non-AC" state; only a
+        // value that was actually clamped is rewritten.
+        service_charge_ac_pct: acPct == null ? '' : String(acPct),
+      }));
+
       await updateRestaurant(restaurant.id, {
         name: form.name.trim() || restaurant.name,
         address: form.address.trim() || null,
@@ -114,12 +142,12 @@ export function Settings() {
         own_website: form.own_website.trim() || null,
         is_open: form.is_open,
         // gst_pct is kept in sync as sgst+cgst by a DB trigger.
-        sgst_pct: Math.min(14, Math.max(0, Number(form.sgst_pct) || 0)),
-        cgst_pct: Math.min(14, Math.max(0, Number(form.cgst_pct) || 0)),
-        service_charge_pct: Math.min(25, Math.max(0, Number(form.service_charge_pct) || 0)),
+        sgst_pct: clamped.sgst_pct,
+        cgst_pct: clamped.cgst_pct,
+        service_charge_pct: clamped.service_charge_pct,
         // Same bounds the database enforces, so a typo is corrected here rather
         // than bounced back as a constraint error.
-        grace_seconds: Math.min(900, Math.max(0, Math.round(Number(form.grace_seconds) || 0))),
+        grace_seconds: clamped.grace_seconds,
         ...(can('white_label') || can('basic_theme') ? { brand_color: form.brand_color } : {}),
       });
       // The AC rate, tolerated. A missing column is the expected state until

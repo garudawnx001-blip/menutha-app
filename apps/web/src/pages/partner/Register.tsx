@@ -25,7 +25,7 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { Wordmark } from '../../components';
 import { loadMembership } from '../../lib/portalApi';
-import { usernameAvailable, usernameProblem } from '../../lib/auth';
+import { usernameAvailable, usernameProblem, cleanHandle } from '../../lib/auth';
 
 type Phase = 'checking' | 'finish' | 'restaurant';
 
@@ -163,7 +163,7 @@ export function Register({ previewPhase }: { previewPhase?: Phase } = {}) {
               id="setup-username"
               className="code-input" type="text" autoComplete="username" autoFocus
               placeholder="ashwamedha_lodge" value={username}
-              onChange={(e) => setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9._]/g, '').slice(0, 30))} />
+              onChange={(e) => setUsername(cleanHandle(e.target.value))} />
             <label className="field-label" htmlFor="setup-password">Password</label>
             <input id="setup-password" className="code-input" type="password" autoComplete="new-password"
               placeholder="At least 8 characters" value={password}

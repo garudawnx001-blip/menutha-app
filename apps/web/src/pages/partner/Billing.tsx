@@ -89,7 +89,14 @@ export function Billing() {
   const acPricing = (restaurant as any).ac_pricing === true;
   const subtotal = chosen.reduce((a, o) => a + o.subtotal + o.packing_charge, 0);
   const service = chosen.reduce((a, o) => a + Number((o as any).service_charge ?? 0), 0);
-  const disc = Math.min(Number(discount) || 0, subtotal);
+  /**
+   * A DISCOUNT CANNOT BE NEGATIVE, and this was only clamped at the top.
+   *
+   * `-500` made taxable = subtotal + service + 500: the "discount" INCREASED
+   * the bill, the GST on it, and the UPI QR the diner is shown and pays. A
+   * bound at one end of a money field is not a bound.
+   */
+  const disc = Math.min(Math.max(0, Number(discount) || 0), subtotal);
   // Owner-configured Indian GST split (SGST + CGST), matching place_order.
   const sgstPct = Number((restaurant as any).sgst_pct ?? 2.5);
   const cgstPct = Number((restaurant as any).cgst_pct ?? 2.5);

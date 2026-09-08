@@ -14,6 +14,16 @@
 import { supabase } from './supabase';
 
 export const USERNAME_RE = /^[a-z0-9._]{3,30}$/;
+
+/**
+ * What a keystroke in a username box is allowed to become.
+ *
+ * Lower-cased and filtered to Instagram's alphabet, because what the owner
+ * sees has to be what is stored. Kept in one place so the sign-up field and
+ * the Finish-setup field cannot drift apart -- they claim the same handle.
+ */
+export const cleanHandle = (v: string) =>
+  v.toLowerCase().replace(/[^a-z0-9._]/g, '').slice(0, 30);
 export const isEmailLike = (s: string) => s.includes('@');
 
 /** Format only -- the same rules the database enforces, so the form can say

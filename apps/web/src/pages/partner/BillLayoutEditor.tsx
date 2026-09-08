@@ -48,6 +48,51 @@ const clone = (l: BillLayout): BillLayout => ({
   ) as BillLayout['sections'],
 });
 
+/**
+ * A size box that can actually be typed in.
+ *
+ * The rule for every bounded number field in this product: hold the TYPED
+ * STRING while the field has focus, and settle it to a legal number on blur.
+ * Clamping per keystroke fights the person typing -- an intermediate value on
+ * the way to a legal one is almost always illegal, and correcting it under
+ * the caret is what makes a field feel broken.
+ *
+ * `text` re-seeds from the committed value whenever that changes from
+ * outside (the +/- chips, a layout reset) but never while focused, so a
+ * remote update cannot yank the caret mid-word.
+ */
+function SizeInput({ label, size, onCommit }: {
+  label: string; size: number; onCommit: (n: number) => void;
+}) {
+  const [text, setText] = useState(String(size));
+  const [focused, setFocused] = useState(false);
+  useEffect(() => { if (!focused) setText(String(size)); }, [size, focused]);
+
+  const commit = () => {
+    setFocused(false);
+    const n = Number(text.trim());
+    // A blank or nonsense entry means "leave it alone", not "make it 8".
+    if (!text.trim() || !Number.isFinite(n)) { setText(String(size)); return; }
+    const clamped = Math.min(MAX_SIZE, Math.max(MIN_SIZE, Math.round(n)));
+    setText(String(clamped));
+    if (clamped !== size) onCommit(clamped);
+  };
+
+  return (
+    <input
+      className="code-input"
+      inputMode="numeric"
+      aria-label={`${label}: size in points`}
+      value={text}
+      onFocus={() => setFocused(true)}
+      onChange={(e) => setText(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+      style={{ width: 52, padding: '4px 6px', fontSize: 12.5, textAlign: 'center' }}
+    />
+  );
+}
+
 export function BillLayoutEditor({
   restaurantId, restaurant,
 }: {
@@ -252,17 +297,21 @@ export function BillLayoutEditor({
                       disabled={s.size <= MIN_SIZE}
                       onClick={() => edit((d) => { d.sections[key].size = Math.max(MIN_SIZE, s.size - 1); })}
                     >−</button>
-                    <input
-                      className="code-input"
-                      inputMode="numeric"
-                      aria-label={`${label}: size in points`}
-                      value={s.size}
-                      onChange={(e) => {
-                        const n = Number(e.target.value);
-                        if (!Number.isFinite(n)) return;
-                        edit((d) => { d.sections[key].size = Math.min(MAX_SIZE, Math.max(MIN_SIZE, Math.round(n))); });
-                      }}
-                      style={{ width: 52, padding: '4px 6px', fontSize: 12.5, textAlign: 'center' }}
+                    {/* CLAMPED ON BLUR, NOT ON EVERY KEYSTROKE.
+                        Clamping per character made most of the range
+                        untypeable: going for 12, the "1" clamped to MIN_SIZE
+                        (8) immediately, the "2" appended to that giving 82,
+                        which clamped to MAX_SIZE. Every size from 9 to 27 was
+                        reachable only by the +/- chips. And `Number('')` is 0,
+                        which IS finite, so the guard never caught a cleared
+                        box -- it could not be emptied to retype.
+                        So the field holds the typed string while it has focus
+                        and settles to a legal number when the owner leaves
+                        it; the chips still step the committed value. */}
+                    <SizeInput
+                      label={label}
+                      size={s.size}
+                      onCommit={(n) => edit((d) => { d.sections[key].size = n; })}
                     />
                     <button
                       type="button" className="chip" style={{ minWidth: 28, padding: '4px 8px' }}
