@@ -413,14 +413,6 @@ export async function confirmPayment(paymentId: string) {
 // ── Revenue (P&L) ──────────────────────────────────────────────────────────
 // The Expenses section was removed at the client's request; get_pnl is kept
 // because the revenue half still backs the Orders growth charts.
-export async function fetchPnl(restaurantId: string, monthISO: string) {
-  const { data, error } = await supabase.rpc('get_pnl', {
-    p_restaurant_id: restaurantId, p_month: monthISO + '-01',
-  });
-  if (error) throw error;
-  return data as { month: string; revenue: number; expenses: number; profit: number };
-}
-
 // ── Reservations ───────────────────────────────────────────────────────────
 
 /** Includes WHO booked. The staff page showed date, party size and status but
@@ -589,21 +581,6 @@ export async function fetchGrowth(
 // Replaces the accept/preparing/ready/served workflow: an order starts its own
 // countdown when it lands. These are staff-side tools only — neither notifies
 // the diner.
-
-/** Pull an order's countdown to zero. */
-export async function markOrderReadyNow(orderId: string) {
-  const { error } = await supabase.rpc('mark_order_ready_now', { p_order_id: orderId });
-  if (error) throw error;
-}
-
-/** Nudge one order's deadline by +/- minutes, without changing the
- *  restaurant's default prep time. */
-export async function adjustOrderTimer(orderId: string, deltaMinutes: number) {
-  const { error } = await supabase.rpc('adjust_order_timer', {
-    p_order_id: orderId, p_delta_minutes: deltaMinutes,
-  });
-  if (error) throw error;
-}
 
 /** Persist a new category order. Writes sort_order from array position, so the
  *  list the owner sees is the list diners get. */

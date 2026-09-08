@@ -79,7 +79,7 @@ export function Showcase() {
 
   return (
     <div className="fade-in" style={{ maxWidth: 720 }}>
-      <p className="overline" style={{ marginTop: 12 }}>Profile</p>
+      <p className="overline" style={{ marginTop: 12 }}>Showcase</p>
       <h1 className="display" style={{ fontSize: 26, marginBottom: 4 }}>Your showcase</h1>
       <p className="muted" style={{ fontSize: 14, marginBottom: 14 }}>
         Shown on your public page, where diners look before they visit. Your
@@ -125,7 +125,7 @@ export function Showcase() {
       })}
 
       <div className="glass" style={{ padding: 16, marginTop: 8 }}>
-        <p className="overline" style={{ marginBottom: 8 }}>Add to your profile</p>
+        <p className="overline" style={{ marginBottom: 8 }}>Add to your showcase</p>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
           <select className="code-input" style={{ flex: '0 0 150px' }}
             value={kind} onChange={(e) => setKind(e.target.value as MediaKind)}>

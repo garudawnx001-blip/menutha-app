@@ -270,8 +270,17 @@ export function PlanScreen() {
                   </p>
                 </>
               ) : (
-                <button className="btn btn-primary btn-block" disabled={busyPlan !== ''} onClick={() => callFn('subscribe', p.id)}>
-                  {busyPlan === p.id ? 'Opening checkout…' : (ent?.state === 'active' ? `Switch to ${p.name}` : `Choose ${p.name}`)}
+                {/* Until the Razorpay plan id is filled in, the button explains
+                    instead of failing: the page is wired end to end, and
+                    dropping the id into subscription_plans is the only thing
+                    that flips it live. */}
+                <button className="btn btn-primary btn-block" disabled={busyPlan !== ''}
+                  onClick={() => (p.razorpay_plan_id
+                    ? callFn('subscribe', p.id)
+                    : setError('Online subscription is being switched on. Your 30-day trial continues meanwhile, and nothing is charged.'))}>
+                  {busyPlan === p.id ? 'Opening checkout…'
+                    : !p.razorpay_plan_id ? 'Online payment opens soon'
+                    : (ent?.state === 'active' ? `Switch to ${p.name}` : `Choose ${p.name}`)}
                 </button>
               )}
             </div>
