@@ -9,6 +9,7 @@ import { Wordmark } from '../../components';
 import {
   showAppleButton, APPLE_COMING_SOON, APPLE_PENDING_MESSAGE, providerError,
 } from '../../lib/authProviders';
+import { loginWithIdentifier, resetByIdentifier, usernameAvailable, usernameProblem } from '../../lib/auth';
 
 export function PartnerLogin() {
   const nav = useNavigate();
@@ -42,6 +43,10 @@ export function PartnerLogin() {
    *  first. Its own flag, not the reset-link one: reusing `sent` would show
    *  "a reset link is on its way" to someone who just created an account. */
   const [signupSent, setSignupSent] = useState(false);
+  /** Instagram-style handle, sign-up only. Checked for format and
+   *  availability before the account is created; CLAIMED when the restaurant
+   *  is (Register), because that is the first call with a session. */
+  const [username, setUsername] = useState('');
 
   /**
    * AND THEN THE RESET LINK HAD TO LAND SOMEWHERE.
@@ -136,14 +141,21 @@ export function PartnerLogin() {
   const passwordRef = useRef<HTMLInputElement>(null);
 
   const signInEmail = async () => {
-    const em = (emailRef.current?.value || email).trim();
+    const id = (emailRef.current?.value || email).trim();
     const pw = passwordRef.current?.value || password;
-    if (!em || !pw) { setError('Enter your email and password.'); return; }
+    if (!id || !pw) { setError('Enter your username or email, and your password.'); return; }
     setBusy(true); setError('');
-    const { error: err } = await supabase.auth.signInWithPassword({ email: em, password: pw });
-    setBusy(false);
-    if (err) { setError(err.message === 'Invalid login credentials' ? 'Email or password is incorrect.' : err.message); return; }
-    nav('/partner/orders', { replace: true });
+    try {
+      // Username or email -- lib/auth decides which it was and resolves a
+      // username on the server, so the reader never has to know the
+      // difference and this page never learns another account's email.
+      await loginWithIdentifier(id, pw);
+      nav('/partner/orders', { replace: true });
+    } catch (e: any) {
+      setError(e?.message ?? 'Could not sign in. Please try again.');
+    } finally {
+      setBusy(false);
+    }
   };
 
   /**
@@ -172,14 +184,32 @@ export function PartnerLogin() {
     // their phone that rejects what the laptop just accepted. Converged on the
     // stricter of the two, which is also the one already shipping.
     if (pw.length < 8) { setError('Choose a password of at least 8 characters.'); return; }
-    setBusy(true); setError('');
     /* emailRedirectTo: the confirmation link lands on Register, where the
        next two steps live -- Connect Google, then the restaurant -- rather
        than back on this form to log in a second time. Supabase reads the
        session out of the URL on that page. */
+    const handle = username.trim().toLowerCase();
+    const problem = usernameProblem(handle);
+    if (problem) { setError(problem); return; }
+    setBusy(true); setError('');
+    // Asked BEFORE creating the account, so a taken handle is a one-line
+    // correction here rather than a dead end on Register. The server checks
+    // again when the restaurant is created; this is the friendly pass.
+    try {
+      if (!(await usernameAvailable(handle))) { setBusy(false); setError('That username is taken. Try another.'); return; }
+    } catch (e: any) {
+      setBusy(false); setError(e?.message ?? 'Could not check that username.'); return;
+    }
+    // The handle rides in user metadata until the account is verified and the
+    // restaurant is created, at which point complete_restaurant_signup claims
+    // it under the unique index. It cannot be claimed earlier: with "Confirm
+    // email" on there is no session -- and no auth.uid() -- yet.
     const { data, error: err } = await supabase.auth.signUp({
       email: em, password: pw,
-      options: { emailRedirectTo: `${window.location.origin}/partner/register` },
+      options: {
+        emailRedirectTo: `${window.location.origin}/partner/register`,
+        data: { username: handle },
+      },
     });
     setBusy(false);
     if (err) {
@@ -213,13 +243,19 @@ export function PartnerLogin() {
    */
   const [sent, setSent] = useState(false);
   const forgotPassword = async () => {
-    const em = (emailRef.current?.value || email).trim();
-    if (!em) { setError('Type your account email above first, then use “Forgot password”.'); return; }
+    const id = (emailRef.current?.value || email).trim();
+    if (!id) { setError('Type your username or email above first, then use “Forgotten password”.'); return; }
     setBusy(true); setError('');
-    const { error: err } = await supabase.auth.resetPasswordForEmail(em);
-    setBusy(false);
-    if (err) { setError(err.message); return; }
-    setSent(true);
+    try {
+      // A username is resolved on the server, an email goes straight through,
+      // and the answer is the same sentence either way -- see lib/auth.
+      await resetByIdentifier(id);
+      setSent(true);
+    } catch (e: any) {
+      setError(e?.message ?? 'Could not send the reset link.');
+    } finally {
+      setBusy(false);
+    }
   };
 
   // The recovery screen replaces the login card rather than sitting beside it.
@@ -374,9 +410,32 @@ export function PartnerLogin() {
 
           {(
             <>
-              <p className="overline" style={{ margin: '8px 0 6px' }}>Email</p>
-              <input className="code-input" type="email" autoComplete="email" placeholder="you@restaurant.com"
+              {/* ONE FIELD ON LOG IN: USERNAME OR EMAIL -- the Instagram shape
+                  he sent a screenshot of. Either opens the same account; an
+                  email signs in directly, a username is resolved on the server
+                  (see lib/auth). On SIGN UP it is the email, and the handle
+                  gets its own field under it. */}
+              <p className="overline" style={{ margin: '8px 0 6px' }}>
+                {mode === 'signup' ? 'Email' : 'Username or email'}
+              </p>
+              <input
+                className="code-input"
+                type={mode === 'signup' ? 'email' : 'text'}
+                autoComplete={mode === 'signup' ? 'email' : 'username'}
+                placeholder={mode === 'signup' ? 'you@restaurant.com' : 'username or you@restaurant.com'}
                 ref={emailRef} value={email} onChange={(e) => setEmail(e.target.value)} />
+              {mode === 'signup' && (
+                <>
+                  <p className="overline" style={{ margin: '14px 0 6px' }}>Username</p>
+                  {/* Lower-cased as typed, so what the owner sees is what is
+                      stored -- "Ashwin" and "ashwin" are one name. Instagram's
+                      alphabet: letters, numbers, dot, underscore. */}
+                  <input
+                    className="code-input" type="text" autoComplete="username"
+                    placeholder="ashwamedha_lodge" value={username}
+                    onChange={(e) => setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9._]/g, '').slice(0, 30))} />
+                </>
+              )}
               <p className="overline" style={{ margin: '14px 0 6px' }}>Password</p>
               <input className="code-input" type="password"
                 autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
@@ -401,7 +460,7 @@ export function PartnerLogin() {
                   </p>
                 ) : (
                   <button className="chip" style={{ marginTop: 10, width: '100%' }} disabled={busy} onClick={forgotPassword}>
-                    Forgot password?
+                    Forgotten password?
                   </button>
                 )
               )}

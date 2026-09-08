@@ -35,12 +35,18 @@ export function Register() {
   const [googleEmail, setGoogleEmail] = useState<string | null>(null);
   const [checking, setChecking] = useState(true);
   const [linking, setLinking] = useState(false);
+  /** The username chosen at sign-up, read back off user metadata and passed to
+   *  complete_restaurant_signup, which claims it under the unique index. */
+  const [metaUsername, setMetaUsername] = useState<string | null>(null);
 
   const readIdentities = async () => {
     const { data } = await supabase.auth.getUser();
     const g = (data.user?.identities ?? []).find((i) => i.provider === 'google');
     setGoogleLinked(!!g);
     setGoogleEmail((g?.identity_data as any)?.email ?? null);
+    // The handle chosen at sign-up rode here in user metadata; this is the
+    // first call with a session, so this page is where it gets claimed.
+    setMetaUsername((data.user?.user_metadata as any)?.username ?? null);
     setChecking(false);
   };
 
@@ -75,6 +81,7 @@ export function Register() {
       p_city: form.city.trim() || null,
       p_address: form.address.trim() || null,
       p_gstin: form.gstin.trim() || null,
+      p_username: metaUsername,
     });
     setBusy(false);
     if (err) {
