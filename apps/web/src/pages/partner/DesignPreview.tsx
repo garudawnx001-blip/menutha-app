@@ -14,6 +14,8 @@
  *   screen=chat-error       Chat, load failed (with retry)
  *   screen=chat-populated   Chat, three conversations
  *   screen=chat-thread      Chat, one open conversation
+ *   screen=settings         Restaurant settings (fixture restaurant)
+ *   screen=plan             Plan & billing (fixture plans, ids blank)
  *
  * Without ?screen it lists them.
  */
@@ -23,6 +25,9 @@ import { Wordmark } from '../../components';
 import { PartnerLogin } from './PartnerLogin';
 import { Register } from './Register';
 import { ChatView, type ThreadsState } from './Chat';
+import { Settings } from './Settings';
+import { PlanScreen } from './PlanScreen';
+import { PartnerPreviewProvider } from './PartnerShell';
 import type { ChatThread, PortalMessage } from '../../lib/portalApi';
 
 const now = Date.now();
@@ -75,6 +80,12 @@ export function DesignPreview() {
     case 'chat-error': return <ChatFixture state={{ kind: 'error', message: 'The chat tables are not set up on the server yet.' }} />;
     case 'chat-populated': return <ChatFixture state={{ kind: 'ready', threads: THREADS }} />;
     case 'chat-thread': return <ChatFixture state={{ kind: 'ready', threads: THREADS }} thread />;
+    case 'settings': return (
+      <PartnerPreviewProvider>
+        <div className="partner-page" style={{ maxWidth: 760, margin: '0 auto', padding: '8px 20px 40px' }}><Settings /></div>
+      </PartnerPreviewProvider>
+    );
+    case 'plan': return <PlanScreen preview />;
     default: break;
   }
 
@@ -82,6 +93,7 @@ export function DesignPreview() {
     ['login', 'Log in'], ['signup', 'Create account (add ?mode=signup)'], ['finish', 'Finish setting up'],
     ['chat-loading', 'Chat · loading'], ['chat-empty', 'Chat · empty'], ['chat-error', 'Chat · error'],
     ['chat-populated', 'Chat · conversations'], ['chat-thread', 'Chat · open thread'],
+    ['settings', 'Restaurant settings'], ['plan', 'Plan & billing'],
   ];
   return (
     <div className="page fade-in" style={{ padding: 24, maxWidth: 560, margin: '0 auto' }}>

@@ -65,7 +65,18 @@ const FEATURE_LABELS: Record<string, string> = {
 
 import { loadCheckout } from '../../lib/razorpayCheckout';
 
-export function PlanScreen() {
+/** The design preview's plans: what subscription_plans holds today, with no
+ *  Razorpay ids -- so the preview shows the "opens soon" state honestly. */
+const PREVIEW_PLANS = [
+  { id: 'basic', kind: 'tier', name: 'Basic', price_inr: 499, razorpay_plan_id: null, sort_order: 1,
+    features: ['qr_ordering', 'dynamic_menu', 'instant_price_edit', 'basic_theme', 'single_qr_set'] },
+  { id: 'growth', kind: 'tier', name: 'Growth', price_inr: 999, razorpay_plan_id: null, sort_order: 2,
+    features: ['qr_ordering', 'dynamic_menu', 'instant_price_edit', 'basic_theme', 'analytics', 'multi_language', 'inventory_alerts', 'multi_qr', 'excel_upload'] },
+  { id: 'enterprise', kind: 'tier', name: 'Enterprise', price_inr: 2999, razorpay_plan_id: null, sort_order: 3,
+    features: ['qr_ordering', 'dynamic_menu', 'instant_price_edit', 'basic_theme', 'analytics', 'multi_language', 'inventory_alerts', 'multi_qr', 'excel_upload', 'multi_location', 'white_label', 'dedicated_manager', 'priority_support'] },
+];
+
+export function PlanScreen({ preview }: { preview?: boolean } = {}) {
   const nav = useNavigate();
   const [restaurant, setRestaurant] = useState<{ id: string; name: string } | null>(null);
   const [plans, setPlans] = useState<Plan[]>([]);
@@ -76,7 +87,21 @@ export function PlanScreen() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
 
+  // Subscribe buttons: until a plan has its razorpay_plan_id, the button reads
+  // "opens soon" and explains when pressed rather than failing -- dropping the
+  // ids into subscription_plans is the only thing that flips them live.
   const load = async () => {
+    if (preview) {
+      // Design preview: fixtures, no session. See DesignPreview.
+      setRestaurant({ id: 'preview', name: 'Ashwamedha Lodge' } as any);
+      setPlans(PREVIEW_PLANS as any);
+      setState({
+        plan_tier: 'trial', plan_status: 'trialing', grace_until: null, addons: [],
+        trial_ends_at: new Date(Date.now() + 25 * 864e5).toISOString(),
+      });
+      setLoading(false);
+      return;
+    }
     const { data: session } = await supabase.auth.getSession();
     if (!session.session) { nav('/partner', { replace: true }); return; }
     const uid = session.session.user.id;
@@ -270,10 +295,6 @@ export function PlanScreen() {
                   </p>
                 </>
               ) : (
-                {/* Until the Razorpay plan id is filled in, the button explains
-                    instead of failing: the page is wired end to end, and
-                    dropping the id into subscription_plans is the only thing
-                    that flips it live. */}
                 <button className="btn btn-primary btn-block" disabled={busyPlan !== ''}
                   onClick={() => (p.razorpay_plan_id
                     ? callFn('subscribe', p.id)
