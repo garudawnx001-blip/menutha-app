@@ -151,25 +151,59 @@ img { max-width: 100%; display: block; }
   font-weight: 700;
   font-size: 15px;
   padding: 14px 22px;
+  /* NO CLIPPED LETTERS, and this is the guard for it.
+     .btn-glass sets overflow:hidden so its specular sweep is clipped to the
+     pane -- which also means anything that squeezes the button narrower than
+     its label cuts the label off rather than letting it spill. A button in a
+     flex row is squeezable by default, so this stops that at the source:
+     the button holds its content width, and a tight row scrolls or wraps
+     instead of shaving characters off the word inside it. */
+  flex-shrink: 0;
+  min-width: fit-content;
   transition: transform 0.12s ease, opacity 0.12s ease, background 0.12s ease, box-shadow 0.12s ease;
   user-select: none;
 }
 .btn:active { transform: scale(0.98); }
 .btn[disabled] { opacity: 0.5; cursor: not-allowed; }
 
+/* ── GLASS ON EVERY BUTTON, EDGE TO EDGE ─────────────────────────────────────
+   "The glass is not covering the whole thing behind it, everywhere on the
+   page." He is right, and on the web the reason was blunter than on the phone:
+   .btn-primary was a flat colour fill and .btn-ghost was a bordered box. There
+   was no material on either -- only .btn-glass had any, and most portal
+   buttons are not that class.
+
+   The fill stays exactly what it was; the material goes ON it, as a gradient
+   over the colour plus the two inset edges that give glass thickness -- light
+   gathering along the top, the underside catching a shadow. Same recipe
+   .btn-glass already used and the same one the app's primary lens uses: a
+   primary is still terracotta, it just behaves like glass.
+
+   `background-image` over `background-color` rather than a ::before overlay:
+   an overlay needs stacking context and z-index on every button in the app,
+   and would sit over the label unless every one of them also got a position.
+   Two properties on one rule cannot get that wrong. */
 .btn-primary {
-  background: var(--primary);
+  background-color: var(--primary);
+  background-image: linear-gradient(180deg, rgba(255,255,255,0.26), rgba(255,255,255,0.06) 52%, rgba(0,0,0,0.05));
   color: #fffdf8;
-  box-shadow: 0 6px 18px rgba(27, 94, 63, 0.28);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.40),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.10),
+    0 6px 18px rgba(27, 94, 63, 0.28);
 }
-.btn-primary:hover { background: var(--primary-deep); }
+.btn-primary:hover { background-color: var(--primary-deep); }
 
 .btn-ghost {
   border: 1.5px solid var(--line-strong);
   color: var(--primary);
-  background: var(--surface);
+  background-color: var(--surface);
+  background-image: linear-gradient(180deg, rgba(255,255,255,0.55), rgba(255,255,255,0.18));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.85),
+    inset 0 -1px 0 rgba(120, 90, 70, 0.08);
 }
-.btn-ghost:hover { background: var(--sand); }
+.btn-ghost:hover { background-color: var(--sand); }
 
 .btn-block { width: 100%; }
 
@@ -694,15 +728,30 @@ input.code-input::placeholder { color: var(--text-dim); }
 .diet-chip.active .veg-mark { background: #fff; }
 
 /* ── Site-wide hover + press feedback on all interactive controls ────────── */
+/* ── PRESS COMES FORWARD. IT NEVER SHRINKS. ──────────────────────────────────
+   The brand law, and the web was the last surface breaking it. These read
+   `transform: translateY(0) scale(0.97)` on .btn and `scale(0.96)` on .chip --
+   the control moving AWAY from the finger and getting smaller under it, which
+   is the one response the held-lens language forbids. The app removed every
+   shrink months ago; nobody had looked at the stylesheet since, which is
+   exactly why a button here has never felt like a button there.
+
+   Forward and held: it lifts further on press than on hover and grows very
+   slightly, then settles. Same idea as the lens, in the vocabulary CSS has. */
 .btn { transition: transform 0.14s cubic-bezier(0.2,0.7,0.2,1), box-shadow 0.16s ease, background 0.16s ease, filter 0.16s ease; }
 .btn:hover { transform: translateY(-1.5px); filter: brightness(1.04); }
-.btn:active { transform: translateY(0) scale(0.97); filter: brightness(0.98); }
+.btn:active { transform: translateY(-2.5px) scale(1.012); filter: brightness(1.06); }
 .btn-primary:hover { box-shadow: 0 10px 26px rgba(27, 94, 63, 0.34); }
+.btn-primary:active { box-shadow: 0 14px 30px rgba(27, 94, 63, 0.38); }
 .btn-ghost:hover { border-color: var(--saffron); }
 
 .chip:hover { border-color: var(--saffron); color: var(--text); }
 .chip.active:hover { color: #fffdf8; }
-.chip:active { transform: scale(0.96); }
+.chip:active { transform: translateY(-1.5px) scale(1.015); }
+
+@media (prefers-reduced-motion: reduce) {
+  .btn:hover, .btn:active, .chip:active { transform: none; }
+}
 
 .dish, .rest-card, .option-card { transition: border-color 0.14s ease, box-shadow 0.16s ease, transform 0.16s cubic-bezier(0.2,0.7,0.2,1); }
 .dish:active, .rest-card:active, .option-card:active { transform: scale(0.99); }
