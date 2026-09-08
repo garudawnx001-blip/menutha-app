@@ -24,6 +24,7 @@ import { Settings } from './pages/partner/Settings';
 import { Chat } from './pages/partner/Chat';
 import { Alerts } from './pages/partner/Alerts';
 import { Account } from './pages/partner/Account';
+import { DesignPreview } from './pages/partner/DesignPreview';
 import { Menu } from './pages/Menu';
 import { Cart } from './pages/Cart';
 import { Track } from './pages/Track';
@@ -59,6 +60,8 @@ export function App() {
           <Route path="/bill" element={<Bill />} />
           <Route path="/partner" element={<PartnerLogin />} />
           <Route path="/partner/register" element={<Register />} />
+          {/* Screens for approval, drawn from fixtures. See DesignPreview. */}
+          <Route path="/partner/preview" element={<DesignPreview />} />
           <Route element={<PartnerShell />}>
             <Route path="/partner/orders" element={<OrdersBoard />} />
             <Route path="/partner/menu" element={<MenuManager />} />

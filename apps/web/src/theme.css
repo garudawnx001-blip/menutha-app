@@ -1942,3 +1942,94 @@ select.code-input:focus { border-color: var(--primary); }
 .acct-row small { font-size: 12px; }
 .acct-state { font-size: 12.5px; font-weight: 700; color: var(--text-muted); white-space: nowrap; }
 .acct-state.ok { color: var(--primary); }
+
+/* ══ AUTH SCREENS — the Instagram shape, in the brand kit ═══════════════════
+   One spacing scale (8 / 16 / 24 / 32), one header treatment (gold eyebrow →
+   serif title → muted standfirst), one card. The app draws the same screen in
+   the same order, so the two read as one product. */
+.auth-page { display: flex; flex-direction: column; min-height: 100dvh; }
+.auth-fill { gap: 24px; padding: 32px 20px 40px; }
+.auth-head { display: flex; flex-direction: column; gap: 8px; max-width: 440px; }
+.auth-title { font-size: clamp(28px, 5vw, 36px); line-height: 1.12; margin: 0; }
+.auth-sub { font-size: 14.5px; line-height: 1.5; margin: 0; }
+.auth-card {
+  width: 100%; max-width: 420px; padding: 24px; text-align: left;
+  display: flex; flex-direction: column;
+}
+.field-label {
+  display: block; font-size: 11px; font-weight: 700; letter-spacing: 0.12em;
+  text-transform: uppercase; color: var(--text-muted); margin: 0 0 8px;
+}
+.field-label + .code-input, .field-row { margin-bottom: 16px; }
+.auth-card .code-input { min-height: 48px; font-size: 15px; }
+.code-input.is-readonly { opacity: 0.7; }
+.field-row { position: relative; }
+.field-row .code-input { padding-right: 64px; margin-bottom: 0; }
+.field-reveal {
+  position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+  font-size: 10.5px; letter-spacing: 0.12em; font-weight: 800; min-height: 36px; padding: 0 10px;
+}
+.field-error { color: var(--error); font-size: 13.5px; margin: -4px 0 12px; }
+.auth-primary { margin-top: 4px; min-height: 50px; font-size: 15px; }
+.btn-link {
+  background: none; border: none; box-shadow: none; color: var(--text-muted);
+  font-weight: 600; padding: 8px 10px; min-height: 40px;
+}
+.btn-link:hover { color: var(--ink); transform: none; filter: none; }
+.auth-forgot { align-self: center; margin-top: 8px; font-size: 13.5px; }
+.auth-note { font-size: 12.5px; line-height: 1.45; text-align: center; margin: 10px 0 0; }
+.auth-divider {
+  display: flex; align-items: center; gap: 12px; margin: 18px 0 14px;
+  color: var(--text-muted); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase;
+}
+.auth-divider::before, .auth-divider::after { content: ''; flex: 1; height: 1px; background: var(--line-strong); }
+.auth-providers { display: grid; gap: 10px; }
+/* Google's button, to the brand guidelines: plain white, a hairline, the G
+   unrecoloured. Bordered secondary — the alternate action, not the primary. */
+.btn-google {
+  display: inline-flex; align-items: center; justify-content: center; gap: 10px;
+  min-height: 48px; background: #ffffff; color: var(--ink);
+  border: 1.5px solid var(--line-strong); box-shadow: 0 1px 2px rgba(60, 40, 20, 0.06);
+  font-weight: 700; font-size: 14.5px;
+}
+.btn-google:hover { border-color: #d8ccb6; box-shadow: 0 4px 12px rgba(60, 40, 20, 0.10); }
+.auth-anchor { display: flex; flex-direction: column; align-items: center; gap: 10px; width: 100%; max-width: 420px; }
+.auth-rule { width: 100%; height: 1px; background: var(--line-strong); margin-bottom: 6px; }
+.auth-anchor-note { font-size: 13px; margin: 0; }
+.auth-anchor-btn { width: 100%; min-height: 48px; font-size: 15px; }
+.auth-fine { font-size: 11.5px; margin: 0; }
+.auth-sent { display: flex; flex-direction: column; align-items: center; text-align: center; padding: 8px 4px; }
+.auth-sent-mark {
+  width: 52px; height: 52px; border-radius: 50%; display: grid; place-items: center;
+  background: var(--gold-soft); color: var(--gold); font-size: 22px; margin-bottom: 12px;
+}
+
+/* ══ SECTION HEADERS + STATE CARDS (Chat and friends) ══════════════════════
+   The same three-line header the auth screens use, and ONE card for every
+   non-populated state: loading, empty, error. Each draws a mark, a line and
+   (for error) a way back. Never two states at once. */
+.section-head { display: flex; flex-direction: column; gap: 4px; margin: 12px 0 20px; }
+.section-title { font-size: 26px; margin: 0; }
+.section-sub { font-size: 13.5px; margin: 0; }
+.state-card {
+  display: flex; flex-direction: column; align-items: center; text-align: center; gap: 8px;
+  padding: 36px 24px; border-radius: var(--r-lg); background: var(--glass-bg);
+  border: 1px solid var(--glass-border); box-shadow: var(--shadow-sm), inset 0 1px 0 rgba(255,255,255,0.55);
+}
+.state-card .dim { font-size: 13.5px; line-height: 1.5; max-width: 360px; margin: 0; }
+.state-card strong { font-size: 15.5px; }
+.state-card .btn { margin-top: 8px; }
+.state-card .spinner { margin-bottom: 6px; }
+.state-mark {
+  width: 52px; height: 52px; border-radius: 50%; display: grid; place-items: center;
+  font-weight: 800; font-size: 22px; margin-bottom: 6px;
+  background: rgba(197, 64, 47, 0.10); color: var(--error);
+}
+.state-mark-soft { background: var(--gold-soft); color: var(--gold); }
+.state-error strong { color: var(--ink); }
+.thread-list { display: grid; gap: 10px; }
+.thread-time { font-size: 12px; margin-left: auto; }
+.thread-back { align-self: flex-start; margin: 0 0 10px -10px; }
+.thread-pane { padding: 14px; }
+.chat-empty { text-align: center; font-size: 13.5px; padding: 24px 0; }
+.chat-compose { margin-top: 10px; }

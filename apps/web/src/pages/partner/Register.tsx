@@ -29,9 +29,11 @@ import { usernameAvailable, usernameProblem } from '../../lib/auth';
 
 type Phase = 'checking' | 'finish' | 'restaurant';
 
-export function Register() {
+/** `previewPhase` is for the design preview only: it draws that step from a
+ *  fixture instead of reading the session. */
+export function Register({ previewPhase }: { previewPhase?: Phase } = {}) {
   const nav = useNavigate();
-  const [phase, setPhase] = useState<Phase>('checking');
+  const [phase, setPhase] = useState<Phase>(previewPhase ?? 'checking');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
@@ -64,6 +66,7 @@ export function Register() {
   };
 
   useEffect(() => {
+    if (previewPhase) { setEmail('priya@ashwamedha.in'); return; }
     readState();
     const { data: sub } = supabase.auth.onAuthStateChange(() => { readState(); });
     return () => sub.subscription.unsubscribe();
@@ -134,39 +137,43 @@ export function Register() {
         <Wordmark size={24} />
         <span className="badge gold">30-day free trial</span>
       </div>
-      <div className="center-fill" style={{ gap: 14 }}>
-        {phase !== 'checking' && <p className="overline">{stepLabel}</p>}
+      <div className="center-fill auth-fill">
         {phase !== 'checking' && (
-          <h1 className="display" style={{ fontSize: 'clamp(26px, 5vw, 34px)' }}>{title}</h1>
+          <div className="auth-head">
+            <p className="overline">{stepLabel}</p>
+            <h1 className="display auth-title">{title}</h1>
+            <p className="muted auth-sub">
+              {phase === 'finish'
+                ? 'Google confirmed your email. Choose a username and a password so you can also sign in without Google — on the portal and in the app.'
+                : 'A few details and your restaurant is live. Full Growth features for 30 days, no card needed.'}
+            </p>
+          </div>
         )}
 
-        {phase === 'checking' ? null : phase === 'finish' ? (
-          <div className="glass" style={{ width: '100%', maxWidth: 460, padding: 20, textAlign: 'left' }}>
-            <p className="dim" style={{ fontSize: 14, margin: '0 0 12px' }}>
-              Google confirmed your email. Choose a username and a password so you can also
-              sign in without Google — on the portal and in the app.
-            </p>
-            <p className="overline" style={{ marginBottom: 6 }}>Email</p>
-            <input className="code-input" value={email} readOnly aria-readonly style={{ opacity: 0.75 }} />
-            <p className="overline" style={{ margin: '12px 0 6px' }}>Username</p>
+        {phase === 'checking' ? (
+          <div className="state-card" role="status"><div className="spinner" /><p className="dim">Opening your account…</p></div>
+        ) : phase === 'finish' ? (
+          <div className="glass auth-card">
+            <label className="field-label" htmlFor="setup-email">Email</label>
+            <input id="setup-email" className="code-input is-readonly" value={email} readOnly aria-readonly />
+            <label className="field-label" htmlFor="setup-username">Username</label>
             {/* Lower-cased as typed, so what the owner sees is what is stored.
                 Instagram's alphabet: letters, numbers, dot, underscore. */}
             <input
+              id="setup-username"
               className="code-input" type="text" autoComplete="username" autoFocus
               placeholder="ashwamedha_lodge" value={username}
               onChange={(e) => setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9._]/g, '').slice(0, 30))} />
-            <p className="overline" style={{ margin: '12px 0 6px' }}>Password</p>
-            <input className="code-input" type="password" autoComplete="new-password"
+            <label className="field-label" htmlFor="setup-password">Password</label>
+            <input id="setup-password" className="code-input" type="password" autoComplete="new-password"
               placeholder="At least 8 characters" value={password}
               onChange={(e) => setPassword(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && finishSetup()} />
-            {error && <p style={{ color: 'var(--error)', fontSize: 13.5, marginTop: 10 }}>{error}</p>}
-            <button className={`btn btn-glass btn-block${busy ? ' is-busy' : ''}`} style={{ marginTop: 16 }} disabled={busy} onClick={finishSetup}>
+            {error && <p className="field-error">{error}</p>}
+            <button className={`btn btn-glass btn-block auth-primary${busy ? ' is-busy' : ''}`} disabled={busy} onClick={finishSetup}>
               Continue
             </button>
-            <p className="dim" style={{ fontSize: 12, marginTop: 10 }}>
-              Your restaurant details are next. No card, nothing is charged.
-            </p>
+            <p className="dim auth-note">Your restaurant details are next. No card, nothing is charged.</p>
           </div>
         ) : (
         <div className="glass" style={{ width: '100%', maxWidth: 460, padding: 20, textAlign: 'left' }}>
