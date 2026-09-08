@@ -24,6 +24,7 @@ import { Chat } from './pages/partner/Chat';
 import { Alerts } from './pages/partner/Alerts';
 import { Account } from './pages/partner/Account';
 import { DesignPreview } from './pages/partner/DesignPreview';
+import { BillSettings } from './pages/partner/BillSettings';
 import { Menu } from './pages/Menu';
 import { Cart } from './pages/Cart';
 import { Track } from './pages/Track';
@@ -78,6 +79,7 @@ export function App() {
             <Route path="/partner/chat" element={<Chat />} />
             <Route path="/partner/alerts" element={<Alerts />} />
             <Route path="/partner/account" element={<Account />} />
+            <Route path="/partner/bill-settings" element={<BillSettings />} />
             <Route path="/partner/settings" element={<Settings />} />
           </Route>
           <Route path="/partner/plan" element={<PlanScreen />} />

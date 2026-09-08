@@ -2,12 +2,11 @@
  *  (per plan), P&L visibility toggle (owner), UPI ID (diners pay it directly
  *  wires the secret via Edge Function config — never client-side). */
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   updateRestaurant, uploadImage,
 } from '../../lib/portalApi';
 import { usePartner } from './PartnerShell';
-import { BillCharges } from './BillCharges';
-import { BillLayoutEditor } from './BillLayoutEditor';
 
 /**
  * ONE FIELD: a label over its input.
@@ -38,6 +37,7 @@ function F({ label, children }: { label: string; children: React.ReactNode }) {
 }
 
 export function Settings() {
+  const nav = useNavigate();
   const { restaurant, role, can, reload } = usePartner();
   const [form, setForm] = useState({
     name: restaurant.name ?? '',
@@ -248,27 +248,21 @@ export function Settings() {
             Tables &amp; QR, and add an AC charge below.
           </span>
         </F>
-        {/* Charges save themselves as they are added, so they sit outside the
-            form's own Save. Mixing the two would mean adding a charge and then
-            wondering whether Save was still required for it. */}
-        <F label="Custom charges">
-          <BillCharges restaurantId={restaurant.id} acPricing={form.ac_pricing} />
-        </F>
-        {/* THE LAYOUT EDITOR, in the same card as the charges and the tax
-            rates, because they are the same job: everything that decides what
-            the bill says and how it reads. It saves itself, like the charges
-            above and for the same reason -- mixing it into the form's Save
-            would mean changing an alignment and then wondering whether Save
-            was still required.
-
-            `form` rather than `restaurant` is passed on purpose: the preview
-            has to show the thank-you line he is typing RIGHT NOW, not the one
-            last saved, or it is only telling the truth about half this page. */}
-        <F label="Bill layout">
-          <BillLayoutEditor
-            restaurantId={restaurant.id}
-            restaurant={{ ...(restaurant as any), ...form }}
-          />
+        {/* CHARGES AND THE BILL LAYOUT MOVED OUT, to their own section.
+            They were three scrolls down a form about addresses and opening
+            hours, while the phone has kept them as their own screen since
+            they were built -- so "change it in Bill settings" meant two
+            different journeys depending on which device the owner was
+            holding. See BillSettings. */}
+        <F label="Bill settings">
+          <p className="dim" style={{ fontSize: 13, margin: 0 }}>
+            Taxes, custom charges and the printed layout have their own section now —
+            the same place the app keeps them.
+          </p>
+          <button type="button" className="btn btn-ghost" style={{ marginTop: 10 }}
+            onClick={() => nav('/partner/bill-settings')}>
+            Open Bill settings →
+          </button>
         </F>
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
           <div style={{ flex: '1 1 140px', minWidth: 0 }}>

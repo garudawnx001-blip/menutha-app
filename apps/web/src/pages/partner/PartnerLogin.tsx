@@ -378,7 +378,12 @@ export function PartnerLogin() {
                of the form: nothing went wrong, and a red line saying "account
                created" is a contradiction the reader has to resolve. */
             <div className="auth-sent">
-              <div className="auth-sent-mark" aria-hidden>✉</div>
+              <div className="auth-sent-mark" aria-hidden>
+                <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="3" y="5" width="18" height="14" rx="2" />
+                  <path d="m3 7 9 6 9-6" />
+                </svg>
+              </div>
               <strong>Check your email</strong>
               <p className="dim" style={{ fontSize: 13.5, margin: '6px 0 14px' }}>
                 We sent a 6-digit code to <b>{email.trim()}</b>. Type it here — or tap the link in the

@@ -10,6 +10,7 @@ import {
   bulkUploadDishImages, reorderDishes, type BulkImageResult,
 } from '../../lib/portalApi';
 import { downloadTemplate, exportMenu, parseWorkbook, publishPlan, type ImportPlan } from '../../lib/excelMenu';
+import { DragHandleIcon, PencilIcon } from './Glyphs';
 import { inr } from '../../lib/types';
 import { usePartner } from './PartnerShell';
 import { Spinner, VegMark } from '../../components';
@@ -279,7 +280,9 @@ export function MenuManager() {
           <button className={editCats ? 'chip active' : 'chip'}
             title="Rename, reorder or delete menu categories"
             onClick={() => setEditCats(!editCats)}>
-            {editCats ? '✕ Done editing categories' : '✎ Edit categories'}
+            {editCats
+              ? <>✕&nbsp;Done editing categories</>
+              : <><PencilIcon size={14} />&nbsp;Edit categories</>}
           </button>
           <button className="btn btn-primary" style={{ padding: '10px 16px', fontSize: 14 }}
             onClick={() => setDraft(emptyDraft(activeCat === 'all' ? cats[0]?.id ?? null : activeCat))}>
@@ -351,7 +354,7 @@ export function MenuManager() {
             ))}
             {plan.updates.map(({ row: r, existing }) => (
               <div key={'u' + r.row} className="muted">
-                ✎ {r.name}: {inr(existing.price)} → {inr(r.price)}{existing.is_available !== r.available ? (r.available ? ' · back in stock' : ' · marked out of stock') : ''}
+                <PencilIcon size={13} /> {r.name}: {inr(existing.price)} → {inr(r.price)}{existing.is_available !== r.available ? (r.available ? ' · back in stock' : ' · marked out of stock') : ''}
               </div>
             ))}
           </div>
@@ -406,7 +409,7 @@ export function MenuManager() {
                   onPointerMove={onGripMove}
                   onPointerUp={onGripUp}
                   onPointerCancel={onGripUp}
-                >⠿</span>
+                ><DragHandleIcon size={15} /></span>
                 <span style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                   <button className="chip cat-nudge" disabled={idx === 0}
                     aria-label={`Move ${c.name} up`}

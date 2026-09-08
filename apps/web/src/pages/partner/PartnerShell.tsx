@@ -46,6 +46,7 @@ const NAV: { to: string; label: string; icon: string; primary?: boolean }[] = [
   { to: '/partner/billing', label: 'Billing', icon: '💳', primary: true },
   { to: '/partner/chat', label: 'Chat', icon: '💬', primary: true },
   { to: '/partner/alerts', label: 'Alerts', icon: '🔔', primary: true },
+  // Same items in the same order as the phone's More list. See MoreScreen.
   { to: '/partner/reports', label: 'Reports', icon: '📈' },
   { to: '/partner/reservations', label: 'Reservations', icon: '📅' },
   { to: '/partner/buffets', label: 'Buffets', icon: '🍽' },
@@ -54,6 +55,7 @@ const NAV: { to: string; label: string; icon: string; primary?: boolean }[] = [
   // "Restaurant profile", not "Settings": the overflow button is Settings now,
   // and a Settings menu whose contents include Settings is a path nobody reads
   // twice without pausing. Mirrors the app.
+  { to: '/partner/bill-settings', label: 'Bill settings', icon: '🧮' },
   { to: '/partner/settings', label: 'Restaurant profile', icon: '⚙️' },
   { to: '/partner/account', label: 'Account & security', icon: '👤' },
 ];

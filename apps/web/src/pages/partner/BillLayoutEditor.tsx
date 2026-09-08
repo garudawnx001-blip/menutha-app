@@ -31,11 +31,17 @@ import {
   type Align, type BillLayout, type SectionKey,
 } from '../../lib/billTemplate';
 import { fetchBillLayout, saveBillLayout, uploadImage } from '../../lib/portalApi';
+import { AlignLeftIcon, AlignCenterIcon, AlignRightIcon } from './Glyphs';
 
-const ALIGNS: { key: Align; label: string; glyph: string }[] = [
-  { key: 'left',   label: 'Left',   glyph: '⯇' },
-  { key: 'center', label: 'Centre', glyph: '≡' },
-  { key: 'right',  label: 'Right',  glyph: '⯈' },
+/**
+ * DRAWN, NOT TYPED. These were U+2BC7 / U+2BC8, a Unicode block most system
+ * fonts do not ship -- which is why they rendered as tofu boxes on the
+ * owner's screen. An SVG has no font behind it to be missing. See Glyphs.
+ */
+const ALIGNS: { key: Align; label: string; Icon: (p: { size?: number }) => JSX.Element }[] = [
+  { key: 'left',   label: 'Left',   Icon: AlignLeftIcon },
+  { key: 'center', label: 'Centre', Icon: AlignCenterIcon },
+  { key: 'right',  label: 'Right',  Icon: AlignRightIcon },
 ];
 
 /** A deep-enough clone. The layout is two levels of plain data, so this is
@@ -277,10 +283,10 @@ export function BillLayoutEditor({
                         title={a.label}
                         aria-pressed={s.align === a.key}
                         aria-label={`${label}: ${a.label}`}
-                        style={{ minWidth: 34, padding: '4px 8px' }}
+                        style={{ minWidth: 34, padding: '4px 8px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
                         onClick={() => edit((d) => { d.sections[key].align = a.key; })}
                       >
-                        {a.glyph}
+                        <a.Icon size={15} />
                       </button>
                     ))}
                   </div>
