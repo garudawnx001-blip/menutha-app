@@ -68,4 +68,13 @@ jobs:
         run: npx tsc --noEmit
 
       - name: Build (vite)
+        env:
+          # THE MAPS KEY IS A BUILD-TIME VALUE, and Vite only inlines names
+          # starting with VITE_. A repository VARIABLE rather than a secret:
+          # a browser Maps key is public by design -- it ships inside the
+          # bundle to every visitor either way -- and a secret would be masked
+          # to an empty string here, which fails silently as a blank map.
+          # Absent is a supported state: the picker still saves the pin and
+          # says the map appears once the key is set.
+          VITE_GOOGLE_MAPS_API_KEY: ${{ vars.VITE_GOOGLE_MAPS_API_KEY }}
         run: npx vite build
