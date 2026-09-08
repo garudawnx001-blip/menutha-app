@@ -55,6 +55,11 @@ const DURATIONS = [
 
 const perMonthOf = (p: Plan) => Math.round(p.price_inr / Math.max(1, p.duration_months));
 
+/** "Basic", not "basic": the tier is stored lower-case because it is a key,
+ *  and a key is not a label. */
+const tierLabel = (p: { tier: string | null; name: string }) =>
+  (p.tier ? p.tier[0].toUpperCase() + p.tier.slice(1) : p.name);
+
 const FEATURE_LABELS: Record<string, string> = {
   qr_ordering: 'QR ordering & billing',
   dynamic_menu: 'Dynamic menu',
@@ -114,7 +119,10 @@ export function PlanScreen({ preview }: { preview?: boolean } = {}) {
   // ids into subscription_plans is the only thing that flips them live.
   const load = async () => {
     if (preview) {
-      // Design preview: fixtures, no session. See DesignPreview.
+      // Design preview: fixtures, no session. See DesignPreview. ?months= opens
+      // on a given duration so every term can be looked at (and screenshotted).
+      const want = Number(new URLSearchParams(window.location.search).get('months'));
+      if ([1, 3, 6, 12].includes(want)) setMonths(want);
       setRestaurant({ id: 'preview', name: 'Ashwamedha Lodge' } as any);
       setPlans(PREVIEW_PLANS as any);
       setState({
@@ -327,7 +335,7 @@ export function PlanScreen({ preview }: { preview?: boolean } = {}) {
           return (
             <div key={p.id} className="glass" style={{ padding: 18, display: 'flex', flexDirection: 'column', gap: 10, borderColor: isCurrent ? 'var(--primary)' : undefined }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
-                <h3 className="display" style={{ fontSize: 21 }}>{p.tier ? p.tier[0].toUpperCase() + p.tier.slice(1) : p.name}</h3>
+                <h3 className="display" style={{ fontSize: 21 }}>{tierLabel(p)}</h3>
                 <span style={{ textAlign: 'right' }}>
                   {/* THE BASE LEADS, and the total is directly under it. The
                       base is the price this product quotes everywhere -- the
@@ -383,7 +391,7 @@ export function PlanScreen({ preview }: { preview?: boolean } = {}) {
                     : setError('Online subscription is being switched on. Your 30-day trial continues meanwhile, and nothing is charged.'))}>
                   {busyPlan === p.id ? 'Opening checkout…'
                     : !p.razorpay_plan_id ? 'Online payment opens soon'
-                    : (ent?.state === 'active' ? 'Switch to this plan' : `Choose ${p.tier ?? p.name}`)}
+                    : (ent?.state === 'active' ? 'Switch to this plan' : `Choose ${tierLabel(p)}`)}
                 </button>
               )}
               <p className="dim" style={{ fontSize: 11.5, margin: 0 }}>
