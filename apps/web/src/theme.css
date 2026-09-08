@@ -2059,3 +2059,14 @@ select.code-input:focus { border-color: var(--primary); }
   letter-spacing: 0.5em; text-align: center; font-size: 22px; font-weight: 700;
   padding-left: 0.5em; /* the tracking pushes the last glyph right; balance it */
 }
+
+/* The outlet picker in the sidebar brand block. A select, not a bespoke
+   dropdown: it is a list of names, the platform already draws one well on
+   both a phone and a desktop, and it is reachable by keyboard for free. */
+.outlet-switch {
+  margin-top: 4px; max-width: 100%;
+  background: transparent; border: 1px solid var(--line-strong); border-radius: 8px;
+  color: var(--text-muted); font: inherit; font-size: 11.5px; padding: 3px 6px;
+  cursor: pointer;
+}
+.outlet-switch:hover { border-color: var(--gold); color: var(--ink); }

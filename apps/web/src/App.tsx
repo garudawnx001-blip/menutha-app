@@ -24,6 +24,7 @@ import { Chat } from './pages/partner/Chat';
 import { Alerts } from './pages/partner/Alerts';
 import { Account } from './pages/partner/Account';
 import { DesignPreview } from './pages/partner/DesignPreview';
+import { Gate } from './pages/partner/Gate';
 import { BillSettings } from './pages/partner/BillSettings';
 import { Menu } from './pages/Menu';
 import { Cart } from './pages/Cart';
@@ -72,12 +73,12 @@ export function App() {
             <Route path="/partner/tables" element={<TablesQR />} />
             <Route path="/partner/billing" element={<Billing />} />
 
-            <Route path="/partner/reports" element={<Reports />} />
+            <Route path="/partner/reports" element={<Gate feature="detailed_reports" what="Detailed reports"><Reports /></Gate>} />
             <Route path="/partner/buffets" element={<Buffets />} />
             <Route path="/partner/showcase" element={<Showcase />} />
-            <Route path="/partner/reservations" element={<Reservations />} />
-            <Route path="/partner/chat" element={<Chat />} />
-            <Route path="/partner/alerts" element={<Alerts />} />
+            <Route path="/partner/reservations" element={<Gate feature="reservations" what="Reservations"><Reservations /></Gate>} />
+            <Route path="/partner/chat" element={<Gate feature="table_chat" what="Table chat"><Chat /></Gate>} />
+            <Route path="/partner/alerts" element={<Gate feature="notifications" what="Notifications"><Alerts /></Gate>} />
             <Route path="/partner/account" element={<Account />} />
             <Route path="/partner/bill-settings" element={<BillSettings />} />
             <Route path="/partner/settings" element={<Settings />} />

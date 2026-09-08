@@ -3,7 +3,9 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
-import { loadMembership, type Membership, type PortalRole } from '../../lib/portalApi';
+import {
+  loadMembership, loadOutlets, rememberOutlet, type Membership, type PortalRole,
+} from '../../lib/portalApi';
 import { entitlementsFor, hasFeature, type Entitlements } from '../../lib/entitlements';
 import { Spinner, Wordmark } from '../../components';
 
@@ -68,6 +70,17 @@ export function PartnerShell() {
   // Phone bar overflow. Closes on navigation so the sheet never covers the
   // section it just opened.
   const [moreOpen, setMoreOpen] = useState(false);
+  /** Every outlet this account can open. One entry is the ordinary case; the
+   *  picker only appears when there are more. */
+  const [outlets, setOutlets] = useState<Membership['restaurant'][]>([]);
+
+  const switchOutlet = async (id: string) => {
+    rememberOutlet(id);
+    // A full reload rather than a state swap: every open section holds data
+    // for the outlet it was opened with, and re-fetching them piecemeal is how
+    // one stale panel ends up showing another outlet's orders.
+    window.location.reload();
+  };
   const loc = useLocation();
   useEffect(() => { setMoreOpen(false); }, [loc.pathname]);
 
@@ -80,6 +93,7 @@ export function PartnerShell() {
         setError('This account is not linked to a restaurant yet. Register your restaurant below to get started.');
       }
       setMember(m);
+      setOutlets(await loadOutlets().catch(() => []));
     } catch (e: any) {
       setError(e?.message ?? 'Could not load your restaurant.');
     } finally {
@@ -132,9 +146,27 @@ export function PartnerShell() {
         <aside className="portal-nav">
           <div className="portal-brand">
             <Wordmark size={19} />
-            <span className="dim" style={{ fontSize: 11.5, display: 'block', marginTop: 2 }}>
-              {member.restaurant.name}
-            </span>
+            {/* ONE OUTLET: its name, as before. SEVERAL: a picker, because
+                the name is also the answer to "which one am I editing?" and
+                that question only exists once there is more than one. The
+                choice is remembered per browser -- an owner at head office
+                and a manager on the counter PC can be in different outlets. */}
+            {outlets.length > 1 ? (
+              <select
+                className="outlet-switch"
+                aria-label="Which outlet"
+                value={member.restaurant.id}
+                onChange={(e) => switchOutlet(e.target.value)}
+              >
+                {outlets.map((o) => (
+                  <option key={o.id} value={o.id}>{o.name}</option>
+                ))}
+              </select>
+            ) : (
+              <span className="dim" style={{ fontSize: 11.5, display: 'block', marginTop: 2 }}>
+                {member.restaurant.name}
+              </span>
+            )}
           </div>
           {/* Wide screens list every section; the phone bar shows the four
               primary ones plus More, because nine never fitted and the four

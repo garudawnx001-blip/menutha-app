@@ -4,9 +4,11 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  updateRestaurant, uploadImage,
+  updateRestaurant, uploadImage, addOutlet, rememberOutlet,
 } from '../../lib/portalApi';
 import { usePartner } from './PartnerShell';
+import { LocationPicker, type LatLng } from './LocationPicker';
+import { UpgradeNudge } from './Gate';
 
 /**
  * ONE FIELD: a label over its input.
@@ -54,6 +56,7 @@ export function Settings() {
     brand_color: (restaurant as any).brand_color ?? '#1B5E3F',
     is_open: restaurant.is_open !== false,
     grace_seconds: String((restaurant as any).grace_seconds ?? 60),
+    map_label: (restaurant as any).map_label ?? (restaurant as any).address ?? '',
     /* The tax and service rates, the FSSAI number, the footer trio and the AC
        toggle are NOT here any more: they belong to Bill settings, which is the
        only page that shows or writes them. A page must not carry state it
@@ -62,7 +65,35 @@ export function Settings() {
   });
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
+  /** The map pin. Null until the owner sets one; every tier may. */
+  const [pin, setPin] = useState<LatLng | null>(
+    (restaurant as any).lat != null && (restaurant as any).lng != null
+      ? { lat: Number((restaurant as any).lat), lng: Number((restaurant as any).lng) }
+      : null,
+  );
   const [error, setError] = useState('');
+
+  /** A second address, for an account whose plan allows one. */
+  const [outletName, setOutletName] = useState('');
+  const [outletCity, setOutletCity] = useState('');
+  const [addingOutlet, setAddingOutlet] = useState(false);
+
+  const createOutlet = async () => {
+    if (!outletName.trim()) { setError('Give the new outlet a name.'); return; }
+    setAddingOutlet(true); setError('');
+    try {
+      // The new row points at THIS restaurant, which is the one holding the
+      // subscription -- effective_plan() resolves the child's tier to it.
+      const id = await addOutlet(restaurant.id, outletName, outletCity);
+      setOutletName(''); setOutletCity('');
+      rememberOutlet(id);
+      // Straight into the new outlet: the next thing anyone does is set up its
+      // menu, and the switcher would otherwise still be pointing here.
+      window.location.reload();
+    } catch (e: any) {
+      setError(e?.message ?? 'Could not add that outlet.');
+    } finally { setAddingOutlet(false); }
+  };
 
   const save = async () => {
     setBusy(true); setError(''); setSaved(false);
@@ -104,6 +135,11 @@ export function Settings() {
         // Same bounds the database enforces, so a typo is corrected here rather
         // than bounced back as a constraint error.
         grace_seconds: clamped.grace_seconds,
+        // The pin, and the line shown under it. Sent as nulls when cleared, so
+        // "no location" is storable rather than only "never set".
+        lat: pin ? pin.lat : null,
+        lng: pin ? pin.lng : null,
+        map_label: form.map_label.trim() || null,
         ...(can('white_label') || can('basic_theme') ? { brand_color: form.brand_color } : {}),
       });
       await reload();
@@ -154,6 +190,42 @@ export function Settings() {
             they were built -- so "change it in Bill settings" meant two
             different journeys depending on which device the owner was
             holding. See BillSettings. */}
+        {/* WHERE THE OUTLET IS. Every tier -- knowing where a restaurant is is
+            not a premium feature. Diners see this pin on the menu. */}
+        <F label="Location on the map">
+          <LocationPicker
+            value={pin}
+            label={form.map_label}
+            onChange={setPin}
+            onLabelChange={(v) => setForm((f) => ({ ...f, map_label: v }))}
+          />
+        </F>
+        {/* MORE THAN ONE ADDRESS. Enterprise, unlimited, one subscription --
+            a new outlet is a restaurant row pointing at this one, so it gets
+            its own menu, tables, QR codes and reports and reads its plan from
+            here. Locked tiers see the nudge rather than nothing. */}
+        <F label="Outlets">
+          {can('multi_outlet') ? (
+            <>
+              <p className="dim" style={{ fontSize: 13, margin: '0 0 10px' }}>
+                Each outlet has its own menu, tables, QR codes and reports. One subscription
+                covers them all, and the switcher at the top left moves between them.
+              </p>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <input className="code-input" style={{ flex: '1 1 180px' }} placeholder="New outlet name"
+                  value={outletName} onChange={(e) => setOutletName(e.target.value)} />
+                <input className="code-input" style={{ flex: '1 1 120px' }} placeholder="City"
+                  value={outletCity} onChange={(e) => setOutletCity(e.target.value)} />
+              </div>
+              <button type="button" className={`btn btn-ghost`}
+                style={{ marginTop: 10 }} disabled={addingOutlet} onClick={createOutlet}>
+                Add outlet
+              </button>
+            </>
+          ) : (
+            <UpgradeNudge feature="multi_outlet" what="Multiple outlets" />
+          )}
+        </F>
         <F label="Bill settings">
           <p className="dim" style={{ fontSize: 13, margin: 0 }}>
             Taxes, custom charges and the printed layout have their own section now —

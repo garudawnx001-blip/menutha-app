@@ -22,6 +22,39 @@ export interface Membership {
   };
 }
 
+/** Which outlet the owner last had open. Per browser, because a manager on
+ *  the counter PC and the owner on a laptop can reasonably be looking at
+ *  different outlets at once. */
+const OUTLET_KEY = 'menutha.outlet';
+export const rememberOutlet = (id: string) => {
+  try { localStorage.setItem(OUTLET_KEY, id); } catch { /* private mode */ }
+};
+const recalledOutlet = (): string | null => {
+  try { return localStorage.getItem(OUTLET_KEY); } catch { return null; }
+};
+
+/**
+ * EVERY OUTLET THIS ACCOUNT CAN OPEN, oldest first.
+ *
+ * The first row is the primary -- the one that holds the subscription and
+ * whose plan the others read through effective_plan(). Ordering by created_at
+ * makes that stable rather than incidental.
+ */
+export async function loadOutlets(): Promise<Membership['restaurant'][]> {
+  const { data: session } = await supabase.auth.getSession();
+  const uid = session.session?.user?.id;
+  if (!uid) return [];
+  const { data } = await supabase
+    .from('restaurant_member')
+    .select('restaurant(*)')
+    .eq('user_id', uid)
+    .in('member_role', ['owner', 'manager', 'waiter', 'kitchen'])
+    .order('created_at', { ascending: true });
+  return (data ?? [])
+    .map((row: any) => (Array.isArray(row.restaurant) ? row.restaurant[0] : row.restaurant))
+    .filter(Boolean) as Membership['restaurant'][];
+}
+
 export async function loadMembership(): Promise<Membership | null> {
   const { data: session } = await supabase.auth.getSession();
   const uid = session.session?.user?.id;
@@ -31,12 +64,59 @@ export async function loadMembership(): Promise<Membership | null> {
     .select('member_role, restaurant(*)')
     .eq('user_id', uid)
     .in('member_role', ['owner', 'manager', 'waiter', 'kitchen'])
-    .order('created_at', { ascending: true })
-    .limit(1)
-    .maybeSingle();
-  if (!data) return null;
-  const r = (Array.isArray(data.restaurant) ? data.restaurant[0] : data.restaurant) as Membership['restaurant'];
-  return { role: data.member_role as PortalRole, restaurant: r };
+    .order('created_at', { ascending: true });
+  const rows = data ?? [];
+  if (!rows.length) return null;
+  /**
+   * The remembered outlet if it is still one of theirs, else the first --
+   * which is the primary. Falling back rather than failing matters: an outlet
+   * can be closed or a membership revoked between sessions, and landing on an
+   * empty portal because of a stale id in localStorage would look like the
+   * account had lost its restaurant.
+   */
+  const wanted = recalledOutlet();
+  const pick = rows.find((row: any) => {
+    const r = Array.isArray(row.restaurant) ? row.restaurant[0] : row.restaurant;
+    return r?.id === wanted;
+  }) ?? rows[0];
+  const r = (Array.isArray(pick.restaurant) ? pick.restaurant[0] : pick.restaurant) as Membership['restaurant'];
+  return { role: (pick as any).member_role as PortalRole, restaurant: r };
+}
+
+/**
+ * OPEN ANOTHER OUTLET, under the same subscription.
+ *
+ * The new row points at the payer through parent_id, so effective_plan()
+ * resolves its tier to the parent's and one subscription covers them all.
+ * complete_restaurant_signup is not reused here: it starts a fresh 30-day
+ * trial and claims a username, neither of which applies to a second address
+ * on an existing account.
+ */
+export async function addOutlet(parentId: string, name: string, city: string | null): Promise<string> {
+  const { data: session } = await supabase.auth.getSession();
+  const uid = session.session?.user?.id;
+  if (!uid) throw new Error('Please sign in again.');
+
+  const { data: created, error } = await supabase
+    .from('restaurant')
+    .insert({ name: name.trim(), city: city?.trim() || null, parent_id: parentId, status: 'active' })
+    .select('id')
+    .single();
+  if (error) throw new Error(error.message);
+
+  const { error: memberErr } = await supabase
+    .from('restaurant_member')
+    .insert({ restaurant_id: created.id, user_id: uid, member_role: 'manager' });
+  if (memberErr) throw new Error(memberErr.message);
+
+  // A parcel row, exactly as sign-up creates for a first outlet, so takeaway
+  // works from the moment the outlet exists.
+  await supabase.from('dining_table').insert({
+    restaurant_id: created.id, label: 'Parcel', is_parcel: true,
+    qr_token: `qr_${String(created.id).slice(0, 8)}_parcel`,
+  });
+
+  return created.id as string;
 }
 
 // ── Orders ─────────────────────────────────────────────────────────────────
