@@ -81,6 +81,46 @@ export async function loginWithIdentifier(identifier: string, password: string):
   if (setErr) throw setErr;
 }
 
+/**
+ * FINISH A RESET: the six-digit code from the email, and a new password.
+ *
+ * Always through the edge function, even for an email identifier, so both
+ * surfaces and both identifier kinds take one code path -- and so the reply is
+ * the same sentence whether the code was wrong, expired, or the account never
+ * existed. It answers with a session, which this adopts: someone who has just
+ * proved they own the address and chosen a password should not then be asked
+ * to type it.
+ */
+export async function completeReset(identifier: string, code: string, newPassword: string): Promise<void> {
+  const { data, error } = await supabase.functions.invoke('username-login', {
+    body: {
+      action: 'reset_verify',
+      identifier: identifier.trim().toLowerCase(),
+      token: code.trim(),
+      password: newPassword,
+    },
+  });
+  if (error) {
+    let msg = 'That code did not match. Check it and try again.';
+    try { msg = JSON.parse(String((error as any)?.context?.body ?? '{}')).error ?? msg; } catch { /* keep default */ }
+    throw new Error(msg);
+  }
+  const session = (data as any)?.session;
+  if (!session?.access_token) throw new Error('That code did not match. Check it and try again.');
+  const { error: setErr } = await supabase.auth.setSession({
+    access_token: session.access_token, refresh_token: session.refresh_token,
+  });
+  if (setErr) throw setErr;
+}
+
+/** Supabase's OTP failures, in words the person typing can act on. */
+export function otpErrorSentence(message: string): string {
+  if (/expired/i.test(message)) return 'That code has expired — send a new one.';
+  if (/invalid|not found/i.test(message)) return 'That code did not match. Check it and try again.';
+  if (/rate|too many|seconds/i.test(message)) return 'Too many attempts just now. Wait a minute and try again.';
+  return message;
+}
+
 /** Reset by username OR email. Answers identically whether or not the
  *  identifier exists -- the enumeration this whole module exists to prevent. */
 export async function resetByIdentifier(identifier: string): Promise<void> {

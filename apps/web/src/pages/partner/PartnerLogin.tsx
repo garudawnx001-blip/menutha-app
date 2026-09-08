@@ -1,9 +1,16 @@
 /** Restaurant Portal sign-in. THE MODEL, as he finalised it: Google is the
  *  front door of sign-up (verified email, no inbox step; username + password
  *  are set on Register right after), email sign-up is the secondary door
- *  (username + password up front, confirmed by LINK). Log in is one field --
- *  username OR email -- plus password, or the Google button; all of them open
- *  the same account. No PIN, no OTP anywhere.
+ *  (username + password up front, confirmed by a SIX-DIGIT CODE). Log in is
+ *  one field -- username OR email -- plus password, or the Google button; all
+ *  of them open the same account.
+ *
+ *  CODES, NOT LINKS, for confirming and for resetting. Custom SMTP is on the
+ *  project, so the templates carry {{ .Token }} and the whole thing finishes
+ *  on this screen: no hop to a mail client and back, and nothing lost when the
+ *  link opens on a device that is not the one being fixed. The links still
+ *  work -- the same mail carries both -- so nobody who reaches for one is
+ *  stranded. Logging IN is still a password; there is no OTP login.
  *
  *  THE SHAPE IS INSTAGRAM'S, at his direction and from his screenshot:
  *  field, password, Log in, "Forgot password?" under it, then "Continue with
@@ -20,7 +27,10 @@ import { Wordmark } from '../../components';
 import {
   showAppleButton, APPLE_COMING_SOON, APPLE_PENDING_MESSAGE, providerError,
 } from '../../lib/authProviders';
-import { loginWithIdentifier, resetByIdentifier, usernameAvailable, usernameProblem } from '../../lib/auth';
+import {
+  loginWithIdentifier, resetByIdentifier, completeReset, otpErrorSentence,
+  usernameAvailable, usernameProblem,
+} from '../../lib/auth';
 import { GoogleMark } from './GoogleMark';
 
 export function PartnerLogin() {
@@ -39,6 +49,21 @@ export function PartnerLogin() {
   const [error, setError] = useState('');
   /** Sign-up succeeded but the address must be confirmed first. */
   const [signupSent, setSignupSent] = useState(false);
+  /** The six-digit code from the confirmation mail. The link in the same mail
+   *  still works; this is the path that does not leave the screen. */
+  const [signupCode, setSignupCode] = useState('');
+
+  const confirmSignupCode = async () => {
+    if (!/^\d{6}$/.test(signupCode)) { setError('Enter the 6-digit code from the email.'); return; }
+    setBusy(true); setError('');
+    const { data, error: err } = await supabase.auth.verifyOtp({
+      email: email.trim(), token: signupCode, type: 'signup',
+    });
+    setBusy(false);
+    if (err) { setError(otpErrorSentence(err.message)); return; }
+    if (!data.session) { setError('That code did not match. Check it and try again.'); return; }
+    nav('/partner/register', { replace: true });
+  };
   /** Instagram-style handle, sign-up only. Checked for format and
    *  availability before the account is created; CLAIMED when the restaurant
    *  is (Register), because that is the first call with a session. */
@@ -158,23 +183,55 @@ export function PartnerLogin() {
     nav('/partner/register', { replace: true });
   };
 
-  const [sent, setSent] = useState(false);
+  /**
+   * FORGOT PASSWORD, BY CODE.
+   *
+   * The reset mail carries a six-digit code, so the whole thing finishes on
+   * this screen: send, type the code, choose the password. No hop to a mail
+   * client and back, and nothing to lose if the link opens on a device that
+   * is not the one being fixed. `resetIdent` is captured when the code is
+   * sent, because the field above is editable and the code belongs to the
+   * identifier it was sent for.
+   */
+  const [resetStep, setResetStep] = useState<'off' | 'code'>('off');
+  const [resetIdent, setResetIdent] = useState('');
+  const [resetCode, setResetCode] = useState('');
+  const [resetPw, setResetPw] = useState('');
+  const [resetAgain, setResetAgain] = useState(0);
+
   const forgotPassword = async () => {
     const id = (emailRef.current?.value || email).trim();
     if (!id) { setError('Type your username or email above first, then use “Forgot password?”.'); return; }
     setBusy(true); setError('');
     try {
       await resetByIdentifier(id);
-      setSent(true);
+      setResetIdent(id);
+      setResetCode('');
+      setResetStep('code');
+      setResetAgain(Date.now() + 30_000);
     } catch (e: any) {
-      setError(e?.message ?? 'Could not send the reset link.');
+      setError(e?.message ?? 'Could not send the reset code.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const saveResetPassword = async () => {
+    if (!/^\d{6}$/.test(resetCode)) { setError('Enter the 6-digit code from the email.'); return; }
+    if (resetPw.length < 8) { setError('Choose a password of at least 8 characters.'); return; }
+    setBusy(true); setError('');
+    try {
+      await completeReset(resetIdent, resetCode, resetPw);
+      nav('/partner/orders', { replace: true });
+    } catch (e: any) {
+      setError(e?.message ?? 'Could not set that password.');
     } finally {
       setBusy(false);
     }
   };
 
   const switchMode = (m: 'login' | 'signup') => {
-    setMode(m); setError(''); setSignupSent(false); setSent(false);
+    setMode(m); setError(""); setSignupSent(false); setSignupCode(""); setResetStep("off");
   };
 
   const Header = ({ eyebrow, title, sub }: { eyebrow: string; title: string; sub: string }) => (
@@ -247,6 +304,53 @@ export function PartnerLogin() {
     );
   }
 
+  // The reset card replaces the login card rather than sitting under it:
+  // someone who asked for a code came to do exactly one thing, and a login
+  // form beside it is how they end up typing the password they have forgotten.
+  if (resetStep === 'code') {
+    return (
+      <div className="page fade-in login-lens auth-page">
+        <div className="topbar">
+          <Wordmark size={24} />
+          <span className="badge gold">Restaurant Portal</span>
+        </div>
+        <div className="center-fill auth-fill">
+          <Header
+            eyebrow="Password reset"
+            title="Check your email"
+            sub={`If that account exists, a 6-digit code is on its way to its email. Enter it here with your new password — it is the same account on the portal and in the app.`}
+          />
+          <div className="glass auth-card">
+            <label className="field-label" htmlFor="reset-code">6-digit code</label>
+            <input
+              id="reset-code" className="code-input code-otp" inputMode="numeric" autoComplete="one-time-code"
+              placeholder="••••••" maxLength={6} autoFocus value={resetCode}
+              onChange={(e) => setResetCode(e.target.value.replace(/\D/g, '').slice(0, 6))} />
+            <label className="field-label" htmlFor="reset-pw">New password</label>
+            <input
+              id="reset-pw" className="code-input" type="password" autoComplete="new-password"
+              placeholder="At least 8 characters" value={resetPw}
+              onChange={(e) => setResetPw(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && saveResetPassword()} />
+            {error && <p className="field-error">{error}</p>}
+            <button className={`btn btn-glass btn-block auth-primary${busy ? ' is-busy' : ''}`}
+              disabled={busy} onClick={saveResetPassword}>
+              Set password and log in
+            </button>
+            <div className="auth-providers" style={{ marginTop: 12 }}>
+              <button className="btn btn-link" disabled={busy || Date.now() < resetAgain} onClick={forgotPassword}>
+                {Date.now() < resetAgain ? 'Send another code in a moment' : 'Send another code'}
+              </button>
+              <button className="btn btn-link" onClick={() => { setResetStep('off'); setError(''); }}>
+                ‹ Back to log in
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="page fade-in login-lens auth-page">
       <div className="topbar">
@@ -276,11 +380,24 @@ export function PartnerLogin() {
             <div className="auth-sent">
               <div className="auth-sent-mark" aria-hidden>✉</div>
               <strong>Check your email</strong>
-              <p className="dim" style={{ fontSize: 13.5, marginTop: 6 }}>
-                We sent a confirmation link to <b>{email.trim()}</b>. Open it and you will land on the
-                next step — your restaurant details. Until the link is opened, the account cannot log in.
+              <p className="dim" style={{ fontSize: 13.5, margin: '6px 0 14px' }}>
+                We sent a 6-digit code to <b>{email.trim()}</b>. Type it here — or tap the link in the
+                same email. Until one of the two, the account cannot log in.
               </p>
-              <button className="btn btn-link" style={{ marginTop: 12 }} onClick={() => { setSignupSent(false); setError(''); }}>
+              <div style={{ textAlign: 'left' }}>
+                <label className="field-label" htmlFor="signup-code">6-digit code</label>
+                <input
+                  id="signup-code" className="code-input code-otp" inputMode="numeric" autoComplete="one-time-code"
+                  placeholder="••••••" maxLength={6} autoFocus value={signupCode}
+                  onChange={(e) => setSignupCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  onKeyDown={(e) => e.key === 'Enter' && confirmSignupCode()} />
+              </div>
+              {error && <p className="field-error">{error}</p>}
+              <button className={`btn btn-glass btn-block auth-primary${busy ? ' is-busy' : ''}`}
+                disabled={busy} onClick={confirmSignupCode}>
+                Confirm and continue
+              </button>
+              <button className="btn btn-link" style={{ marginTop: 8 }} onClick={() => { setSignupSent(false); setError(''); setSignupCode(''); }}>
                 Use a different email
               </button>
             </div>
@@ -333,13 +450,9 @@ export function PartnerLogin() {
               </button>
 
               {mode === 'login' && (
-                sent ? (
-                  <p className="dim auth-note">If that account exists, a reset link is on its way to its email.</p>
-                ) : (
-                  <button className="btn btn-link auth-forgot" disabled={busy} onClick={forgotPassword}>
-                    Forgot password?
-                  </button>
-                )
+                <button className="btn btn-link auth-forgot" disabled={busy} onClick={forgotPassword}>
+                  Forgot password?
+                </button>
               )}
 
               <div className="auth-divider"><span>or</span></div>

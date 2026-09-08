@@ -2051,3 +2051,11 @@ select.code-input:focus { border-color: var(--primary); }
   margin-top: 4px; padding-top: 6px; border-top: 1px solid var(--line-strong);
   color: var(--ink); font-weight: 700;
 }
+
+/* A six-digit code: monospaced-ish, spaced, and big enough to read back to
+   someone over a phone. Not six boxes -- one field keeps paste and the
+   browser's one-time-code autofill working. */
+.code-otp {
+  letter-spacing: 0.5em; text-align: center; font-size: 22px; font-weight: 700;
+  padding-left: 0.5em; /* the tracking pushes the last glyph right; balance it */
+}
