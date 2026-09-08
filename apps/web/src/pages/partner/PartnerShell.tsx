@@ -55,6 +55,7 @@ const NAV: { to: string; label: string; icon: string; primary?: boolean }[] = [
   // and a Settings menu whose contents include Settings is a path nobody reads
   // twice without pausing. Mirrors the app.
   { to: '/partner/settings', label: 'Restaurant profile', icon: '⚙️' },
+  { to: '/partner/account', label: 'Account & security', icon: '👤' },
 ];
 
 export function PartnerShell() {

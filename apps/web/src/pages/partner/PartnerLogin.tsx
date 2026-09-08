@@ -349,11 +349,26 @@ export function PartnerLogin() {
               belongs at the top; the email field is for anyone who would rather
               type an address than hand over an account. */}
           <div style={{ display: 'grid', gap: 8, marginTop: 10 }}>
+            {/* THE TRAP THIS COPY EXISTS TO STOP. Supabase merges a Google
+                sign-in into an existing account only when the email matches.
+                On LOG IN, an unlinked Google account with a different address
+                does not fail -- it quietly creates a brand-new, empty
+                restaurant and signs the owner into that. The one-line hint
+                under the button is what sends them to sign in with their
+                email first and link Google from Account, which attaches any
+                Google account to the restaurant they already have. On SIGN UP
+                the same button is exactly right, so the hint only shows on
+                log in. */}
             <button className={`btn btn-glass btn-block${busy ? ' is-busy' : ''}`} disabled={busy}
               onClick={signInWithGoogle}>
               <span aria-hidden style={{ marginRight: 8 }}>🇬</span>
               Continue with Google
             </button>
+            {mode === 'login' && (
+              <p className="dim" style={{ fontSize: 12, margin: '-2px 0 0', textAlign: 'center' }}>
+                Works once Google is linked to your account — link it from Account &amp; security.
+              </p>
+            )}
             {/* Drawn on iOS and the web, hidden on Android. Disabled until the
                 Apple Developer config exists -- pressing it says so rather than
                 failing with a provider error nobody can act on. */}

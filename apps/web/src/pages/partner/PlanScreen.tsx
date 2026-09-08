@@ -3,6 +3,7 @@
  *  Razorpay hosted Checkout (no card data in our code), payment history,
  *  cancel-at-cycle-end. */
 import React, { useEffect, useMemo, useState } from 'react';
+import { gstBreakdown } from '../../lib/gst';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { inr } from '../../lib/types';
@@ -226,9 +227,20 @@ export function PlanScreen() {
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
                 <h3 className="display" style={{ fontSize: 21 }}>{p.name}</h3>
                 <span style={{ textAlign: 'right' }}>
+                  {/* THE CHARGED FIGURE LEADS, the base explains it -- same as
+                      the app. An owner who sees ₹499 on the card and ₹589 on
+                      the mandate thinks they were overcharged; the mandate
+                      amount is the one that must be no surprise. Multi-month
+                      terms below keep their existing base arithmetic; the GST
+                      line applies to the monthly figure the mandate collects. */}
                   <span style={{ fontWeight: 700, color: 'var(--primary)' }}>
-                    {inr(perMonth)}<span className="dim" style={{ fontSize: 12 }}>/mo</span>
+                    {inr(gstBreakdown(perMonth).charge)}<span className="dim" style={{ fontSize: 12 }}>/mo</span>
                   </span>
+                  {perMonth > 0 && (
+                    <span className="dim" style={{ display: 'block', fontSize: 11.5 }}>
+                      {inr(perMonth)} + 18% GST
+                    </span>
+                  )}
                   {pd.months > 1 && p.price_inr > 0 && (
                     <span className="dim" style={{ display: 'block', fontSize: 11.5 }}>
                       {inr(term)} every {pd.months} months
