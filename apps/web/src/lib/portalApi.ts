@@ -1007,3 +1007,114 @@ export async function setOrdersAc(orderIds: string[], isAc: boolean): Promise<bo
   if (error.code === 'PGRST202') return false;
   throw error;
 }
+
+/* ── Chat: the restaurant's side of the diner conversations ────────────────
+ *
+ * One row per TABLE that has ever said something, newest activity first, with
+ * the last line and an unread count -- which is the shape an inbox needs and
+ * is also exactly what the Notifications badge counts.
+ *
+ * Fetched as one query and grouped here rather than as a query per table: a
+ * restaurant with thirty tables would otherwise open thirty round trips to
+ * draw one list.
+ */
+
+export interface ChatThread {
+  table_id: string;
+  table_label: string;
+  last_body: string;
+  last_at: string;
+  last_from: string;
+  unread: number;
+  guest_name: string | null;
+}
+
+export interface PortalMessage {
+  id: string;
+  from_role: string;
+  body: string;
+  created_at: string;
+  guest_name: string | null;
+  read_at: string | null;
+}
+
+export async function fetchChatThreads(restaurantId: string): Promise<ChatThread[]> {
+  const { data, error } = await supabase
+    .from('message')
+    .select('id, table_id, from_role, body, created_at, guest_name, read_at, dining_table(label)')
+    .eq('restaurant_id', restaurantId)
+    .not('table_id', 'is', null)
+    .order('created_at', { ascending: false })
+    .limit(500);
+  if (error) throw error;
+
+  const byTable = new Map<string, ChatThread>();
+  for (const row of (data ?? []) as any[]) {
+    const label = (Array.isArray(row.dining_table) ? row.dining_table[0] : row.dining_table)?.label ?? 'Table';
+    let th = byTable.get(row.table_id);
+    if (!th) {
+      // Rows arrive newest-first, so the first one seen for a table IS its last
+      // message. Nothing later should overwrite that.
+      th = {
+        table_id: row.table_id, table_label: label,
+        last_body: row.body, last_at: row.created_at, last_from: row.from_role,
+        unread: 0, guest_name: row.guest_name ?? null,
+      };
+      byTable.set(row.table_id, th);
+    }
+    if (row.from_role === 'diner' && !row.read_at) th.unread += 1;
+  }
+  return [...byTable.values()];
+}
+
+export async function fetchThreadMessages(tableId: string): Promise<PortalMessage[]> {
+  const { data, error } = await supabase
+    .from('message')
+    .select('id, from_role, body, created_at, guest_name, read_at')
+    .eq('table_id', tableId)
+    .order('created_at', { ascending: true })
+    .limit(300);
+  if (error) throw error;
+  return (data ?? []) as PortalMessage[];
+}
+
+export async function sendRestaurantMessage(restaurantId: string, tableId: string, body: string) {
+  const text = body.trim();
+  if (!text) return;
+  const { error } = await supabase.from('message').insert({
+    restaurant_id: restaurantId,
+    table_id: tableId,
+    from_role: 'restaurant',
+    body: text.slice(0, 500),
+  });
+  if (error) throw error;
+}
+
+/** Definer function: it checks is_staff_of itself, so a table id alone is not
+ *  enough to clear someone else's unread count. */
+export async function markThreadRead(tableId: string) {
+  await supabase.rpc('mark_thread_read', { p_table_id: tableId });
+}
+
+/**
+ * Every diner message for this restaurant, live.
+ *
+ * ONE CHANNEL FOR THE WHOLE RESTAURANT rather than one per open thread: the
+ * inbox, the badge and the open conversation all want the same event, and
+ * three subscriptions to the same rows is three times the socket traffic and
+ * three places for a reconnect to go wrong.
+ */
+export function subscribeRestaurantMessages(
+  restaurantId: string,
+  onMessage: (m: PortalMessage & { table_id: string }) => void,
+): () => void {
+  const channel = supabase
+    .channel(`chat-portal:${restaurantId}`)
+    .on(
+      'postgres_changes',
+      { event: 'INSERT', schema: 'public', table: 'message', filter: `restaurant_id=eq.${restaurantId}` },
+      (payload) => onMessage(payload.new as PortalMessage & { table_id: string }),
+    )
+    .subscribe();
+  return () => { supabase.removeChannel(channel); };
+}

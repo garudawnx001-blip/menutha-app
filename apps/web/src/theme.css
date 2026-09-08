@@ -1798,3 +1798,77 @@ select.code-input:focus { border-color: var(--primary); }
   font-size: 12px; color: var(--text-muted);
   margin-top: 5px; line-height: 1.3;
 }
+
+/* ── Diner ↔ restaurant chat (in the service sheet) ──────────────────────────
+   Sized to the sheet rather than the page: the log scrolls inside a fixed band
+   so the composer never leaves the screen and the sheet never grows past what
+   a phone can show with a keyboard up. */
+.chat-wrap { display: flex; flex-direction: column; gap: 10px; }
+.chat-log {
+  max-height: 46vh;
+  min-height: 120px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 4px 2px;
+}
+.chat-row { display: flex; }
+.chat-row.mine { justify-content: flex-end; }
+.chat-bubble {
+  max-width: 78%;
+  padding: 8px 12px;
+  border-radius: 14px;
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  font-size: 14px;
+  line-height: 1.45;
+  /* A long unbroken string -- a URL, a phone number -- must wrap rather than
+     stretch the bubble past the sheet. */
+  overflow-wrap: anywhere;
+}
+.chat-bubble.mine {
+  background: color-mix(in srgb, var(--primary) 12%, var(--surface));
+  border-color: color-mix(in srgb, var(--primary) 34%, var(--line-strong));
+}
+.chat-time {
+  display: block;
+  margin-top: 3px;
+  font-size: 10.5px;
+  color: var(--text-muted);
+}
+.chat-compose { display: flex; gap: 8px; align-items: center; }
+.chat-compose .code-input { flex: 1; min-width: 0; }
+
+/* ── Chat thread list (portal) ─────────────────────────────────────────────── */
+.thread-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  text-align: left;
+  padding: 13px 15px;
+  cursor: pointer;
+}
+.thread-head { display: flex; align-items: center; gap: 8px; }
+.thread-badge {
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--primary);
+  color: #fffdf8;
+  font-size: 11.5px;
+  font-weight: 800;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+/* One line, ellipsised. A thread row previews the conversation; it is not the
+   conversation, and a long message must not make every row a different height. */
+.thread-last {
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

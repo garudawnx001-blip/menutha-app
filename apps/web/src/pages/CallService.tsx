@@ -19,6 +19,7 @@ import React, { useState } from 'react';
 import { requestService, SERVICE_OPTIONS, type ServiceKind } from '../lib/api';
 import type { Session } from '../lib/types';
 import { useT } from '../lib/i18n';
+import { TableChat } from './TableChat';
 
 /**
  * Whether this session can ask for anything at all.
@@ -44,6 +45,9 @@ export function CallService({ session, open, onClose }: {
 }) {
   const [busy, setBusy] = useState<ServiceKind | null>(null);
   const [said, setSaid] = useState<string>('');
+  /** Which half of the sheet is showing. Asks first: it is the faster path and
+   *  the one most people want. */
+  const [pane, setPane] = useState<'ask' | 'chat'>('ask');
   const t = useT();
 
   if (!canCallService(session)) return null;
@@ -89,8 +93,30 @@ export function CallService({ session, open, onClose }: {
         >
           <div className="sheet" onClick={(e) => e.stopPropagation()}>
             <div className="sheet-grabber" />
-            <p className="overline" style={{ marginBottom: 8 }}>{t('svc.title')}</p>
 
+            {/* TWO TABS, ONE SHEET. "Call for service should also have a chat
+                option." From the diner's side asking for water and asking a
+                question are the same intention -- get the restaurant's
+                attention -- so they belong behind one control. A second
+                floating chip beside the one that just replaced the last
+                floating chip would undo what he asked for. */}
+            <div className="chip-row" style={{ paddingBottom: 8 }}>
+              <button
+                className={pane === 'ask' ? 'chip active' : 'chip'}
+                onClick={() => setPane('ask')}
+              >
+                {t('svc.title')}
+              </button>
+              <button
+                className={pane === 'chat' ? 'chip active' : 'chip'}
+                onClick={() => setPane('chat')}
+              >
+                💬 {t('chat.tab')}
+              </button>
+            </div>
+
+            {pane === 'chat' ? <TableChat session={session} /> : (
+            <>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
               {SERVICE_OPTIONS.map((o) => (
                 <button
@@ -109,6 +135,8 @@ export function CallService({ session, open, onClose }: {
               <p className="dim" style={{ fontSize: 13.5, marginTop: 12 }} role="status">
                 {said}
               </p>
+            )}
+            </>
             )}
 
             <button className="chip" style={{ marginTop: 14 }} onClick={() => setOpen(false)}>

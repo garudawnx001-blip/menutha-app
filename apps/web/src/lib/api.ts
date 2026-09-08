@@ -619,3 +619,78 @@ export async function createReservation(args: {
   // 60-day window and the date, and its message is more useful than ours.
   throw error;
 }
+
+/* ── Diner ↔ restaurant chat ───────────────────────────────────────────────
+ *
+ * The canned service requests answer "bring me X". This answers everything
+ * else, which turns out to be most of what a diner actually wants to say: is
+ * the biryani spicy, can you make it Jain, we are four not two, where is table
+ * six. The service sheet could never carry those and a diner who cannot ask
+ * gets up and finds someone.
+ *
+ * WRITES AS THE ANONYMOUS DINER, straight onto `message`. The RLS added by
+ * 2026-09-08_diner_chat scopes anon to rows that HAVE a table_id -- so a diner
+ * can read and write their own table's conversation and can never see the
+ * restaurant's internal stream. Knowing the table's UUID is the credential,
+ * exactly as it already is for the bill and for service requests: they got it
+ * by pointing a camera at the code printed on that table.
+ */
+
+export interface ChatMessage {
+  id: string;
+  from_role: 'diner' | 'restaurant' | 'manager' | 'kitchen';
+  body: string;
+  created_at: string;
+  guest_name?: string | null;
+}
+
+/** This table's conversation, oldest first -- the order it is read in. */
+export async function fetchTableMessages(session: Session): Promise<ChatMessage[]> {
+  if (session.demo || !session.table?.id) return [];
+  const { data, error } = await supabase
+    .from('message')
+    .select('id, from_role, body, created_at, guest_name')
+    .eq('table_id', session.table.id)
+    .order('created_at', { ascending: true })
+    .limit(200);
+  if (error) throw error;
+  return (data ?? []) as ChatMessage[];
+}
+
+export async function sendTableMessage(session: Session, body: string): Promise<void> {
+  const text = body.trim();
+  if (!text || session.demo || !session.table?.id) return;
+  const { error } = await supabase.from('message').insert({
+    restaurant_id: session.restaurant.id,
+    table_id: session.table.id,
+    from_role: 'diner',
+    body: text.slice(0, 500),
+    guest_name: session.guest?.name ?? null,
+    guest_phone: session.guest?.phone ?? null,
+  });
+  if (error) throw error;
+}
+
+/**
+ * LIVE, both ways. "When a customer texts it must appear immediately in the
+ * owner's app AND web" -- and the same is true in reverse, which is the half
+ * that makes it a conversation rather than a form.
+ *
+ * Filtered on table_id server-side rather than in the callback: a diner should
+ * not be shipped every other table's messages and then discard them.
+ */
+export function subscribeTableMessages(
+  session: Session,
+  onMessage: (m: ChatMessage) => void,
+): () => void {
+  if (session.demo || !session.table?.id) return () => {};
+  const channel = supabase
+    .channel(`chat:${session.table.id}`)
+    .on(
+      'postgres_changes',
+      { event: 'INSERT', schema: 'public', table: 'message', filter: `table_id=eq.${session.table.id}` },
+      (payload) => onMessage(payload.new as ChatMessage),
+    )
+    .subscribe();
+  return () => { supabase.removeChannel(channel); };
+}

@@ -44,6 +44,7 @@ const NAV: { to: string; label: string; icon: string; primary?: boolean }[] = [
   { to: '/partner/menu', label: 'Menu', icon: '🍛', primary: true },
   { to: '/partner/tables', label: 'Tables & QR', icon: '🪑', primary: true },
   { to: '/partner/billing', label: 'Billing', icon: '💳', primary: true },
+  { to: '/partner/chat', label: 'Chat', icon: '💬', primary: true },
   { to: '/partner/reports', label: 'Reports', icon: '📈' },
   { to: '/partner/reservations', label: 'Reservations', icon: '📅' },
   { to: '/partner/buffets', label: 'Buffets', icon: '🍽' },
@@ -72,7 +73,7 @@ export function PartnerShell() {
       if (!m) {
         const { data } = await supabase.auth.getSession();
         if (!data.session) { nav('/partner', { replace: true }); return; }
-        setError('This account is not linked to a restaurant yet. Ask the owner to invite your phone number, then sign in again.');
+        setError('This account is not linked to a restaurant yet. Register your restaurant below to get started.');
       }
       setMember(m);
     } catch (e: any) {
