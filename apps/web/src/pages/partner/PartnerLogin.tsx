@@ -1,6 +1,7 @@
-/** Restaurant Portal sign-in: a one-time code by EMAIL, or Google. Apple is
- *  drawn where it is expected and disabled until its provider is configured.
- *  Phone/SMS is gone -- see lib/authProviders for the whole model. */
+/** Restaurant Portal sign-in: email + password, or Google -- two doors to one
+ *  account, because sign-up links a Google identity to every user it creates.
+ *  Apple is drawn where it is expected and disabled until its provider is
+ *  configured. Phone/SMS is gone -- see lib/authProviders for the model. */
 import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
@@ -27,25 +28,20 @@ export function PartnerLogin() {
     params.get('mode') === 'signup' ? 'signup' : 'login',
   );
   /**
-   * `code` is the new default and the intended path: a one-time code sent to
-   * an EMAIL address. `password` is the fallback.
-   *
-   * THE FALLBACK IS DELIBERATE AND I HAVE FLAGGED IT. The model he asked for
-   * is email code + Google, and that is what this page leads with. But the one
-   * live account signs in with an email and a password today, and an emailed
-   * code depends on a mail sender being configured on the Supabase project --
-   * if that delivery is not working, removing the password field outright
-   * locks the owner out of his own restaurant with no way back in. So the
-   * password path stays, one link down, until he confirms a code actually
-   * arrives. Nothing about it is on screen at rest.
+   * THE MODEL, as he settled it. Email + password is the account -- standard
+   * Supabase sign-up with email confirmation and a reset link. "Continue with
+   * Google" is the other door to the SAME account, because sign-up links a
+   * Google identity to every user it creates (see Register). There is no
+   * one-time-code login: it was built, and he chose a password instead.
    */
-  const [tab, setTab] = useState<'code' | 'password'>('code');
-  const [otp, setOtp] = useState('');
-  const [otpSent, setOtpSent] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  /** Sign-up succeeded but the project requires the email to be confirmed
+   *  first. Its own flag, not the reset-link one: reusing `sent` would show
+   *  "a reset link is on its way" to someone who just created an account. */
+  const [signupSent, setSignupSent] = useState(false);
 
   /**
    * AND THEN THE RESET LINK HAD TO LAND SOMEWHERE.
@@ -98,50 +94,6 @@ export function PartnerLogin() {
       return;
     }
     setDone(true);
-  };
-
-  /**
-   * A ONE-TIME CODE TO AN EMAIL ADDRESS. This replaces the SMS OTP entirely.
-   *
-   * `shouldCreateUser` follows the mode, and that distinction matters on this
-   * page: on Log in, a typo in the address must NOT quietly mint a brand-new
-   * empty account and drop the owner into an empty restaurant -- it must say
-   * the address is unknown. On Sign up it is exactly what we want.
-   */
-  const sendCode = async () => {
-    const em = email.trim();
-    if (!/^\S+@\S+\.\S+$/.test(em)) { setError('Enter your email address.'); return; }
-    setBusy(true); setError('');
-    const { error: err } = await supabase.auth.signInWithOtp({
-      email: em,
-      options: {
-        shouldCreateUser: mode === 'signup',
-        emailRedirectTo: `${window.location.origin}/partner/orders`,
-      },
-    });
-    setBusy(false);
-    if (err) {
-      setError(/not found|signups not allowed|user not found/i.test(err.message)
-        ? 'No account with that email. Choose Sign up to create one.'
-        : err.message);
-      return;
-    }
-    setOtpSent(true);
-  };
-
-  const verifyCode = async () => {
-    setBusy(true); setError('');
-    // `type: 'email'` -- the same code the magic link carries, entered by hand
-    // for anyone reading their mail on a different device from the one they
-    // are signing in on, which on a restaurant counter is most of the time.
-    const { error: err } = await supabase.auth.verifyOtp({
-      email: email.trim(), token: otp.trim(), type: 'email',
-    });
-    setBusy(false);
-    if (err) { setError('That code didn’t match — check your email and try again.'); return; }
-    // Brand-new owners go straight to registering their restaurant; returning
-    // accounts land on the live board.
-    nav(mode === 'signup' ? '/partner/register' : '/partner/orders', { replace: true });
   };
 
   /**
@@ -221,7 +173,14 @@ export function PartnerLogin() {
     // stricter of the two, which is also the one already shipping.
     if (pw.length < 8) { setError('Choose a password of at least 8 characters.'); return; }
     setBusy(true); setError('');
-    const { data, error: err } = await supabase.auth.signUp({ email: em, password: pw });
+    /* emailRedirectTo: the confirmation link lands on Register, where the
+       next two steps live -- Connect Google, then the restaurant -- rather
+       than back on this form to log in a second time. Supabase reads the
+       session out of the URL on that page. */
+    const { data, error: err } = await supabase.auth.signUp({
+      email: em, password: pw,
+      options: { emailRedirectTo: `${window.location.origin}/partner/register` },
+    });
     setBusy(false);
     if (err) {
       setError(/already registered|already been registered/i.test(err.message)
@@ -230,8 +189,10 @@ export function PartnerLogin() {
       return;
     }
     if (!data.session) {
-      setMode('login');
-      setError('Account created. Confirm the email we just sent, then log in here.');
+      // "Confirm email" is on for the project: the account exists but cannot
+      // do anything until the link is opened. Say exactly that, and stay on
+      // Sign up so the form does not look like it rejected them.
+      setSignupSent(true);
       return;
     }
     nav('/partner/register', { replace: true });
@@ -322,7 +283,7 @@ export function PartnerLogin() {
         </h1>
         <p className="muted" style={{ maxWidth: 440, fontSize: 14.5 }}>
           {mode === 'signup'
-            ? 'Create your account with an email and a password, then register your restaurant — QR ordering, live kitchen board and billing. 10-day free trial, no card, zero commission.'
+            ? 'Create your account with an email and a password, then register your restaurant — QR ordering, live kitchen board and billing. 30-day free trial, no card, zero commission.'
             : 'Live orders, menu, billing, QR codes and your plan — from any phone or computer. Zero commission: diners always pay you directly.'}
         </p>
 
@@ -331,18 +292,32 @@ export function PartnerLogin() {
           <div className="seg" role="tablist" aria-label="Log in or sign up" style={{ marginBottom: 14 }}>
             <button role="tab" aria-selected={mode === 'login'}
               className={mode === 'login' ? 'seg-btn active' : 'seg-btn'}
-              onClick={() => { setMode('login'); setError(''); setOtpSent(false); }}>Log in</button>
-            {/* 'code', not the old 'email': signing up starts on the emailed
-                code, which is the path a brand-new owner should be on. A
-                comment cannot live between a tag's attributes -- it parses as
-                an expression there, not a comment -- so it sits above. */}
+              onClick={() => { setMode('login'); setError(''); setSignupSent(false); }}>Log in</button>
             <button role="tab" aria-selected={mode === 'signup'}
               className={mode === 'signup' ? 'seg-btn active' : 'seg-btn'}
-              onClick={() => { setMode('signup'); setTab('code'); setError(''); setOtpSent(false); }}>Sign up</button>
+              onClick={() => { setMode('signup'); setError(''); setSignupSent(false); }}>Sign up</button>
           </div>
 
           {mode === 'signup' && (
             <p className="overline" style={{ marginBottom: 2, color: 'var(--primary)' }}>Create your account</p>
+          )}
+          {/* THE ACCOUNT EXISTS, THE EMAIL IS NOT YET CONFIRMED. Shown in place
+              of the form rather than as an error under it: nothing went wrong,
+              and a red line saying "account created" is a contradiction the
+              reader has to resolve. The link in the mail lands on Register,
+              where Connect Google and the restaurant details are the next two
+              steps. */}
+          {mode === 'signup' && signupSent && (
+            <div className="glass" style={{ padding: 16, marginTop: 10 }}>
+              <strong>Check your email</strong>
+              <p className="dim" style={{ fontSize: 13.5, marginTop: 6 }}>
+                We sent a confirmation link to <b>{email.trim()}</b>. Open it and you will land on the
+                next step — connecting Google, then your restaurant details. It takes under a minute.
+              </p>
+              <button className="chip" style={{ marginTop: 10 }} onClick={() => { setSignupSent(false); setError(''); }}>
+                ← Use a different email
+              </button>
+            </div>
           )}
 
           {/* THE PROVIDERS, ABOVE THE FORM. One tap is the shortest path in and
@@ -366,7 +341,7 @@ export function PartnerLogin() {
             </button>
             {mode === 'login' && (
               <p className="dim" style={{ fontSize: 12, margin: '-2px 0 0', textAlign: 'center' }}>
-                Works once Google is linked to your account — link it from Account &amp; security.
+                Every account connects Google at sign-up, so this opens yours. Signed up before that? Link it from Account &amp; security.
               </p>
             )}
             {/* Drawn on iOS and the web, hidden on Android. Disabled until the
@@ -389,39 +364,15 @@ export function PartnerLogin() {
             )}
           </div>
 
+          {/* The providers, the divider and the form all step aside while the
+              confirmation panel is up -- a form under "check your email" reads
+              as "and also fill this in again". */}
+          {!(mode === 'signup' && signupSent) && (<>
           <p className="overline" style={{ textAlign: 'center', margin: '14px 0 4px', opacity: 0.7 }}>
             or use your email
           </p>
 
-          {tab === 'code' ? (
-            !otpSent ? (
-              <>
-                <p className="overline" style={{ margin: '8px 0 6px' }}>Email</p>
-                <input className="code-input" type="email" autoComplete="email"
-                  placeholder="you@restaurant.com" value={email}
-                  onChange={(e) => setEmail(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && sendCode()} />
-                {error && <p style={{ color: 'var(--error)', fontSize: 13.5, marginTop: 10 }}>{error}</p>}
-                <button className={`btn btn-glass btn-block${busy ? ' is-busy' : ''}`} style={{ marginTop: 14 }} disabled={busy} onClick={sendCode}>
-                  {mode === 'signup' ? 'Email me a code to sign up' : 'Email me a code'}
-                </button>
-                <button className="chip" style={{ marginTop: 10 }}
-                  onClick={() => { setTab('password'); setError(''); }}>
-                  Use a password instead
-                </button>
-              </>
-            ) : (
-              <>
-                <p className="overline" style={{ margin: '8px 0 6px' }}>Enter the code sent to {email.trim()}</p>
-                <input className="code-input" inputMode="numeric" autoFocus placeholder="••••••" value={otp}
-                  onChange={(e) => setOtp(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && verifyCode()} />
-                {error && <p style={{ color: 'var(--error)', fontSize: 13.5, marginTop: 10 }}>{error}</p>}
-                <button className={`btn btn-glass btn-block${busy ? ' is-busy' : ''}`} style={{ marginTop: 14 }} disabled={busy || otp.trim().length < 4} onClick={verifyCode}>
-                  {mode === 'signup' ? 'Verify & create account' : 'Verify & sign in'}
-                </button>
-                <button className="chip" style={{ marginTop: 10 }} onClick={() => { setOtpSent(false); setOtp(''); }}>← Change email</button>
-              </>
-            )
-          ) : (
+          {(
             <>
               <p className="overline" style={{ margin: '8px 0 6px' }}>Email</p>
               <input className="code-input" type="email" autoComplete="email" placeholder="you@restaurant.com"
@@ -454,20 +405,15 @@ export function PartnerLogin() {
                   </button>
                 )
               )}
-              {/* Back to the intended path. The password form is a fallback and
-                  should never be a room with no door out of it. */}
-              <button className="chip" style={{ marginTop: 10, width: '100%' }}
-                onClick={() => { setTab('code'); setError(''); }}>
-                ← Email me a code instead
-              </button>
             </>
           )}
+          </>)}
         </div>
 
         <p className="dim" style={{ fontSize: 12.5, maxWidth: 400 }}>
           {mode === 'signup'
             ? 'Already have an account? Tap “Log in” above.'
-            : 'New restaurant? Tap “Sign up” above to create your account and register — 10-day free trial, full Growth features.'}
+            : 'New restaurant? Tap “Sign up” above to create your account and register — 30-day free trial, full Growth features.'}
         </p>
       </div>
     </div>

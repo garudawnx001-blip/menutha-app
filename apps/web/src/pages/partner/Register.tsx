@@ -1,16 +1,70 @@
-/** First-restaurant registration for a signed-in account with no membership.
- *  Atomic server-side bootstrap: owner role, restaurant, membership, Parcel
- *  table, 10-day full-Growth trial. */
-import React, { useState } from 'react';
+/** The two steps after the account exists: connect Google (required), then
+ *  register the restaurant. The confirmation email lands here, and so does the
+ *  Google link on its way back. Atomic server-side bootstrap for the second
+ *  step: owner role, restaurant, membership, Parcel table, 30-day full-Growth
+ *  trial -- the trial starts the moment the restaurant is created. */
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { Wordmark } from '../../components';
+import { providerError } from '../../lib/authProviders';
 
 export function Register() {
   const nav = useNavigate();
   const [form, setForm] = useState({ owner: '', name: '', city: '', address: '', gstin: '' });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+
+  /**
+   * STEP 1 OF 2 ON THIS PAGE: CONNECT GOOGLE, required.
+   *
+   * Every account has Google attached from day one, so "Continue with Google"
+   * on the login page -- portal or phone -- always lands in this restaurant
+   * rather than minting a second, empty one. ANY Google account: the address
+   * does not have to match the sign-up email, because most owners' Google is
+   * personal and their business email is not. Nothing is adopted silently; a
+   * gmail typed at sign-up is just an address until this step connects an
+   * actual Google identity.
+   *
+   * linkIdentity runs in the browser and comes back to THIS page, so the
+   * identities are re-read on load and on every auth event -- the gate opens
+   * by itself the moment the link lands. `checking` keeps the form from
+   * flashing before the first read answers.
+   */
+  const [googleLinked, setGoogleLinked] = useState(false);
+  const [googleEmail, setGoogleEmail] = useState<string | null>(null);
+  const [checking, setChecking] = useState(true);
+  const [linking, setLinking] = useState(false);
+
+  const readIdentities = async () => {
+    const { data } = await supabase.auth.getUser();
+    const g = (data.user?.identities ?? []).find((i) => i.provider === 'google');
+    setGoogleLinked(!!g);
+    setGoogleEmail((g?.identity_data as any)?.email ?? null);
+    setChecking(false);
+  };
+
+  useEffect(() => {
+    readIdentities();
+    const { data: sub } = supabase.auth.onAuthStateChange(() => { readIdentities(); });
+    return () => sub.subscription.unsubscribe();
+  }, []);
+
+  const connectGoogle = async () => {
+    setLinking(true); setError('');
+    const { error: err } = await supabase.auth.linkIdentity({
+      provider: 'google',
+      options: { redirectTo: `${window.location.origin}/partner/register` },
+    });
+    // Success navigates away; only a failure comes back here. The likeliest
+    // failure is a project toggle, not this code, and the message says so.
+    if (err) {
+      setLinking(false);
+      setError(/manual linking|not enabled|disabled/i.test(err.message)
+        ? 'Google linking is switched off on the server (Supabase → Authentication → Settings → Allow manual linking).'
+        : providerError(err, 'Google'));
+    }
+  };
 
   const submit = async () => {
     if (!form.owner.trim() || !form.name.trim()) { setError('Your name and the restaurant name are required.'); return; }
@@ -35,12 +89,39 @@ export function Register() {
     <div className="page fade-in" style={{ display: 'flex', flexDirection: 'column', minHeight: '100dvh' }}>
       <div className="topbar">
         <Wordmark size={24} />
-        <span className="badge gold">10-day free trial</span>
+        <span className="badge gold">30-day free trial</span>
       </div>
       <div className="center-fill" style={{ gap: 14 }}>
-        <p className="overline">Almost there</p>
-        <h1 className="display" style={{ fontSize: 'clamp(26px, 5vw, 34px)' }}>Register your restaurant</h1>
+        <p className="overline">{googleLinked ? 'Step 2 of 2' : 'Step 1 of 2'}</p>
+        <h1 className="display" style={{ fontSize: 'clamp(26px, 5vw, 34px)' }}>
+          {googleLinked ? 'Register your restaurant' : 'Connect Google'}
+        </h1>
+
+        {checking ? null : !googleLinked ? (
+          /* THE GATE. The restaurant form is not drawn until a Google identity
+             is on the account -- required, by decision, so that every account
+             can be opened with one tap on either surface. Any Google account. */
+          <div className="glass" style={{ width: '100%', maxWidth: 460, padding: 20, textAlign: 'left' }}>
+            <p className="dim" style={{ fontSize: 14, margin: '0 0 14px' }}>
+              So you can also sign in with one tap. Use <b>any</b> Google account — it does not have to
+              match the email you signed up with.
+            </p>
+            {error && <p style={{ color: 'var(--error)', fontSize: 13.5, marginBottom: 10 }}>{error}</p>}
+            <button className={`btn btn-glass btn-block${linking ? ' is-busy' : ''}`} disabled={linking} onClick={connectGoogle}>
+              <span aria-hidden style={{ marginRight: 8 }}>🇬</span>
+              Connect Google
+            </button>
+            <p className="dim" style={{ fontSize: 12, marginTop: 10 }}>
+              Google opens in this tab and brings you straight back here. Nothing is posted anywhere.
+            </p>
+          </div>
+        ) : (
         <div className="glass" style={{ width: '100%', maxWidth: 460, padding: 20, textAlign: 'left' }}>
+          {googleEmail && (
+            <p className="dim" style={{ fontSize: 12.5, margin: '0 0 12px' }}>
+              ✓ Google connected · {googleEmail}
+            </p>
+          )}
           <p className="overline" style={{ marginBottom: 6 }}>Your name</p>
           <input className="code-input" value={form.owner} onChange={(e) => setForm({ ...form, owner: e.target.value })} />
           <p className="overline" style={{ margin: '12px 0 6px' }}>Restaurant name</p>
@@ -62,9 +143,10 @@ export function Register() {
             {'Start free trial'}
           </button>
           <p className="dim" style={{ fontSize: 12, marginTop: 10 }}>
-            Full Growth features for 10 days · no card needed · zero commission always.
+            Full Growth features for 30 days · no card needed · zero commission always.
           </p>
         </div>
+        )}
       </div>
     </div>
   );
