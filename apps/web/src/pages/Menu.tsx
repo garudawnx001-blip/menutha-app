@@ -6,7 +6,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   fetchMenu, subscribeMenu, placeOrder,
-  fetchMyOpenOrders, updateMyOrderItem, fetchTableBill, type OpenOrder,
+  fetchMyOpenOrders, updateMyOrderItem, fetchTableBill, fetchDinerBuffets, type OpenOrder,
 } from '../lib/api';
 import type { CartLine, MenuItem } from '../lib/types';
 import { inr } from '../lib/types';
@@ -15,7 +15,7 @@ import { IdentityGate, ItemSheet, LanguagePicker, Spinner, Stepper, VegMark, Wor
 import { useT, useLang, translateCategory, translateTableLabel } from '../lib/i18n';
 import { dishName } from '../lib/translit';
 import { TableSoFar } from './TableSoFar';
-import { CallService } from './CallService';
+import { CallService, canCallService } from './CallService';
 
 export function Menu() {
   const nav = useNavigate();
@@ -37,6 +37,26 @@ export function Menu() {
   }, [query, diet, activeCat]);
   const [open, setOpen] = useState<MenuItem | null>(null);
   const [toast, setToast] = useState('');
+  /** The service sheet, opened from the chip in the filter row below. */
+  const [svcOpen, setSvcOpen] = useState(false);
+  /**
+   * Whether this restaurant has a buffet on today.
+   *
+   * ASKED, rather than assumed, because the chip must not be a dead end -- his
+   * standing rule, and the reason the door page's buffet card used to carry a
+   * count. A Buffet chip that opens a page saying "there is no buffet on today"
+   * is a button that goes nowhere. Null until the answer arrives, so the chip
+   * appears when it is real rather than flickering in and out.
+   */
+  const [hasBuffet, setHasBuffet] = useState(false);
+  useEffect(() => {
+    if (!session || session.demo) return;
+    let alive = true;
+    fetchDinerBuffets(session.restaurant.id)
+      .then((b) => { if (alive) setHasBuffet(b.length > 0); })
+      .catch(() => { /* no chip rather than a broken one */ });
+    return () => { alive = false; };
+  }, [session?.restaurant.id]);
 
   // ── Ordering without a cart ───────────────────────────────────────────────
   // Each dish is ordered on its own the moment it is tapped, so nothing is left
@@ -340,6 +360,31 @@ export function Menu() {
           >
             <span className="veg-mark nonveg" /> {t('menu.nonveg')}
           </button>
+
+          {/* BUFFET AND SERVICE, WHERE HE MARKED THEM. He drew both labels into
+              this row and crossed out the floating "Call for service" chip that
+              used to sit below the table summary on a line of its own.
+
+              They are deliberately NOT diet filters, and they are separated by
+              a spacer rather than styled to look like one: the three chips to
+              the left change what the list below shows, these two leave the
+              menu. Same row because that is where a diner's eye already is;
+              different half of it because they do different things. */}
+          {(hasBuffet || canCallService(session)) && <span className="chip-gap" aria-hidden />}
+          {hasBuffet && (
+            <button className="chip chip-go" onClick={() => nav('/buffet')}>
+              🍽 {t('start.buffet')}
+            </button>
+          )}
+          {canCallService(session) && (
+            <button
+              className="chip chip-go"
+              onClick={() => setSvcOpen(true)}
+              aria-haspopup="dialog"
+            >
+              🙋 {t('svc.open')}
+            </button>
+          )}
         </div>
         <div className="chip-row" role="tablist">
           {['All', ...cats].map((c) => (
@@ -362,11 +407,10 @@ export function Menu() {
       {/* What the table has already ordered — on the menu itself, because
           leaving to the bill screen to check is what caused double-ordering. */}
       {!session.demo && <TableSoFar session={session} />}
-      {/* Beside the table summary: both are "things about this table" rather
-          than things on the menu, so they belong together. */}
-      <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '6px 0' }}>
-        <CallService session={session} />
-      </div>
+      {/* The SHEET only. Its chip is up in the filter row now, so nothing is
+          drawn here at rest -- which is what removed the odd right-aligned
+          strip that used to sit under the table summary. */}
+      <CallService session={session} open={svcOpen} onClose={() => setSvcOpen(false)} />
 
       {items === null && !failed && <Spinner label={t('menu.loading')} />}
       {failed && (

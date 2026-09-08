@@ -732,6 +732,30 @@ input.code-input::placeholder { color: var(--text-dim); }
    dish cards while the category row above it lined up correctly. */
 .diet-row { margin-block: 2px; }
 .diet-chip { padding: 9px 16px; }
+
+/* ── Buffet and Call for service, in the filter row ──────────────────────────
+   He drew both labels into this row and crossed out the floating service chip
+   that used to sit on its own line below the table summary.
+
+   They need to READ as different from the three chips to their left, because
+   they are: Veg / Non-veg change what the list shows and stay pressed; these
+   two leave the menu and never hold a state. So they get a gap in front of
+   them and the accent ink, and they deliberately do NOT get the .active
+   treatment — a chip that looks selected but cannot be is the kind of small
+   lie that makes a row feel arbitrary. */
+.chip-gap {
+  flex: 0 0 auto;
+  width: 1px;
+  align-self: center;
+  height: 22px;
+  margin-inline: 2px;
+  background: var(--line-strong);
+  opacity: 0.5;
+}
+.chip-go {
+  color: var(--primary);
+  border-color: color-mix(in srgb, var(--primary) 38%, var(--line-strong));
+}
 .diet-chip.diet-all.active { background: var(--saffron) !important; border-color: var(--saffron) !important; color: #fffdf8 !important; }
 .diet-chip.diet-veg.active { background: rgba(31,138,84,0.14) !important; border-color: var(--veg) !important; color: #14663d !important; box-shadow: 0 4px 12px rgba(31,138,84,0.18); }
 .diet-chip.diet-nonveg.active { background: rgba(192,69,59,0.12) !important; border-color: var(--nonveg) !important; color: #9b2c24 !important; box-shadow: 0 4px 12px rgba(192,69,59,0.16); }

@@ -1,9 +1,13 @@
-/** Restaurant Portal sign-in: phone OTP (owners & invited staff) or
- *  email + password (existing Menuva staff credentials). */
+/** Restaurant Portal sign-in: a one-time code by EMAIL, or Google. Apple is
+ *  drawn where it is expected and disabled until its provider is configured.
+ *  Phone/SMS is gone -- see lib/authProviders for the whole model. */
 import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { Wordmark } from '../../components';
+import {
+  showAppleButton, APPLE_COMING_SOON, APPLE_PENDING_MESSAGE, providerError,
+} from '../../lib/authProviders';
 
 export function PartnerLogin() {
   const nav = useNavigate();
@@ -22,13 +26,20 @@ export function PartnerLogin() {
   const [mode, setMode] = useState<'login' | 'signup'>(
     params.get('mode') === 'signup' ? 'signup' : 'login',
   );
-  // Email, not OTP. Phone OTP is still a UI stub — SMS is not configured, and
-  // the send fails with "SMS login is not configured yet". Defaulting the
-  // portal to it stranded the one real user, who signs in with email and
-  // password, on a form that cannot work. Both surfaces default to email until
-  // OTP is wired, and then both flip together.
-  const [tab, setTab] = useState<'otp' | 'email'>('email');
-  const [phone, setPhone] = useState('');
+  /**
+   * `code` is the new default and the intended path: a one-time code sent to
+   * an EMAIL address. `password` is the fallback.
+   *
+   * THE FALLBACK IS DELIBERATE AND I HAVE FLAGGED IT. The model he asked for
+   * is email code + Google, and that is what this page leads with. But the one
+   * live account signs in with an email and a password today, and an emailed
+   * code depends on a mail sender being configured on the Supabase project --
+   * if that delivery is not working, removing the password field outright
+   * locks the owner out of his own restaurant with no way back in. So the
+   * password path stays, one link down, until he confirms a code actually
+   * arrives. Nothing about it is on screen at rest.
+   */
+  const [tab, setTab] = useState<'code' | 'password'>('code');
   const [otp, setOtp] = useState('');
   const [otpSent, setOtpSent] = useState(false);
   const [email, setEmail] = useState('');
@@ -89,25 +100,66 @@ export function PartnerLogin() {
     setDone(true);
   };
 
-  const e164 = () => '+91' + phone.replace(/\D/g, '').slice(-10);
-
-  const sendOtp = async () => {
-    if (phone.replace(/\D/g, '').length < 10) { setError('Enter a 10-digit mobile number.'); return; }
+  /**
+   * A ONE-TIME CODE TO AN EMAIL ADDRESS. This replaces the SMS OTP entirely.
+   *
+   * `shouldCreateUser` follows the mode, and that distinction matters on this
+   * page: on Log in, a typo in the address must NOT quietly mint a brand-new
+   * empty account and drop the owner into an empty restaurant -- it must say
+   * the address is unknown. On Sign up it is exactly what we want.
+   */
+  const sendCode = async () => {
+    const em = email.trim();
+    if (!/^\S+@\S+\.\S+$/.test(em)) { setError('Enter your email address.'); return; }
     setBusy(true); setError('');
-    const { error: err } = await supabase.auth.signInWithOtp({ phone: e164() });
+    const { error: err } = await supabase.auth.signInWithOtp({
+      email: em,
+      options: {
+        shouldCreateUser: mode === 'signup',
+        emailRedirectTo: `${window.location.origin}/partner/orders`,
+      },
+    });
     setBusy(false);
-    if (err) { setError(err.message.includes('provider') ? 'SMS login is not configured yet — use the Email tab.' : err.message); return; }
+    if (err) {
+      setError(/not found|signups not allowed|user not found/i.test(err.message)
+        ? 'No account with that email. Choose Sign up to create one.'
+        : err.message);
+      return;
+    }
     setOtpSent(true);
   };
 
-  const verifyOtp = async () => {
+  const verifyCode = async () => {
     setBusy(true); setError('');
-    const { error: err } = await supabase.auth.verifyOtp({ phone: e164(), token: otp.trim(), type: 'sms' });
+    // `type: 'email'` -- the same code the magic link carries, entered by hand
+    // for anyone reading their mail on a different device from the one they
+    // are signing in on, which on a restaurant counter is most of the time.
+    const { error: err } = await supabase.auth.verifyOtp({
+      email: email.trim(), token: otp.trim(), type: 'email',
+    });
     setBusy(false);
-    if (err) { setError('That code didn’t match — try again.'); return; }
+    if (err) { setError('That code didn’t match — check your email and try again.'); return; }
     // Brand-new owners go straight to registering their restaurant; returning
     // accounts land on the live board.
     nav(mode === 'signup' ? '/partner/register' : '/partner/orders', { replace: true });
+  };
+
+  /**
+   * GOOGLE. A redirect, not a popup: a popup is what mobile browsers block,
+   * and the counter machine is as likely to be a phone as a laptop.
+   *
+   * The redirect comes back to the orders board. Supabase resolves the session
+   * from the URL on load, so there is nothing to hand-carry across the hop.
+   */
+  const signInWithGoogle = async () => {
+    setBusy(true); setError('');
+    const { error: err } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo: `${window.location.origin}/partner/orders` },
+    });
+    // On success the browser is already navigating away; only a failure
+    // returns here with the page still on screen.
+    if (err) { setBusy(false); setError(providerError(err, 'Google')); }
   };
 
   /**
@@ -285,37 +337,69 @@ export function PartnerLogin() {
               onClick={() => { setMode('signup'); setTab('email'); setError(''); setOtpSent(false); }}>Sign up</button>
           </div>
 
-          {mode === 'login' && (
-            <div className="chip-row" style={{ paddingBottom: 6 }}>
-              <button className={tab === 'email' ? 'chip active' : 'chip'} onClick={() => { setTab('email'); setError(''); }}>✉️ Email</button>
-              <button className={tab === 'otp' ? 'chip active' : 'chip'} onClick={() => { setTab('otp'); setError(''); }}>📱 Phone OTP</button>
-            </div>
-          )}
           {mode === 'signup' && (
             <p className="overline" style={{ marginBottom: 2, color: 'var(--primary)' }}>Create your account</p>
           )}
 
-          {tab === 'otp' ? (
+          {/* THE PROVIDERS, ABOVE THE FORM. One tap is the shortest path in and
+              belongs at the top; the email field is for anyone who would rather
+              type an address than hand over an account. */}
+          <div style={{ display: 'grid', gap: 8, marginTop: 10 }}>
+            <button className={`btn btn-glass btn-block${busy ? ' is-busy' : ''}`} disabled={busy}
+              onClick={signInWithGoogle}>
+              <span aria-hidden style={{ marginRight: 8 }}>🇬</span>
+              Continue with Google
+            </button>
+            {/* Drawn on iOS and the web, hidden on Android. Disabled until the
+                Apple Developer config exists -- pressing it says so rather than
+                failing with a provider error nobody can act on. */}
+            {showAppleButton() && (
+              <button
+                className="btn btn-glass btn-block"
+                disabled={APPLE_COMING_SOON || busy}
+                aria-disabled={APPLE_COMING_SOON}
+                title={APPLE_COMING_SOON ? APPLE_PENDING_MESSAGE : undefined}
+                onClick={() => setError(APPLE_PENDING_MESSAGE)}
+              >
+                <span aria-hidden style={{ marginRight: 8 }}></span>
+                Continue with Apple
+                {APPLE_COMING_SOON && (
+                  <span className="dim" style={{ fontSize: 12, marginLeft: 8 }}>coming soon</span>
+                )}
+              </button>
+            )}
+          </div>
+
+          <p className="overline" style={{ textAlign: 'center', margin: '14px 0 4px', opacity: 0.7 }}>
+            or use your email
+          </p>
+
+          {tab === 'code' ? (
             !otpSent ? (
               <>
-                <p className="overline" style={{ margin: '8px 0 6px' }}>Mobile number</p>
-                <input className="code-input" inputMode="tel" placeholder="98765 43210" value={phone}
-                  onChange={(e) => setPhone(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && sendOtp()} />
+                <p className="overline" style={{ margin: '8px 0 6px' }}>Email</p>
+                <input className="code-input" type="email" autoComplete="email"
+                  placeholder="you@restaurant.com" value={email}
+                  onChange={(e) => setEmail(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && sendCode()} />
                 {error && <p style={{ color: 'var(--error)', fontSize: 13.5, marginTop: 10 }}>{error}</p>}
-                <button className={`btn btn-glass btn-block${busy ? ' is-busy' : ''}`} style={{ marginTop: 14 }} disabled={busy} onClick={sendOtp}>
-                  {mode === 'signup' ? 'Send OTP to sign up' : 'Send OTP'}
+                <button className={`btn btn-glass btn-block${busy ? ' is-busy' : ''}`} style={{ marginTop: 14 }} disabled={busy} onClick={sendCode}>
+                  {mode === 'signup' ? 'Email me a code to sign up' : 'Email me a code'}
+                </button>
+                <button className="chip" style={{ marginTop: 10 }}
+                  onClick={() => { setTab('password'); setError(''); }}>
+                  Use a password instead
                 </button>
               </>
             ) : (
               <>
-                <p className="overline" style={{ margin: '8px 0 6px' }}>Enter the 6-digit code sent to {e164()}</p>
+                <p className="overline" style={{ margin: '8px 0 6px' }}>Enter the code sent to {email.trim()}</p>
                 <input className="code-input" inputMode="numeric" autoFocus placeholder="••••••" value={otp}
-                  onChange={(e) => setOtp(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && verifyOtp()} />
+                  onChange={(e) => setOtp(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && verifyCode()} />
                 {error && <p style={{ color: 'var(--error)', fontSize: 13.5, marginTop: 10 }}>{error}</p>}
-                <button className={`btn btn-glass btn-block${busy ? ' is-busy' : ''}`} style={{ marginTop: 14 }} disabled={busy || otp.trim().length < 4} onClick={verifyOtp}>
+                <button className={`btn btn-glass btn-block${busy ? ' is-busy' : ''}`} style={{ marginTop: 14 }} disabled={busy || otp.trim().length < 4} onClick={verifyCode}>
                   {mode === 'signup' ? 'Verify & create account' : 'Verify & sign in'}
                 </button>
-                <button className="chip" style={{ marginTop: 10 }} onClick={() => { setOtpSent(false); setOtp(''); }}>← Change number</button>
+                <button className="chip" style={{ marginTop: 10 }} onClick={() => { setOtpSent(false); setOtp(''); }}>← Change email</button>
               </>
             )
           ) : (
@@ -351,6 +435,12 @@ export function PartnerLogin() {
                   </button>
                 )
               )}
+              {/* Back to the intended path. The password form is a fallback and
+                  should never be a room with no door out of it. */}
+              <button className="chip" style={{ marginTop: 10, width: '100%' }}
+                onClick={() => { setTab('code'); setError(''); }}>
+                ← Email me a code instead
+              </button>
             </>
           )}
         </div>

@@ -81,7 +81,7 @@ export function BuffetPick() {
     <div className="page fade-in">
       <div className="topbar">
         <Wordmark size={24} />
-        <button className="chip" onClick={() => nav('/start')}>← {t('common.back')}</button>
+        <button className="chip" onClick={() => nav('/menu')}>← {t('common.back')}</button>
       </div>
 
       <p className="overline" style={{ marginTop: 10 }}>{session.restaurant.name}</p>

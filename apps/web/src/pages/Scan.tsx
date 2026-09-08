@@ -21,12 +21,17 @@ export function Scan() {
         const session = await resolveToken(token);
         if (cancelled) return;
         startSession(session);
-        // /start, not /menu. The same QR is how someone asks about the buffet
-        // and how someone books a table for Saturday -- going straight to the
-        // menu made two of the three things this restaurant sells unreachable
-        // from the one link printed on the table. See DinerStart. Menu is the
-        // first and primary card there, so ordering is still one obvious tap.
-        nav('/start', { replace: true });
+        // STRAIGHT TO THE MENU. "Remove this page bro after scanning only menu
+        // should open" -- and he is right about what a scan means. Someone who
+        // has just pointed a camera at the code on their table wants the food;
+        // asking them "what would you like to do?" first put a decision in
+        // front of the one thing they had already decided.
+        //
+        // Buffet and Call for service did not go away with the door page: they
+        // moved INTO the menu's own filter row, where he marked them, so all
+        // three things the restaurant sells are still one tap from the scan --
+        // they just no longer cost a tap each to reach the food.
+        nav('/menu', { replace: true });
       } catch (e) {
         if (cancelled) return;
         if (e instanceof ScanError && e.kind === 'not_accepting') {

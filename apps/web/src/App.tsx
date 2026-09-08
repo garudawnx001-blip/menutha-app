@@ -5,7 +5,6 @@ import { Landing } from './pages/Landing';
 import { Restaurants } from './pages/Restaurants';
 import { Scan } from './pages/Scan';
 import { TableGate } from './pages/TableGate';
-import { DinerStart } from './pages/DinerStart';
 import { Reserve } from './pages/Reserve';
 import { BuffetPick } from './pages/BuffetPick';
 import { PublicRestaurant } from './pages/PublicRestaurant';
@@ -44,10 +43,11 @@ export function App() {
           {/* THE DINER FALLBACK. Every session-less diner path lands here --
               see TableGate for why it is not '/'. */}
           <Route path="/table" element={<TableGate />} />
-          {/* #P — the three doors a scan now lands on, and the two flows
-              behind them. All inside the locked diner scope: no account, no
-              partner link, no marketing. */}
-          <Route path="/start" element={<DinerStart />} />
+          {/* The two flows a scan can reach besides the menu. The door page
+              that used to sit in front of them is gone -- "after scanning only
+              menu should open" -- and they are reached from chips in the
+              menu's own filter row instead. Still inside the locked diner
+              scope: no account, no partner link, no marketing. */}
           <Route path="/reserve" element={<Reserve />} />
           <Route path="/buffet" element={<BuffetPick />} />
           <Route path="/scan/:token" element={<Scan />} />

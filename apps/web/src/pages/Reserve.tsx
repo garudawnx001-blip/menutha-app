@@ -85,7 +85,7 @@ export function Reserve() {
           {t('reserve.doneBody').replace('{name}', restaurant.name).replace('{phone}', phone)}
         </p>
         <button className="btn btn-primary" onClick={() => nav('/menu')}>{t('start.menu')}</button>
-        <button className="btn btn-ghost" onClick={() => nav('/start')}>{t('common.back')}</button>
+        <button className="btn btn-ghost" onClick={() => nav('/menu')}>{t('common.back')}</button>
       </div>
     );
   }
@@ -94,7 +94,7 @@ export function Reserve() {
     <div className="page fade-in">
       <div className="topbar">
         <Wordmark size={24} />
-        <button className="chip" onClick={() => nav('/start')}>← {t('common.back')}</button>
+        <button className="chip" onClick={() => nav('/menu')}>← {t('common.back')}</button>
       </div>
 
       <div className="center-fill" style={{ gap: 12 }}>

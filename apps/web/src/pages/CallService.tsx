@@ -20,13 +20,34 @@ import { requestService, SERVICE_OPTIONS, type ServiceKind } from '../lib/api';
 import type { Session } from '../lib/types';
 import { useT } from '../lib/i18n';
 
-export function CallService({ session }: { session: Session }) {
-  const [open, setOpen] = useState(false);
+/**
+ * Whether this session can ask for anything at all.
+ *
+ * EXPORTED because the trigger no longer lives in this file. The chip moved
+ * into the menu's filter row, where he marked it, so the menu has to answer the
+ * same question before it draws a chip -- and a second copy of the rule in
+ * another file is how the button and the sheet end up disagreeing about
+ * whether a takeaway diner can ask for cutlery.
+ */
+export function canCallService(session: Session): boolean {
+  return !session.demo && !!session.table?.id && !session.table.is_parcel;
+}
+
+/**
+ * The sheet. CONTROLLED from outside now: the caller owns `open`, because the
+ * caller owns the chip that opens it.
+ */
+export function CallService({ session, open, onClose }: {
+  session: Session;
+  open: boolean;
+  onClose: () => void;
+}) {
   const [busy, setBusy] = useState<ServiceKind | null>(null);
   const [said, setSaid] = useState<string>('');
   const t = useT();
 
-  if (session.demo || !session.table?.id || session.table.is_parcel) return null;
+  if (!canCallService(session)) return null;
+  const setOpen = (v: boolean) => { if (!v) onClose(); };
 
   /** "Language for this options also" — this sheet was the last English-only
    *  surface a diner could reach. The option labels are looked up by KIND
@@ -54,15 +75,11 @@ export function CallService({ session }: { session: Session }) {
 
   return (
     <>
-      <button
-        className="chip"
-        onClick={() => setOpen(true)}
-        aria-haspopup="dialog"
-        title={t('svc.open')}
-      >
-        🙋 {t('svc.open')}
-      </button>
-
+      {/* NO TRIGGER HERE ANY MORE. The chip that opens this used to sit on its
+          own line under the table summary, and he crossed it out there and
+          drew it into the filter row instead. Menu.tsx renders it now; this
+          file is the sheet and the request, which is all it should ever have
+          been. */}
       {open && (
         <div
           className="sheet-scrim"
