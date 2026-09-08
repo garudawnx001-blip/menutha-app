@@ -332,9 +332,13 @@ export function PartnerLogin() {
             <button role="tab" aria-selected={mode === 'login'}
               className={mode === 'login' ? 'seg-btn active' : 'seg-btn'}
               onClick={() => { setMode('login'); setError(''); setOtpSent(false); }}>Log in</button>
+            {/* 'code', not the old 'email': signing up starts on the emailed
+                code, which is the path a brand-new owner should be on. A
+                comment cannot live between a tag's attributes -- it parses as
+                an expression there, not a comment -- so it sits above. */}
             <button role="tab" aria-selected={mode === 'signup'}
               className={mode === 'signup' ? 'seg-btn active' : 'seg-btn'}
-              onClick={() => { setMode('signup'); setTab('email'); setError(''); setOtpSent(false); }}>Sign up</button>
+              onClick={() => { setMode('signup'); setTab('code'); setError(''); setOtpSent(false); }}>Sign up</button>
           </div>
 
           {mode === 'signup' && (
