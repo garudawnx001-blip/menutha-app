@@ -5,6 +5,7 @@ import React, { useEffect, useState } from 'react';
 import { fetchGrowth, type GrowthPeriod, type GrowthPoint } from '../../lib/portalApi';
 import { supabase } from '../../lib/supabase';
 import { buildReportCsv, reportFileName } from '../../lib/reportCsv';
+import { printReportPdf } from '../../lib/reportPdf';
 import { inr } from '../../lib/types';
 
 const isoDay = (d: Date) => d.toISOString().slice(0, 10);
@@ -265,15 +266,17 @@ export function Growth({ restaurantId }: { restaurantId: string }) {
    * report that silently truncates is worse than one that fails. The URL is
    * revoked afterwards so the blob is not held for the life of the tab.
    */
-  const downloadCsv = async () => {
-    if (exporting) return;
-    setExporting(true);
-    try {
-      const { data: rest } = await supabase
-        .from('restaurant').select('name').eq('id', restaurantId).single();
-      const extra = await fetchExtraSeries(restaurantId, period, from, to);
-
-      const payload = {
+  /**
+   * ONE PAYLOAD, TWO EXPORTS. Extracted so the CSV and the PDF are built from
+   * the identical object: two exports of the same report that assemble their
+   * own inputs is how a spreadsheet and a document come to disagree about a
+   * total, and nobody looking at them would know which to believe.
+   */
+  const buildPayload = async () => {
+    const { data: rest } = await supabase
+      .from('restaurant').select('name').eq('id', restaurantId).single();
+    const extra = await fetchExtraSeries(restaurantId, period, from, to);
+    return {
         restaurantName: rest?.name || 'Restaurant',
         periodLabel: PERIODS.find((p) => p.key === period)?.label ?? String(period),
         from: period === 'custom'
@@ -285,9 +288,15 @@ export function Growth({ restaurantId }: { restaurantId: string }) {
         points: points ?? [],
         topItems: extra.topItems,
         peakHours: extra.peakHours,
-        generatedAt: new Date(),
-      };
+      generatedAt: new Date(),
+    };
+  };
 
+  const downloadCsv = async () => {
+    if (exporting) return;
+    setExporting(true);
+    try {
+      const payload = await buildPayload();
       const blob = new Blob([buildReportCsv(payload)], { type: 'text/csv;charset=utf-8' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -299,6 +308,28 @@ export function Growth({ restaurantId }: { restaurantId: string }) {
       URL.revokeObjectURL(url);
     } catch (e: any) {
       setError(e?.message ?? 'Could not build the report file.');
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  /**
+   * THE PDF THE PORTAL NEVER HAD. The phone has offered CSV and PDF side by
+   * side for months; here CSV was the only option, so an owner at the counter
+   * machine could not produce the one document you hand to an accountant.
+   *
+   * A blocked pop-up is the ONE failure this has, and it is common enough that
+   * saying so matters -- a button that visibly does nothing is what gets
+   * reported as broken.
+   */
+  const openPdf = async () => {
+    if (exporting) return;
+    setExporting(true);
+    try {
+      const ok = printReportPdf(await buildPayload());
+      if (!ok) setError('Your browser blocked the report window. Allow pop-ups for this site and try again.');
+    } catch (e: any) {
+      setError(e?.message ?? 'Could not build the report.');
     } finally {
       setExporting(false);
     }
@@ -353,6 +384,18 @@ export function Growth({ restaurantId }: { restaurantId: string }) {
             title="Download this report as a CSV for Excel"
           >
             {'⬇ CSV'}
+          </button>
+          {/* Beside CSV, on the same row and with the same disabled rule: the
+              two are the same export in two formats, and separating them would
+              invite exporting one range while looking at another. */}
+          <button
+            className={`chip${exporting ? ' is-busy' : ''}`}
+            onClick={openPdf}
+            disabled={exporting || !points}
+            style={{ minHeight: 44 }}
+            title="Open this report as a PDF to print or save"
+          >
+            {'⬇ PDF'}
           </button>
           {period === 'custom' && (
             <>
