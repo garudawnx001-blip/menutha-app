@@ -3,14 +3,21 @@ import React, { useEffect, useState } from 'react';
 import { fetchReservations, setReservationStatus, type Reservation } from '../../lib/portalApi';
 import { usePartner } from './PartnerShell';
 import { Spinner } from '../../components';
+import { UpgradeNudge } from './Gate';
 
 export function Reservations() {
-  const { restaurant } = usePartner();
+  const { restaurant, can } = usePartner();
   const [rows, setRows] = useState<Reservation[] | null>(null);
   const [error, setError] = useState('');
 
   const load = () => fetchReservations(restaurant.id).then(setRows).catch((e) => { setError(e.message); setRows([]); });
   useEffect(() => { load(); }, [restaurant.id]);
+
+  /* GROWTH AND UP. Shown, not hidden: an owner on Basic should learn that
+     Menutha takes bookings, and which plan turns it on -- see Gate. The list
+     is replaced by the nudge; the bookings themselves are untouched and are
+     all still there the moment the plan allows them again. */
+  if (!can('reservations')) return <UpgradeNudge feature="reservations" what="Reservations" />;
 
   if (rows === null) return <Spinner label="Loading reservations…" />;
 

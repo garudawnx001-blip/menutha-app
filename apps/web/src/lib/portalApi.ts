@@ -97,9 +97,27 @@ export async function addOutlet(parentId: string, name: string, city: string | n
   const uid = session.session?.user?.id;
   if (!uid) throw new Error('Please sign in again.');
 
+  /**
+   * ONE LEVEL ONLY, AND THE PARENT IS THE ROOT.
+   *
+   * The database refuses an outlet whose parent is itself an outlet, and it is
+   * right to: two levels means `effective_plan()` has to walk a chain, and a
+   * chain is how one branch quietly ends up on a different tier from the
+   * subscription paying for it. But an owner adding an outlet while VIEWING an
+   * outlet is an ordinary thing to do, and hitting a constraint error for it
+   * would be a dead end. So the parent is resolved to the top of the tree here
+   * rather than trusted from the caller.
+   */
+  const { data: parentRow } = await supabase
+    .from('restaurant')
+    .select('parent_id')
+    .eq('id', parentId)
+    .maybeSingle();
+  const rootId = (parentRow as any)?.parent_id ?? parentId;
+
   const { data: created, error } = await supabase
     .from('restaurant')
-    .insert({ name: name.trim(), city: city?.trim() || null, parent_id: parentId, status: 'active' })
+    .insert({ name: name.trim(), city: city?.trim() || null, parent_id: rootId, status: 'active' })
     .select('id')
     .single();
   if (error) throw new Error(error.message);
@@ -521,9 +539,33 @@ export async function setReservationStatus(id: string, status: 'confirmed' | 'se
 
 // ── Settings ───────────────────────────────────────────────────────────────
 
+/** The columns a staged migration adds. A patch containing one of these before
+ *  the migration has run fails the WHOLE update with 42703 -- so saving a phone
+ *  number would report an error about a map. Dropped once, for the session. */
+const STAGED_COLUMNS = ['lat', 'lng', 'map_label'];
+let stagedColumnsMissing = false;
+
 export async function updateRestaurant(restaurantId: string, patch: Record<string, unknown>) {
-  const { error } = await supabase.from('restaurant').update(patch).eq('id', restaurantId);
-  if (error) throw error;
+  const without = (p: Record<string, unknown>) => {
+    const copy = { ...p };
+    for (const k of STAGED_COLUMNS) delete copy[k];
+    return copy;
+  };
+
+  const send = (p: Record<string, unknown>) =>
+    supabase.from('restaurant').update(p).eq('id', restaurantId);
+
+  const { error } = await send(stagedColumnsMissing ? without(patch) : patch);
+  if (!error) return;
+  // 42703 = undefined_column. Retry without them rather than telling the owner
+  // their restaurant name could not be saved.
+  if ((error as any).code === '42703') {
+    stagedColumnsMissing = true;
+    const { error: retry } = await send(without(patch));
+    if (retry) throw retry;
+    return;
+  }
+  throw error;
 }
 
 

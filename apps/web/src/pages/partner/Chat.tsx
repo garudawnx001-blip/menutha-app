@@ -25,6 +25,7 @@ import {
   subscribeRestaurantMessages, type ChatThread, type PortalMessage,
 } from '../../lib/portalApi';
 import { usePartner } from './PartnerShell';
+import { UpgradeNudge } from './Gate';
 
 const time = (iso: string) => {
   try {
@@ -169,7 +170,7 @@ export function ChatView(p: ChatViewProps) {
 
 /** The data. */
 export function Chat() {
-  const { restaurant } = usePartner();
+  const { restaurant, can } = usePartner();
   const [params] = useSearchParams();
   const [state, setState] = useState<ThreadsState>({ kind: 'loading' });
   const [openTable, setOpenTable] = useState<string | null>(null);
@@ -241,6 +242,12 @@ export function Chat() {
     } catch { setMsgsError('Could not send that. Please try again.'); }
     finally { setBusy(false); }
   };
+
+  /* GROWTH AND UP. Table chat is the feature an owner is most likely to meet
+     by accident -- a diner sends a message and the counter never sees it -- so
+     a plan without it says so here rather than showing an empty list that
+     looks like nobody has written. Nothing is thrown away meanwhile. */
+  if (!can('table_chat')) return <UpgradeNudge feature="table_chat" what="Table chat" />;
 
   const current = state.kind === 'ready' ? state.threads.find((t) => t.table_id === openTable) : undefined;
 
