@@ -30,7 +30,7 @@ const ago = (min: number) => new Date(now - min * 60_000).toISOString();
 
 const THREADS: ChatThread[] = [
   { table_id: 't6', table_label: 'Table 6', last_body: 'Can the biryani be made less spicy for one of us?', last_at: ago(2), last_from: 'diner', unread: 2, guest_name: 'Priya' },
-  { table_id: 't2', table_label: 'Table 2', last_body: 'You: On its way — two minutes.', last_at: ago(14), last_from: 'restaurant', unread: 0, guest_name: null },
+  { table_id: 't2', table_label: 'Table 2', last_body: 'On its way — two minutes.', last_at: ago(14), last_from: 'restaurant', unread: 0, guest_name: null },
   { table_id: 'parcel', table_label: 'Parcel · #41', last_body: 'Please add extra raita, thank you!', last_at: ago(41), last_from: 'diner', unread: 0, guest_name: 'Arun' },
 ];
 

@@ -14,7 +14,6 @@ export interface Membership {
     cuisine_tags?: string | null;
     slug?: string | null;
     own_website?: string | null;
-    gateway_key_id?: string | null;
     pnl_visible_to_managers?: boolean;
     open_time?: string | null;
     close_time?: string | null;

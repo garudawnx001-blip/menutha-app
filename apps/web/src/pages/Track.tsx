@@ -4,7 +4,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import QRCode from 'qrcode';
-import { fetchOrderStatus, fetchPaymentQr, startGatewayCheckout, type PaymentQr } from '../lib/api';
+import { fetchOrderStatus, fetchPaymentQr, type PaymentQr } from '../lib/api';
 import { buildUpiUri, isValidVpa } from '../../../../packages/payments/index.js';
 import type { OrderView } from '../lib/types';
 import { inr } from '../lib/types';
@@ -96,12 +96,6 @@ function PaymentPanel({ order, demo, onChanged }: { order: OrderView; demo?: boo
         <p className="muted" style={{ fontSize: 13.5, marginTop: 6 }}>
           UPI isn’t set up here yet — pay cash at the counter.
         </p>
-      )}
-      {qr.gateway_key_id && (
-        <button className="btn btn-ghost btn-block" style={{ marginTop: 10 }} disabled={busy !== ''}
-          onClick={() => act(() => startGatewayCheckout(order.id, demo), 'gw')}>
-          {busy === 'gw' ? t('common.opening') : `💳 ${t('track.payCard')}`}
-        </button>
       )}
       <p className="dim" style={{ fontSize: 12, marginTop: 12 }}>
         {t('track.payDirect')}

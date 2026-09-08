@@ -13,7 +13,6 @@ import {
   demoRestaurant,
   demoTable,
 } from './demo';
-import { loadCheckout } from './razorpayCheckout';
 
 export class ScanError extends Error {
   constructor(public kind: 'not_found' | 'not_accepting', message: string) {
@@ -249,7 +248,6 @@ export interface PaymentQr {
   amount: number;
   vpa: string | null;
   payee_name: string;
-  gateway_key_id: string | null;
   paid: boolean;
 }
 
@@ -259,7 +257,7 @@ export async function fetchPaymentQr(orderId: string, demo?: boolean): Promise<P
     return {
       order_no: o?.order_no ?? 108, amount: o?.total ?? 0,
       vpa: 'saffrongrove@demo', payee_name: 'Saffron Grove Kitchen',
-      gateway_key_id: null, paid: o?.payment?.status === 'paid',
+      paid: o?.payment?.status === 'paid',
     };
   }
   const { data, error } = await supabase.rpc('get_payment_qr', { p_order_id: orderId });
@@ -280,36 +278,6 @@ export async function recordDinerPayment(orderId: string, mode: 'upi_qr' | 'cash
   }
 }
 
-/** Card/wallet checkout on the RESTAURANT'S OWN Razorpay account. */
-export async function startGatewayCheckout(orderId: string, demo?: boolean): Promise<void> {
-  if (demo || orderId === 'demo-order') { demoRecordPayment('gateway'); return; }
-  const { data, error } = await supabase.functions.invoke('gateway-order', {
-    body: { order_id: orderId },
-  });
-  if (error) throw new Error((await (error as any)?.context?.text?.()) || error.message);
-  await loadCheckout();
-  await new Promise<void>((resolve, reject) => {
-    const rzp = new window.Razorpay({
-      key: data.key_id,
-      order_id: data.razorpay_order_id,
-      amount: data.amount,
-      currency: 'INR',
-      name: data.name,
-      theme: { color: '#1B5E3F' },
-      handler: async (res: { razorpay_payment_id: string }) => {
-        try {
-          await supabase.rpc('record_payment', {
-            p_order_id: orderId, p_provider: 'gateway',
-            p_provider_ref: res.razorpay_payment_id,
-          });
-          resolve();
-        } catch (e) { reject(e); }
-      },
-      modal: { ondismiss: () => reject(new Error('Checkout was closed before paying.')) },
-    });
-    rzp.open();
-  });
-}
 
 
 /** The diner tells the counter they have paid the table's bill.

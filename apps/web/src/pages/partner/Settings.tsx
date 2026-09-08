@@ -1,5 +1,5 @@
 /** Restaurant settings: profile, timings, cuisine tags, UPI VPA, branding
- *  (per plan), P&L visibility toggle (owner), own gateway key id (Module 3
+ *  (per plan), P&L visibility toggle (owner), UPI ID (diners pay it directly
  *  wires the secret via Edge Function config — never client-side). */
 import React, { useState } from 'react';
 import {
@@ -52,7 +52,6 @@ export function Settings() {
     upi_vpa: restaurant.upi_vpa ?? '',
     upi_account_type: (restaurant as any).upi_account_type ?? 'personal',
     own_website: restaurant.own_website ?? '',
-    gateway_key_id: restaurant.gateway_key_id ?? '',
     brand_color: (restaurant as any).brand_color ?? '#1B5E3F',
     is_open: restaurant.is_open !== false,
     sgst_pct: String((restaurant as any).sgst_pct ?? 2.5),
@@ -113,7 +112,6 @@ export function Settings() {
         upi_vpa: form.upi_vpa.trim() || null,
         upi_account_type: form.upi_account_type,
         own_website: form.own_website.trim() || null,
-        gateway_key_id: form.gateway_key_id.trim() || null,
         is_open: form.is_open,
         // gst_pct is kept in sync as sgst+cgst by a DB trigger.
         sgst_pct: Math.min(14, Math.max(0, Number(form.sgst_pct) || 0)),
@@ -383,13 +381,8 @@ export function Settings() {
               : 'Diners get one-tap up to ₹2,000; above that the bill shows a large QR to scan with the camera. A free merchant UPI ID (PhonePe / Paytm / GPay for Business) removes the limit.'}
           </span>
         </F>
-        <F label="Own Razorpay Key ID (optional — for card checkout on YOUR account)">
-          <input className="code-input" placeholder="rzp_live_…" value={form.gateway_key_id}
-            onChange={(e) => setForm({ ...form, gateway_key_id: e.target.value })} />
-        </F>
         <p className="dim" style={{ fontSize: 12.5 }}>
-          The secret key is never entered here — it's configured server-side
-          when gateway checkout goes live. Menutha takes no cut of diner payments.
+          Diners pay this UPI ID directly. Menutha takes no cut of diner payments.
         </p>
       </div>
 
