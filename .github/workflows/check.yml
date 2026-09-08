@@ -1,0 +1,55 @@
+name: Check (typecheck + build, no publish)
+
+# WHY THIS EXISTS.
+#
+# deploy.yml was the only workflow in this repository, and it typechecks, builds
+# AND publishes to menutha.com in one run. That makes "is this code sound?" and
+# "put this in front of diners" the same action, so the only way to validate a
+# change was to ship it -- and the only way to avoid shipping was to cancel the
+# run and learn nothing.
+#
+# This runs the identical install/typecheck/build steps and stops there. No
+# Pages permissions, no deploy job, nothing to publish with even by accident.
+#
+# It runs on every branch INCLUDING main. On main it duplicates the build half
+# of the deploy, which is a minute of CI in exchange for a green check on a
+# commit that is deliberately not being deployed yet.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ['**']
+  pull_request:
+
+# Deliberately read-only: this workflow cannot publish because it is not
+# permitted to.
+permissions:
+  contents: read
+
+concurrency:
+  group: check-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Web · typecheck & build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/web
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+
+      # Same resilience as the deploy: a transient registry error should not
+      # read as a broken commit.
+      - name: Install
+        run: npm ci --no-audit --no-fund || npm ci --no-audit --no-fund
+
+      - name: Typecheck + production build
+        run: npm run build
