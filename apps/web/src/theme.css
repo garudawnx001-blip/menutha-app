@@ -1872,3 +1872,12 @@ select.code-input:focus { border-color: var(--primary); }
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* Unread marker on an alert row. A dot, not a count: the row already says what
+   it is, and a number here would compete with the badge on the thread list
+   that does mean a quantity. */
+.alert-dot {
+  width: 8px; height: 8px; border-radius: 999px;
+  background: var(--primary);
+  flex: 0 0 auto;
+}

@@ -22,6 +22,7 @@ import { Buffets } from './pages/partner/Buffets';
 import { Showcase } from './pages/partner/Showcase';
 import { Settings } from './pages/partner/Settings';
 import { Chat } from './pages/partner/Chat';
+import { Alerts } from './pages/partner/Alerts';
 import { Menu } from './pages/Menu';
 import { Cart } from './pages/Cart';
 import { Track } from './pages/Track';
@@ -68,6 +69,7 @@ export function App() {
             <Route path="/partner/showcase" element={<Showcase />} />
             <Route path="/partner/reservations" element={<Reservations />} />
             <Route path="/partner/chat" element={<Chat />} />
+            <Route path="/partner/alerts" element={<Alerts />} />
             <Route path="/partner/settings" element={<Settings />} />
           </Route>
           <Route path="/partner/plan" element={<PlanScreen />} />

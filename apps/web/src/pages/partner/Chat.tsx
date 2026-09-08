@@ -17,6 +17,7 @@
  * times the traffic and three places for a reconnect to be missed.
  */
 import React, { useEffect, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   fetchChatThreads, fetchThreadMessages, sendRestaurantMessage, markThreadRead,
   subscribeRestaurantMessages, type ChatThread, type PortalMessage,
@@ -32,6 +33,7 @@ const time = (iso: string) => {
 
 export function Chat() {
   const { restaurant } = usePartner();
+  const [params] = useSearchParams();
   const [threads, setThreads] = useState<ChatThread[] | null>(null);
   const [openTable, setOpenTable] = useState<string | null>(null);
   const [msgs, setMsgs] = useState<PortalMessage[]>([]);
@@ -73,6 +75,23 @@ export function Chat() {
       loadThreads();
     } catch { setError('Could not load that conversation.'); }
   };
+
+  /**
+   * ?table=<id> OPENS THAT CONVERSATION -- what makes an alert land on the
+   * exact thread rather than on the list, with the owner hunting for the row
+   * they just tapped.
+   *
+   * Declared AFTER `open` so it reads in the order it runs. It waits for
+   * `threads` because the header wants the table's label, which only the list
+   * knows, and keys on (param, list) so reopening the list from a deep-linked
+   * thread does not immediately snap back into it.
+   */
+  const wanted = params.get('table');
+  useEffect(() => {
+    if (!wanted || !threads) return;
+    const th = threads.find((t) => t.table_id === wanted);
+    if (th && openRef.current !== wanted) open(th.table_id);
+  }, [wanted, threads]);
 
   useEffect(() => { endRef.current?.scrollIntoView({ block: 'end' }); }, [msgs.length]);
 

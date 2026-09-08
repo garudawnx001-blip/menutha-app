@@ -45,6 +45,7 @@ const NAV: { to: string; label: string; icon: string; primary?: boolean }[] = [
   { to: '/partner/tables', label: 'Tables & QR', icon: '🪑', primary: true },
   { to: '/partner/billing', label: 'Billing', icon: '💳', primary: true },
   { to: '/partner/chat', label: 'Chat', icon: '💬', primary: true },
+  { to: '/partner/alerts', label: 'Alerts', icon: '🔔', primary: true },
   { to: '/partner/reports', label: 'Reports', icon: '📈' },
   { to: '/partner/reservations', label: 'Reservations', icon: '📅' },
   { to: '/partner/buffets', label: 'Buffets', icon: '🍽' },

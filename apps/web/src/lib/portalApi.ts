@@ -1118,3 +1118,114 @@ export function subscribeRestaurantMessages(
     .subscribe();
   return () => { supabase.removeChannel(channel); };
 }
+
+/* ── Notifications ─────────────────────────────────────────────────────────
+ *
+ * DERIVED, NOT STORED. There is no notification table and deliberately so: a
+ * notification here is not a new fact, it is a VIEW of facts that already
+ * exist -- an order was placed, a table asked for something, a diner sent a
+ * message. Writing a row for each would mean two sources of truth that can
+ * disagree, and the first time they did the inbox would be lying about work
+ * that had already been done.
+ *
+ * So the feed is three small queries merged and sorted. Each item carries
+ * enough to open the EXACT thing it is about, which is the whole point: he
+ * asked for deep links that land on the right screen every time, and an item
+ * that only knows its own kind cannot do that.
+ */
+
+export type NotifKind = 'order' | 'service' | 'chat';
+
+export interface Notification {
+  id: string;
+  kind: NotifKind;
+  title: string;
+  body: string;
+  at: string;
+  unread: boolean;
+  /** Where tapping it goes. Built here so both surfaces route identically. */
+  to: string;
+}
+
+const NOTIF_SERVICE_LABEL: Record<string, string> = {
+  clean_table: 'Clean the table', tissues: 'Tissues', water: 'Water', sauce: 'Sauce',
+  plates: 'Extra plates', cutlery: 'Cutlery', assistance: 'Someone at the table',
+};
+
+export async function fetchNotifications(restaurantId: string): Promise<Notification[]> {
+  const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+
+  const [orders, services, msgs] = await Promise.all([
+    supabase
+      .from('food_order')
+      .select('id, order_no, total, placed_at, dining_table(label)')
+      .eq('restaurant_id', restaurantId)
+      .gte('placed_at', since)
+      .neq('status', 'cancelled')
+      .order('placed_at', { ascending: false })
+      .limit(40),
+    supabase
+      .from('service_request')
+      .select('id, table_id, kind, status, created_at, dining_table(label)')
+      .eq('restaurant_id', restaurantId)
+      .gte('created_at', since)
+      .order('created_at', { ascending: false })
+      .limit(40),
+    supabase
+      .from('message')
+      .select('id, table_id, body, created_at, read_at, from_role, dining_table(label)')
+      .eq('restaurant_id', restaurantId)
+      .eq('from_role', 'diner')
+      .gte('created_at', since)
+      .order('created_at', { ascending: false })
+      .limit(40),
+  ]);
+
+  const label = (row: any) =>
+    (Array.isArray(row.dining_table) ? row.dining_table[0] : row.dining_table)?.label ?? 'Table';
+
+  const out: Notification[] = [];
+
+  for (const o of (orders.data ?? []) as any[]) {
+    out.push({
+      id: `order:${o.id}`, kind: 'order',
+      title: `New order · ${label(o)}`,
+      body: `#${o.order_no} · ${inrPlain(o.total)}`,
+      at: o.placed_at,
+      // An order is "unread" while it is still work. The board is the record
+      // of whether it has been dealt with, not a flag on the notification.
+      unread: true,
+      to: `/partner/orders?order=${o.id}`,
+    });
+  }
+
+  for (const s of (services.data ?? []) as any[]) {
+    out.push({
+      id: `svc:${s.id}`, kind: 'service',
+      title: `${label(s)} asked for something`,
+      body: NOTIF_SERVICE_LABEL[s.kind] ?? s.kind,
+      at: s.created_at,
+      unread: s.status === 'open',
+      to: `/partner/orders?table=${s.table_id ?? ''}`,
+    });
+  }
+
+  for (const m of (msgs.data ?? []) as any[]) {
+    out.push({
+      id: `msg:${m.id}`, kind: 'chat',
+      title: `Message from ${label(m)}`,
+      body: m.body,
+      at: m.created_at,
+      unread: !m.read_at,
+      to: `/partner/chat?table=${m.table_id}`,
+    });
+  }
+
+  return out.sort((a, b) => (a.at < b.at ? 1 : -1));
+}
+
+/** Plain rupee formatting, local to this file so the feed does not have to
+ *  import the diner app's formatter. */
+function inrPlain(n: number) {
+  return '₹' + Math.round(Number(n ?? 0)).toLocaleString('en-IN');
+}
