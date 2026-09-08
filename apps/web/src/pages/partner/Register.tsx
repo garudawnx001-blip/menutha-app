@@ -1,74 +1,107 @@
-/** The two steps after the account exists: connect Google (required), then
- *  register the restaurant. The confirmation email lands here, and so does the
- *  Google link on its way back. Atomic server-side bootstrap for the second
- *  step: owner role, restaurant, membership, Parcel table, 30-day full-Growth
- *  trial -- the trial starts the moment the restaurant is created. */
+/**
+ * Everything after the account exists, in one place.
+ *
+ * THE MODEL, as he finalised it. Google is the front door: "Continue with
+ * Google" returns an already-verified email, so there is no inbox step. What
+ * the account still lacks is a USERNAME and a PASSWORD, and this page asks
+ * for both -- "Finish setup" -- before the restaurant form. Email sign-up is
+ * the secondary door: it collects username + password up front and confirms
+ * the address by LINK, and that link lands here with the username already in
+ * user metadata, so the setup step is skipped and the restaurant form is
+ * next. Either way the same user ends up with username, password and a
+ * Google-or-confirmed email, and all three log-in doors open one account.
+ *
+ * WHO LANDS HERE AND WHAT THEY SEE
+ *   - a member of a restaurant already      -> straight to the orders board
+ *   - a Google user with no username yet    -> Finish setup, then the form
+ *   - an email user (username in metadata)  -> the restaurant form
+ *   - nobody signed in                      -> the login page
+ *
+ * Every read is re-run on auth changes because both doors arrive by redirect:
+ * Supabase installs the session from the URL a moment after first paint.
+ */
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { Wordmark } from '../../components';
-import { providerError } from '../../lib/authProviders';
+import { loadMembership } from '../../lib/portalApi';
+import { usernameAvailable, usernameProblem } from '../../lib/auth';
+
+type Phase = 'checking' | 'finish' | 'restaurant';
 
 export function Register() {
   const nav = useNavigate();
-  const [form, setForm] = useState({ owner: '', name: '', city: '', address: '', gstin: '' });
+  const [phase, setPhase] = useState<Phase>('checking');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
-  /**
-   * STEP 1 OF 2 ON THIS PAGE: CONNECT GOOGLE, required.
-   *
-   * Every account has Google attached from day one, so "Continue with Google"
-   * on the login page -- portal or phone -- always lands in this restaurant
-   * rather than minting a second, empty one. ANY Google account: the address
-   * does not have to match the sign-up email, because most owners' Google is
-   * personal and their business email is not. Nothing is adopted silently; a
-   * gmail typed at sign-up is just an address until this step connects an
-   * actual Google identity.
-   *
-   * linkIdentity runs in the browser and comes back to THIS page, so the
-   * identities are re-read on load and on every auth event -- the gate opens
-   * by itself the moment the link lands. `checking` keeps the form from
-   * flashing before the first read answers.
-   */
-  const [googleLinked, setGoogleLinked] = useState(false);
-  const [googleEmail, setGoogleEmail] = useState<string | null>(null);
-  const [checking, setChecking] = useState(true);
-  const [linking, setLinking] = useState(false);
-  /** The username chosen at sign-up, read back off user metadata and passed to
-   *  complete_restaurant_signup, which claims it under the unique index. */
-  const [metaUsername, setMetaUsername] = useState<string | null>(null);
+  /** The signed-in email, read-only on the setup step: Google verified it. */
+  const [email, setEmail] = useState('');
+  /** The handle. Set here on the Google path, or read back off metadata on the
+   *  email path; either way it is what complete_restaurant_signup claims. */
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
 
-  const readIdentities = async () => {
+  const [form, setForm] = useState({ owner: '', name: '', city: '', address: '', gstin: '' });
+
+  const readState = async () => {
     const { data } = await supabase.auth.getUser();
-    const g = (data.user?.identities ?? []).find((i) => i.provider === 'google');
-    setGoogleLinked(!!g);
-    setGoogleEmail((g?.identity_data as any)?.email ?? null);
-    // The handle chosen at sign-up rode here in user metadata; this is the
-    // first call with a session, so this page is where it gets claimed.
-    setMetaUsername((data.user?.user_metadata as any)?.username ?? null);
-    setChecking(false);
+    const user = data.user;
+    if (!user) { nav('/partner', { replace: true }); return; }
+    // Already a member somewhere: this page has nothing to add. Google on the
+    // log-in side redirects here too, so this is the bounce that makes one
+    // redirect target safe for both new and returning owners.
+    const member = await loadMembership();
+    if (member) { nav('/partner/orders', { replace: true }); return; }
+    setEmail(user.email ?? '');
+    const meta = (user.user_metadata as any) ?? {};
+    if (typeof meta.username === 'string' && meta.username) {
+      setUsername(meta.username);
+      setPhase('restaurant');
+    } else {
+      setPhase('finish');
+    }
   };
 
   useEffect(() => {
-    readIdentities();
-    const { data: sub } = supabase.auth.onAuthStateChange(() => { readIdentities(); });
+    readState();
+    const { data: sub } = supabase.auth.onAuthStateChange(() => { readState(); });
     return () => sub.subscription.unsubscribe();
   }, []);
 
-  const connectGoogle = async () => {
-    setLinking(true); setError('');
-    const { error: err } = await supabase.auth.linkIdentity({
-      provider: 'google',
-      options: { redirectTo: `${window.location.origin}/partner/register` },
-    });
-    // Success navigates away; only a failure comes back here. The likeliest
-    // failure is a project toggle, not this code, and the message says so.
-    if (err) {
-      setLinking(false);
-      setError(/manual linking|not enabled|disabled/i.test(err.message)
-        ? 'Google linking is switched off on the server (Supabase → Authentication → Settings → Allow manual linking).'
-        : providerError(err, 'Google'));
+  /**
+   * FINISH SETUP: username + password on the user Google just created.
+   *
+   * updateUser sets the password on the SAME auth user that holds the Google
+   * identity, so "email + password" signs into this account from then on,
+   * and the username rides in metadata until the restaurant is created and
+   * complete_restaurant_signup claims it under the unique index. The
+   * availability check here is the friendly pass; the server checks again.
+   */
+  const finishSetup = async () => {
+    const handle = username.trim().toLowerCase();
+    const problem = usernameProblem(handle);
+    if (problem) { setError(problem); return; }
+    if (password.length < 8) { setError('Choose a password of at least 8 characters.'); return; }
+    setBusy(true); setError('');
+    try {
+      if (!(await usernameAvailable(handle))) { setError('That username is taken. Try another.'); return; }
+      const { error: err } = await supabase.auth.updateUser({
+        password,
+        data: { username: handle, password_set: true },
+      });
+      if (err) {
+        setError(/reauthenticat|nonce/i.test(err.message)
+          ? 'Sign in with Google again, then set your password — the session is too old to change it.'
+          : err.message);
+        return;
+      }
+      setUsername(handle);
+      setPhase('restaurant');
+    } catch (e: any) {
+      setError(e?.message ?? 'Could not finish setup.');
+    } finally {
+      setBusy(false);
     }
   };
 
@@ -81,7 +114,7 @@ export function Register() {
       p_city: form.city.trim() || null,
       p_address: form.address.trim() || null,
       p_gstin: form.gstin.trim() || null,
-      p_username: metaUsername,
+      p_username: username || null,
     });
     setBusy(false);
     if (err) {
@@ -92,6 +125,9 @@ export function Register() {
     nav('/partner/orders', { replace: true });
   };
 
+  const stepLabel = phase === 'finish' ? 'Step 1 of 2' : 'Step 2 of 2';
+  const title = phase === 'finish' ? 'Finish setting up' : 'Register your restaurant';
+
   return (
     <div className="page fade-in" style={{ display: 'flex', flexDirection: 'column', minHeight: '100dvh' }}>
       <div className="topbar">
@@ -99,36 +135,44 @@ export function Register() {
         <span className="badge gold">30-day free trial</span>
       </div>
       <div className="center-fill" style={{ gap: 14 }}>
-        <p className="overline">{googleLinked ? 'Step 2 of 2' : 'Step 1 of 2'}</p>
-        <h1 className="display" style={{ fontSize: 'clamp(26px, 5vw, 34px)' }}>
-          {googleLinked ? 'Register your restaurant' : 'Connect Google'}
-        </h1>
+        {phase !== 'checking' && <p className="overline">{stepLabel}</p>}
+        {phase !== 'checking' && (
+          <h1 className="display" style={{ fontSize: 'clamp(26px, 5vw, 34px)' }}>{title}</h1>
+        )}
 
-        {checking ? null : !googleLinked ? (
-          /* THE GATE. The restaurant form is not drawn until a Google identity
-             is on the account -- required, by decision, so that every account
-             can be opened with one tap on either surface. Any Google account. */
+        {phase === 'checking' ? null : phase === 'finish' ? (
           <div className="glass" style={{ width: '100%', maxWidth: 460, padding: 20, textAlign: 'left' }}>
-            <p className="dim" style={{ fontSize: 14, margin: '0 0 14px' }}>
-              So you can also sign in with one tap. Use <b>any</b> Google account — it does not have to
-              match the email you signed up with.
+            <p className="dim" style={{ fontSize: 14, margin: '0 0 12px' }}>
+              Google confirmed your email. Choose a username and a password so you can also
+              sign in without Google — on the portal and in the app.
             </p>
-            {error && <p style={{ color: 'var(--error)', fontSize: 13.5, marginBottom: 10 }}>{error}</p>}
-            <button className={`btn btn-glass btn-block${linking ? ' is-busy' : ''}`} disabled={linking} onClick={connectGoogle}>
-              <span aria-hidden style={{ marginRight: 8 }}>🇬</span>
-              Connect Google
+            <p className="overline" style={{ marginBottom: 6 }}>Email</p>
+            <input className="code-input" value={email} readOnly aria-readonly style={{ opacity: 0.75 }} />
+            <p className="overline" style={{ margin: '12px 0 6px' }}>Username</p>
+            {/* Lower-cased as typed, so what the owner sees is what is stored.
+                Instagram's alphabet: letters, numbers, dot, underscore. */}
+            <input
+              className="code-input" type="text" autoComplete="username" autoFocus
+              placeholder="ashwamedha_lodge" value={username}
+              onChange={(e) => setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9._]/g, '').slice(0, 30))} />
+            <p className="overline" style={{ margin: '12px 0 6px' }}>Password</p>
+            <input className="code-input" type="password" autoComplete="new-password"
+              placeholder="At least 8 characters" value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && finishSetup()} />
+            {error && <p style={{ color: 'var(--error)', fontSize: 13.5, marginTop: 10 }}>{error}</p>}
+            <button className={`btn btn-glass btn-block${busy ? ' is-busy' : ''}`} style={{ marginTop: 16 }} disabled={busy} onClick={finishSetup}>
+              Continue
             </button>
             <p className="dim" style={{ fontSize: 12, marginTop: 10 }}>
-              Google opens in this tab and brings you straight back here. Nothing is posted anywhere.
+              Your restaurant details are next. No card, nothing is charged.
             </p>
           </div>
         ) : (
         <div className="glass" style={{ width: '100%', maxWidth: 460, padding: 20, textAlign: 'left' }}>
-          {googleEmail && (
-            <p className="dim" style={{ fontSize: 12.5, margin: '0 0 12px' }}>
-              ✓ Google connected · {googleEmail}
-            </p>
-          )}
+          <p className="dim" style={{ fontSize: 12.5, margin: '0 0 12px' }}>
+            ✓ Signed in as {email}{username ? ` · @${username}` : ''}
+          </p>
           <p className="overline" style={{ marginBottom: 6 }}>Your name</p>
           <input className="code-input" value={form.owner} onChange={(e) => setForm({ ...form, owner: e.target.value })} />
           <p className="overline" style={{ margin: '12px 0 6px' }}>Restaurant name</p>

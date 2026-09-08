@@ -36,12 +36,28 @@ export async function usernameAvailable(handle: string): Promise<boolean> {
 
 const BAD_CREDS = 'Username, email or password is incorrect.';
 
+/** Where a reset link lands: the portal's login page, which is also its
+ *  recovery screen (it reads type=recovery off the fragment). Without this
+ *  Supabase falls back to the Site URL, which is the marketing landing --
+ *  a page that ignores the token, so the link would open and do nothing. */
+export const RESET_REDIRECT = () => `${window.location.origin}/partner`;
+
+/** Supabase's own sentences, translated. "Email not confirmed" is the one
+ *  the email door produces on purpose: an address that never opened its
+ *  link stays unverified, and that is the guard, so the message says what
+ *  to do rather than calling the password wrong. */
+export function loginErrorSentence(message: string): string {
+  if (/email not confirmed/i.test(message)) return 'Confirm your email first — open the link we sent you, then log in.';
+  if (message === 'Invalid login credentials') return BAD_CREDS;
+  return message;
+}
+
 /** Resolves to a signed-in session or throws with a sentence for the reader. */
 export async function loginWithIdentifier(identifier: string, password: string): Promise<void> {
   const id = identifier.trim();
   if (isEmailLike(id)) {
     const { error } = await supabase.auth.signInWithPassword({ email: id, password });
-    if (error) throw new Error(error.message === 'Invalid login credentials' ? BAD_CREDS : error.message);
+    if (error) throw new Error(loginErrorSentence(error.message));
     return;
   }
   const { data, error } = await supabase.functions.invoke('username-login', {
@@ -70,7 +86,7 @@ export async function loginWithIdentifier(identifier: string, password: string):
 export async function resetByIdentifier(identifier: string): Promise<void> {
   const id = identifier.trim();
   if (isEmailLike(id)) {
-    const { error } = await supabase.auth.resetPasswordForEmail(id);
+    const { error } = await supabase.auth.resetPasswordForEmail(id, { redirectTo: RESET_REDIRECT() });
     if (error) throw error;
     return;
   }

@@ -1,7 +1,10 @@
-/** Restaurant Portal sign-in: email + password, or Google -- two doors to one
- *  account, because sign-up links a Google identity to every user it creates.
- *  Apple is drawn where it is expected and disabled until its provider is
- *  configured. Phone/SMS is gone -- see lib/authProviders for the model. */
+/** Restaurant Portal sign-in. THE MODEL, as he finalised it: Google is the
+ *  front door of sign-up (verified email, no inbox step; username + password
+ *  are set on Register right after), email sign-up is the secondary door
+ *  (username + password up front, confirmed by LINK). Log in is one field --
+ *  username OR email -- plus password, or the Google button; all of them open
+ *  the same account. No PIN, no OTP anywhere. Apple is drawn where it is
+ *  expected and disabled until its provider is configured. */
 import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
@@ -105,14 +108,19 @@ export function PartnerLogin() {
    * GOOGLE. A redirect, not a popup: a popup is what mobile browsers block,
    * and the counter machine is as likely to be a phone as a laptop.
    *
-   * The redirect comes back to the orders board. Supabase resolves the session
-   * from the URL on load, so there is nothing to hand-carry across the hop.
+   * ONE REDIRECT TARGET FOR BOTH MODES: Register. It bounces anyone who is
+   * already a member to the orders board, asks a brand-new Google user for a
+   * username and password ("Finish setup"), and shows the restaurant form to
+   * the rest -- so the button does the right thing whether the owner meant
+   * "log in" or "sign up", and there is no path on which Google mints a
+   * second, empty account without the owner noticing. Supabase resolves the
+   * session from the URL on load, so there is nothing to hand-carry.
    */
   const signInWithGoogle = async () => {
     setBusy(true); setError('');
     const { error: err } = await supabase.auth.signInWithOAuth({
       provider: 'google',
-      options: { redirectTo: `${window.location.origin}/partner/orders` },
+      options: { redirectTo: `${window.location.origin}/partner/register` },
     });
     // On success the browser is already navigating away; only a failure
     // returns here with the page still on screen.
@@ -185,9 +193,9 @@ export function PartnerLogin() {
     // stricter of the two, which is also the one already shipping.
     if (pw.length < 8) { setError('Choose a password of at least 8 characters.'); return; }
     /* emailRedirectTo: the confirmation link lands on Register, where the
-       next two steps live -- Connect Google, then the restaurant -- rather
-       than back on this form to log in a second time. Supabase reads the
-       session out of the URL on that page. */
+       restaurant form is -- the username and password were collected here,
+       so Register skips its setup step. Supabase reads the session out of
+       the URL on that page. */
     const handle = username.trim().toLowerCase();
     const problem = usernameProblem(handle);
     if (problem) { setError(problem); return; }
@@ -319,7 +327,7 @@ export function PartnerLogin() {
         </h1>
         <p className="muted" style={{ maxWidth: 440, fontSize: 14.5 }}>
           {mode === 'signup'
-            ? 'Create your account with an email and a password, then register your restaurant — QR ordering, live kitchen board and billing. 30-day free trial, no card, zero commission.'
+            ? 'Continue with Google, pick a username and password, then register your restaurant — QR ordering, live kitchen board and billing. 30-day free trial, no card, zero commission.'
             : 'Live orders, menu, billing, QR codes and your plan — from any phone or computer. Zero commission: diners always pay you directly.'}
         </p>
 
@@ -348,7 +356,7 @@ export function PartnerLogin() {
               <strong>Check your email</strong>
               <p className="dim" style={{ fontSize: 13.5, marginTop: 6 }}>
                 We sent a confirmation link to <b>{email.trim()}</b>. Open it and you will land on the
-                next step — connecting Google, then your restaurant details. It takes under a minute.
+                next step — your restaurant details. Until the link is opened, the account cannot log in.
               </p>
               <button className="chip" style={{ marginTop: 10 }} onClick={() => { setSignupSent(false); setError(''); }}>
                 ← Use a different email
@@ -360,26 +368,24 @@ export function PartnerLogin() {
               belongs at the top; the email field is for anyone who would rather
               type an address than hand over an account. */}
           <div style={{ display: 'grid', gap: 8, marginTop: 10 }}>
-            {/* THE TRAP THIS COPY EXISTS TO STOP. Supabase merges a Google
-                sign-in into an existing account only when the email matches.
-                On LOG IN, an unlinked Google account with a different address
-                does not fail -- it quietly creates a brand-new, empty
-                restaurant and signs the owner into that. The one-line hint
-                under the button is what sends them to sign in with their
-                email first and link Google from Account, which attaches any
-                Google account to the restaurant they already have. On SIGN UP
-                the same button is exactly right, so the hint only shows on
-                log in. */}
+            {/* GOOGLE IS THE FRONT DOOR. On sign-up it is the primary path:
+                Google hands back a verified email, so there is no inbox step,
+                and Register asks for the username and password next. On log
+                in it opens the same account -- Supabase attaches a Google
+                sign-in to the user whose verified email matches, and every
+                Google-first account already carries the identity. The hint
+                says so in one line; it used to warn about a second account,
+                which this model no longer has a path to. */}
             <button className={`btn btn-glass btn-block${busy ? ' is-busy' : ''}`} disabled={busy}
               onClick={signInWithGoogle}>
               <span aria-hidden style={{ marginRight: 8 }}>🇬</span>
               Continue with Google
             </button>
-            {mode === 'login' && (
-              <p className="dim" style={{ fontSize: 12, margin: '-2px 0 0', textAlign: 'center' }}>
-                Every account connects Google at sign-up, so this opens yours. Signed up before that? Link it from Account &amp; security.
-              </p>
-            )}
+            <p className="dim" style={{ fontSize: 12, margin: '-2px 0 0', textAlign: 'center' }}>
+              {mode === 'signup'
+                ? 'Fastest: Google confirms your email, then you pick a username and password.'
+                : 'Same account as your username and password.'}
+            </p>
             {/* Drawn on iOS and the web, hidden on Android. Disabled until the
                 Apple Developer config exists -- pressing it says so rather than
                 failing with a provider error nobody can act on. */}
@@ -405,7 +411,7 @@ export function PartnerLogin() {
               as "and also fill this in again". */}
           {!(mode === 'signup' && signupSent) && (<>
           <p className="overline" style={{ textAlign: 'center', margin: '14px 0 4px', opacity: 0.7 }}>
-            or use your email
+            {mode === 'signup' ? 'or sign up with email' : 'or use your username or email'}
           </p>
 
           {(
@@ -439,7 +445,7 @@ export function PartnerLogin() {
               <p className="overline" style={{ margin: '14px 0 6px' }}>Password</p>
               <input className="code-input" type="password"
                 autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
-                placeholder={mode === 'signup' ? 'At least 6 characters' : '••••••••'}
+                placeholder={mode === 'signup' ? 'At least 8 characters' : '••••••••'}
                 ref={passwordRef} value={password} onChange={(e) => setPassword(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && (mode === 'signup' ? signUpEmail() : signInEmail())} />
               {error && <p style={{ color: 'var(--error)', fontSize: 13.5, marginTop: 10 }}>{error}</p>}

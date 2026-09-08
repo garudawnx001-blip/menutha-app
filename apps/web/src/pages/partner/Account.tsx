@@ -90,7 +90,7 @@ export function Account() {
       <p className="overline" style={{ marginBottom: 6 }}>Sign-in methods</p>
       <div className="glass" style={{ padding: 4, marginBottom: 14 }}>
         <div className="acct-row">
-          <span>Email code</span>
+          <span>Username &amp; password</span>
           <span className="acct-state ok">Active</span>
         </div>
         <div className="acct-row">
