@@ -1,7 +1,6 @@
 import React from 'react';
 import { BrowserRouter, HashRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { StoreProvider } from './store';
-import { Landing } from './pages/Landing';
 import { Restaurants } from './pages/Restaurants';
 import { Scan } from './pages/Scan';
 import { TableGate } from './pages/TableGate';
@@ -40,7 +39,11 @@ export function App() {
       <div className="ambient" aria-hidden />
       <Router>
         <Routes>
-          <Route path="/" element={<Landing />} />
+          {/* '/' is the static marketing page, copied over index.html at deploy
+              (see .github/workflows/deploy.yml). Inside the SPA -- hash-router
+              previews -- it has nothing to show, so it goes where every other
+              unknown path goes. */}
+          <Route path="/" element={<Navigate to="/table" replace />} />
           <Route path="/restaurants" element={<Restaurants />} />
           <Route path="/r/:slug" element={<PublicRestaurant />} />
           {/* THE DINER FALLBACK. Every session-less diner path lands here --
