@@ -56,3 +56,28 @@ export function gstBreakdown(base: number): GstBreakdown {
 
 /** The charged amount alone, for a button label. */
 export const gstCharge = (base: number) => gstBreakdown(base).charge;
+
+/**
+ * The checkout itemisation, with the TOTAL taken from the plan row rather
+ * than recomputed.
+ *
+ * charge_inr is the amount on the Razorpay plan: it is what the mandate
+ * actually collects, so it is the one figure that must not be derived. GST is
+ * 18% of the base, and whatever is left over is the round-off -- at most 50
+ * paise, and shown rather than folded into the tax line so the invoice
+ * reconciles to the paisa. If the two ever disagree by more than that, the
+ * plan row and the Razorpay plan have drifted and the caller should say so
+ * rather than quietly bill a different number.
+ */
+export interface GstLines {
+  base: number; cgst: number; sgst: number; gst: number; roundOff: number; total: number; drifted: boolean;
+}
+export function gstLines(base: number, charged?: number | null): GstLines {
+  const b = gstBreakdown(base);
+  const total = charged ?? b.charge;
+  const roundOff = p2(total - b.exact);
+  return {
+    base: b.base, cgst: b.cgst, sgst: b.sgst, gst: b.igst,
+    roundOff, total, drifted: Math.abs(roundOff) > 0.5,
+  };
+}

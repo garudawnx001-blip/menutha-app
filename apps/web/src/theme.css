@@ -2036,3 +2036,18 @@ select.code-input:focus { border-color: var(--primary); }
 
 /* The ticket an Alerts row named (?order= / ?table=). Accent at low alpha, like the app. */
 .ticket-focus { border-color: rgba(217, 119, 87, 0.55); box-shadow: 0 0 0 3px rgba(217, 119, 87, 0.10), var(--shadow-sm); }
+
+/* The charge itemisation on a plan card: what the mandate will take, in the
+   same lines the receipt prints. Small, quiet, and always visible -- the
+   total is never something the owner has to press to discover. */
+.plan-charge {
+  display: flex; flex-direction: column; gap: 3px;
+  padding: 10px 12px; border-radius: var(--r-md, 12px);
+  background: var(--sand); border: 1px solid var(--line-strong);
+  font-size: 12.5px; color: var(--text-muted);
+}
+.plan-charge > div { display: flex; justify-content: space-between; gap: 12px; }
+.plan-charge-total {
+  margin-top: 4px; padding-top: 6px; border-top: 1px solid var(--line-strong);
+  color: var(--ink); font-weight: 700;
+}

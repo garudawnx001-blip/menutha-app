@@ -3,7 +3,7 @@
  *  Razorpay hosted Checkout (no card data in our code), payment history,
  *  cancel-at-cycle-end. */
 import React, { useEffect, useMemo, useState } from 'react';
-import { gstBreakdown } from '../../lib/gst';
+import { gstLines } from '../../lib/gst';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { inr } from '../../lib/types';
@@ -14,7 +14,17 @@ interface Plan {
   id: string;
   kind: 'tier' | 'addon';
   name: string;
+  /** The BASE, pre-GST: what the card leads with and what the receipt calls
+   *  the taxable value. */
   price_inr: number;
+  /** What Razorpay actually collects, GST included. Authoritative -- it is the
+   *  amount on the Razorpay plan, so it is displayed, never derived. */
+  charge_inr: number | null;
+  /** Which entitlement the row grants: a 6-month Growth plan is Growth. */
+  tier: string | null;
+  /** Billing cycle in months: 1 | 3 | 6 | 12. */
+  duration_months: number;
+  razorpay_plan_id: string | null;
   features: string[];
   sort_order: number;
 }
@@ -27,22 +37,23 @@ interface PlanState {
   addons: string[];
 }
 
-/** Billing periods. The discounts are a commercial decision, not a technical
- *  one — they live here as one line each so they can be changed without
- *  touching anything else. Checkout still runs monthly: Razorpay is not wired
- *  for longer terms yet, so the longer periods are quoted honestly and settled
- *  by invoice rather than pretending the button does something it doesn't. */
-const PERIODS = [
-  { key: 'monthly', label: 'Monthly', months: 1, discount: 0 },
-  { key: 'half', label: '6 months', months: 6, discount: 0.10 },
-  { key: 'annual', label: 'Annual', months: 12, discount: 0.20 },
+/**
+ * Billing durations, and every one of them is a REAL Razorpay plan now.
+ *
+ * This used to quote longer terms from a discount multiplier and then send
+ * the owner to a contact page, because only monthly existed at the gateway.
+ * All twelve (tier x duration) plans exist, so the term is a row in
+ * subscription_plans with its own id, its own price and its own mandate --
+ * nothing here computes a price any more, it only picks which rows to show.
+ */
+const DURATIONS = [
+  { months: 1, label: 'Monthly' },
+  { months: 3, label: '3 months' },
+  { months: 6, label: '6 months' },
+  { months: 12, label: '12 months' },
 ] as const;
-type PeriodKey = (typeof PERIODS)[number]['key'];
 
-/** Price for a whole term, rounded to the rupee. */
-function termPrice(monthly: number, months: number, discount: number) {
-  return Math.round(monthly * months * (1 - discount));
-}
+const perMonthOf = (p: Plan) => Math.round(p.price_inr / Math.max(1, p.duration_months));
 
 const FEATURE_LABELS: Record<string, string> = {
   qr_ordering: 'QR ordering & billing',
@@ -65,16 +76,27 @@ const FEATURE_LABELS: Record<string, string> = {
 
 import { loadCheckout } from '../../lib/razorpayCheckout';
 
-/** The design preview's plans: what subscription_plans holds today, with no
- *  Razorpay ids -- so the preview shows the "opens soon" state honestly. */
-const PREVIEW_PLANS = [
-  { id: 'basic', kind: 'tier', name: 'Basic', price_inr: 499, razorpay_plan_id: null, sort_order: 1,
-    features: ['qr_ordering', 'dynamic_menu', 'instant_price_edit', 'basic_theme', 'single_qr_set'] },
-  { id: 'growth', kind: 'tier', name: 'Growth', price_inr: 999, razorpay_plan_id: null, sort_order: 2,
-    features: ['qr_ordering', 'dynamic_menu', 'instant_price_edit', 'basic_theme', 'analytics', 'multi_language', 'inventory_alerts', 'multi_qr', 'excel_upload'] },
-  { id: 'enterprise', kind: 'tier', name: 'Enterprise', price_inr: 2999, razorpay_plan_id: null, sort_order: 3,
-    features: ['qr_ordering', 'dynamic_menu', 'instant_price_edit', 'basic_theme', 'analytics', 'multi_language', 'inventory_alerts', 'multi_qr', 'excel_upload', 'multi_location', 'white_label', 'dedicated_manager', 'priority_support'] },
-];
+/** The design preview's plans: the twelve rows the migration writes, so the
+ *  preview shows the real durations and the real arithmetic. */
+const PREVIEW_FEATURES: Record<string, string[]> = {
+  basic: ['qr_ordering', 'dynamic_menu', 'instant_price_edit', 'basic_theme', 'single_qr_set'],
+  growth: ['qr_ordering', 'dynamic_menu', 'instant_price_edit', 'basic_theme', 'analytics', 'multi_language', 'inventory_alerts', 'multi_qr', 'excel_upload'],
+  enterprise: ['qr_ordering', 'dynamic_menu', 'instant_price_edit', 'basic_theme', 'analytics', 'multi_language', 'inventory_alerts', 'multi_qr', 'excel_upload', 'multi_location', 'white_label', 'dedicated_manager', 'priority_support'],
+};
+const PREVIEW_PLANS: Plan[] = ([
+  ['basic', 1, 499, 589], ['growth', 1, 999, 1179], ['enterprise', 1, 2999, 3539],
+  ['basic', 3, 1422, 1678], ['growth', 3, 2847, 3359], ['enterprise', 3, 8547, 10085],
+  ['basic', 6, 2695, 3180], ['growth', 6, 5395, 6366], ['enterprise', 6, 16195, 19110],
+  ['basic', 12, 4790, 5652], ['growth', 12, 9590, 11316], ['enterprise', 12, 28790, 33972],
+] as [string, number, number, number][]).map(([tier, dm, base, charge]) => ({
+  id: dm === 1 ? tier : `${tier}_${dm}m`,
+  kind: 'tier' as const,
+  name: tier[0].toUpperCase() + tier.slice(1) + (dm === 1 ? '' : ` · ${dm} months`),
+  price_inr: base, charge_inr: charge, tier, duration_months: dm,
+  razorpay_plan_id: 'plan_preview',
+  features: PREVIEW_FEATURES[tier],
+  sort_order: tier === 'basic' ? 1 : tier === 'growth' ? 2 : 3,
+}));
 
 export function PlanScreen({ preview }: { preview?: boolean } = {}) {
   const nav = useNavigate();
@@ -83,7 +105,7 @@ export function PlanScreen({ preview }: { preview?: boolean } = {}) {
   const [state, setState] = useState<PlanState | null>(null);
   const [history, setHistory] = useState<{ event_type: string; processed_at: string }[]>([]);
   const [busyPlan, setBusyPlan] = useState('');
-  const [period, setPeriod] = useState<PeriodKey>('monthly');
+  const [months, setMonths] = useState<number>(1);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
 
@@ -124,7 +146,14 @@ export function PlanScreen({ preview }: { preview?: boolean } = {}) {
     ]);
     setPlans((planRows ?? []) as Plan[]);
     setState(planState as PlanState);
-    void subs; // next_charge_at shown via state below when present
+    // The row the live mandate is on, so Cancel appears on that card and not
+    // on its three sibling durations.
+    const live = (subs ?? []).find((sr: any) => ['authenticated', 'active', 'pending', 'halted'].includes(sr.status));
+    setActivePlanId(live?.plan_id ?? null);
+    // Open on the duration already being paid for, so a 12-month subscriber
+    // does not land on Monthly and think their plan has vanished.
+    const liveMonths = (planRows ?? []).find((pr: any) => pr.id === live?.plan_id)?.duration_months;
+    if (liveMonths) setMonths(liveMonths as number);
 
     const { data: events } = await supabase
       .from('subscription_events')
@@ -141,6 +170,39 @@ export function PlanScreen({ preview }: { preview?: boolean } = {}) {
     () => (state ? entitlementsFor(state) : null),
     [state],
   );
+
+  /** Tier rows only, cheapest tier first then longest term -- add-ons have
+   *  their own grid below and no duration. */
+  const tiers = useMemo(
+    () => plans.filter((p) => p.kind === 'tier')
+      .sort((a, b) => a.sort_order - b.sort_order || a.duration_months - b.duration_months),
+    [plans],
+  );
+  /** The monthly BASE for a tier, used only to say what a longer term saves.
+   *  Read from the monthly row rather than divided out of the longer one, so
+   *  the saving is the real difference between two real prices. */
+  const monthlyBaseFor = (tier: string | null) =>
+    (tier ? tiers.find((p) => p.tier === tier && p.duration_months === 1)?.price_inr ?? 0 : 0);
+
+  /** The one line every card carries about when money actually moves. The
+   *  trial is ours (start_at on the subscription), so a mandate set up today
+   *  authorises a nominal amount that Razorpay refunds, and the first real
+   *  charge waits for the trial to end. */
+  const trialNote = useMemo(() => {
+    // Computed here rather than through daysLeft(), which is declared further
+    // down: a const arrow function is not hoisted, and reading it from a memo
+    // that runs during this render would throw before it exists.
+    const end = state?.trial_ends_at ? Date.parse(state.trial_ends_at) : NaN;
+    const left = Number.isFinite(end) ? Math.max(0, Math.ceil((end - Date.now()) / 864e5)) : 0;
+    return left > 0
+      ? `Nothing is charged today — your first payment is in ${left} day(s), when the trial ends.`
+      : 'Set-up authorises a nominal amount that Razorpay refunds automatically.';
+  }, [state]);
+
+  /** Which plan row the live subscription is actually on, so only that card
+   *  offers Cancel. Null while unknown, which is why the card falls back to
+   *  the tier match. */
+  const [activePlanId, setActivePlanId] = useState<string | null>(null);
 
   const callFn = async (action: 'subscribe' | 'cancel', planId: string) => {
     setBusyPlan(planId);
@@ -159,7 +221,14 @@ export function PlanScreen({ preview }: { preview?: boolean } = {}) {
         key: data.razorpay_key_id,
         subscription_id: data.razorpay_subscription_id,
         name: 'Menutha',
-        description: `${data.plan.name} — ${inr(data.plan.price_inr)}/month`,
+        // What the sheet says must be what the mandate takes, GST included --
+        // the plan row's charged figure, not its base.
+        description: (() => {
+          const row = plans.find((x) => x.id === planId);
+          const total = row ? gstLines(row.price_inr, row.charge_inr).total : data.plan?.price_inr;
+          const per = row && row.duration_months > 1 ? `every ${row.duration_months} months` : 'per month';
+          return `${data.plan?.name ?? row?.name ?? 'Menutha'} — ${inr(total)} ${per}, GST included`;
+        })(),
         theme: { color: '#1B5E3F' },
         handler: () => { setTimeout(load, 2500); }, // webhook flips state; refresh shortly after
       });
@@ -226,74 +295,87 @@ export function PlanScreen({ preview }: { preview?: boolean } = {}) {
       {error && <p style={{ color: 'var(--error)', fontSize: 14, marginTop: 12 }}>{error}</p>}
 
       <h2 className="cat-heading">Plans</h2>
-      {/* Billing period. Longer terms are quoted at a discount; monthly is the
-          only one the gateway can take today, so the others say so plainly
-          rather than dropping the diner into a monthly checkout. */}
+      {/* HOW LONG YOU PAY FOR, and each one is a real plan at the gateway.
+          A duration with no rows is not offered -- before the migration runs
+          only monthly exists, and a tab that leads to an empty grid is worse
+          than a tab that is not there. */}
       <div className="seg" style={{ width: 'fit-content', marginBottom: 12 }}>
-        {PERIODS.map((pd) => (
+        {DURATIONS.filter((d) => tiers.some((p) => p.duration_months === d.months)).map((d) => (
           <button
-            key={pd.key}
-            className={period === pd.key ? 'seg-btn active' : 'seg-btn'}
-            onClick={() => setPeriod(pd.key)}
+            key={d.months}
+            className={months === d.months ? 'seg-btn active' : 'seg-btn'}
+            onClick={() => setMonths(d.months)}
           >
-            {pd.label}{pd.discount > 0 ? ` · save ${Math.round(pd.discount * 100)}%` : ''}
+            {d.label}
           </button>
         ))}
       </div>
       <div className="menu-grid">
-        {plans.filter((p) => p.kind === 'tier').map((p) => {
-          const isCurrent = state?.plan_tier === p.id && ent?.state === 'active';
-          const pd = PERIODS.find((x) => x.key === period)!;
-          const term = termPrice(p.price_inr, pd.months, pd.discount);
-          const perMonth = Math.round(term / pd.months);
-          const saved = p.price_inr * pd.months - term;
+        {tiers.filter((p) => p.duration_months === months).map((p) => {
+          /** The tier this row grants, and whether THIS row is the one being
+           *  billed -- not merely its tier, or all four durations of a tier
+           *  would claim to be current and three of their Cancel presses
+           *  would 404 on a subscription that does not exist. */
+          const isTier = !!p.tier && state?.plan_tier === p.tier && ent?.state === 'active';
+          const isCurrent = isTier && (!activePlanId || activePlanId === p.id);
+          const g = gstLines(p.price_inr, p.charge_inr);
+          const perMonth = perMonthOf(p);
+          /** Saving against paying monthly for the same length of time. Off
+           *  the BASE, because that is the number being compared. */
+          const monthlyBase = monthlyBaseFor(p.tier);
+          const saved = monthlyBase ? monthlyBase * p.duration_months - p.price_inr : 0;
           return (
             <div key={p.id} className="glass" style={{ padding: 18, display: 'flex', flexDirection: 'column', gap: 10, borderColor: isCurrent ? 'var(--primary)' : undefined }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
-                <h3 className="display" style={{ fontSize: 21 }}>{p.name}</h3>
+                <h3 className="display" style={{ fontSize: 21 }}>{p.tier ? p.tier[0].toUpperCase() + p.tier.slice(1) : p.name}</h3>
                 <span style={{ textAlign: 'right' }}>
-                  {/* THE CHARGED FIGURE LEADS, the base explains it -- same as
-                      the app. An owner who sees ₹499 on the card and ₹589 on
-                      the mandate thinks they were overcharged; the mandate
-                      amount is the one that must be no surprise. Multi-month
-                      terms below keep their existing base arithmetic; the GST
-                      line applies to the monthly figure the mandate collects. */}
+                  {/* THE BASE LEADS, and the total is directly under it. The
+                      base is the price this product quotes everywhere -- the
+                      pricing page, the marketing site -- so leading with it is
+                      what makes those pages and this one agree. The charged
+                      total is never more than a line away, because the mandate
+                      amount is the one that must be no surprise. */}
                   <span style={{ fontWeight: 700, color: 'var(--primary)' }}>
-                    {inr(gstBreakdown(perMonth).charge)}<span className="dim" style={{ fontSize: 12 }}>/mo</span>
-                  </span>
-                  {perMonth > 0 && (
-                    <span className="dim" style={{ display: 'block', fontSize: 11.5 }}>
-                      {inr(perMonth)} + 18% GST
+                    {inr(p.price_inr)}
+                    <span className="dim" style={{ fontSize: 12 }}>
+                      {p.duration_months === 1 ? '/mo' : ` / ${p.duration_months} months`}
                     </span>
-                  )}
-                  {pd.months > 1 && p.price_inr > 0 && (
+                  </span>
+                  <span className="dim" style={{ display: 'block', fontSize: 11.5 }}>
+                    + 18% GST · {inr(g.total)} billed
+                  </span>
+                  {p.duration_months > 1 && (
                     <span className="dim" style={{ display: 'block', fontSize: 11.5 }}>
-                      {inr(term)} every {pd.months} months
+                      works out at {inr(perMonth)}/month
                     </span>
                   )}
                 </span>
               </div>
-              {pd.months > 1 && saved > 0 && (
-                <span className="badge gold" style={{ alignSelf: 'flex-start' }}>Saves {inr(saved)}</span>
+              {saved > 0 && (
+                <span className="badge gold" style={{ alignSelf: 'flex-start' }}>Saves {inr(saved)} vs monthly</span>
               )}
               <ul style={{ listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 6 }}>
                 {p.features.map((f) => (
                   <li key={f} className="muted" style={{ fontSize: 13.5 }}>✓ {FEATURE_LABELS[f] ?? f}</li>
                 ))}
               </ul>
+
+              {/* WHAT THE MANDATE WILL TAKE, itemised the way the receipt
+                  itemises it. CGST and SGST are the two halves Indian GST is
+                  charged in; the round-off is shown rather than folded into
+                  the tax line so the invoice reconciles to the paisa. */}
+              <div className="plan-charge">
+                <div><span>Plan{p.duration_months > 1 ? ` · ${p.duration_months} months` : ''}</span><span>{inr(g.base)}</span></div>
+                <div><span>CGST 9%</span><span>{inr(g.cgst)}</span></div>
+                <div><span>SGST 9%</span><span>{inr(g.sgst)}</span></div>
+                {g.roundOff !== 0 && <div><span>Round off</span><span>{inr(g.roundOff)}</span></div>}
+                <div className="plan-charge-total"><span>Total {p.duration_months === 1 ? 'per month' : `every ${p.duration_months} months`}</span><span>{inr(g.total)}</span></div>
+              </div>
+
               {isCurrent ? (
                 <button className="btn btn-ghost btn-block" disabled={busyPlan !== ''} onClick={() => callFn('cancel', p.id)}>
                   {busyPlan === p.id ? 'Working…' : 'Current plan · Cancel at cycle end'}
                 </button>
-              ) : pd.months > 1 ? (
-                <>
-                  <a className="btn btn-ghost btn-block" href="/contact/">
-                    Ask us about {pd.label.toLowerCase()} billing
-                  </a>
-                  <p className="dim" style={{ fontSize: 11.5 }}>
-                    Longer terms are invoiced directly — online checkout is monthly for now.
-                  </p>
-                </>
               ) : (
                 <button className="btn btn-primary btn-block" disabled={busyPlan !== ''}
                   onClick={() => (p.razorpay_plan_id
@@ -301,9 +383,12 @@ export function PlanScreen({ preview }: { preview?: boolean } = {}) {
                     : setError('Online subscription is being switched on. Your 30-day trial continues meanwhile, and nothing is charged.'))}>
                   {busyPlan === p.id ? 'Opening checkout…'
                     : !p.razorpay_plan_id ? 'Online payment opens soon'
-                    : (ent?.state === 'active' ? `Switch to ${p.name}` : `Choose ${p.name}`)}
+                    : (ent?.state === 'active' ? 'Switch to this plan' : `Choose ${p.tier ?? p.name}`)}
                 </button>
               )}
+              <p className="dim" style={{ fontSize: 11.5, margin: 0 }}>
+                {trialNote}
+              </p>
             </div>
           );
         })}
