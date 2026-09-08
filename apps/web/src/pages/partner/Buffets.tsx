@@ -30,7 +30,40 @@ import { usePartner } from './PartnerShell';
 import { inr } from '../../lib/types';
 import { Spinner } from '../../components';
 
-const blankDraft = { name: '', kind: 'complimentary' as BuffetKind, price: '', items: [] as string[] };
+const blankDraft = {
+  name: '', kind: 'complimentary' as BuffetKind, price: '',
+  items: [] as string[], from: '', to: '',
+};
+
+/**
+ * THE SERVING WINDOW, and why it is a time rather than a timestamp on screen.
+ *
+ * The diner page has always PRINTED this window -- "🕒 7:30 AM – 10:30 AM" --
+ * and nothing in the portal could ever set it, so every buffet showed no hours
+ * however carefully the owner filled the rest in. saveBuffet already persisted
+ * starts_at/ends_at; only the form never asked. That is the whole fix.
+ *
+ * The column is a timestamptz and a breakfast window is a time of DAY that
+ * repeats, so the two do not quite line up. The diner side only ever formats
+ * the time part, so a date is carried but never read. These helpers keep that
+ * honest in one place: the owner picks a time, it is stored against today's
+ * date, and both surfaces read back the same clock face.
+ */
+const isoToTime = (iso: string | null): string => {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+};
+
+const timeToIso = (hhmm: string): string | null => {
+  if (!hhmm) return null;
+  const [h, m] = hhmm.split(':').map(Number);
+  if (Number.isNaN(h) || Number.isNaN(m)) return null;
+  const d = new Date();
+  d.setHours(h, m, 0, 0);
+  return d.toISOString();
+};
 
 export function Buffets() {
   const { restaurant } = usePartner();
@@ -60,7 +93,10 @@ export function Buffets() {
 
   const startEdit = (b: Buffet) => {
     setEditing(b.id);
-    setDraft({ name: b.name, kind: b.kind, price: String(b.price ?? ''), items: b.items ?? [] });
+    setDraft({
+      name: b.name, kind: b.kind, price: String(b.price ?? ''), items: b.items ?? [],
+      from: isoToTime(b.starts_at), to: isoToTime(b.ends_at),
+    });
   };
 
   const cancel = () => { setEditing(null); setDraft(blankDraft); };
@@ -71,6 +107,13 @@ export function Buffets() {
       setError('A paid buffet needs a per-person price.');
       return;
     }
+    // Both ends or neither: the diner page only prints a window when it has
+    // two, so one half saved alone is a value the owner set and nobody ever
+    // sees -- which reads as the field not working.
+    if ((draft.from && !draft.to) || (draft.to && !draft.from)) {
+      setError('Give the serving window a start and an end, or leave both blank.');
+      return;
+    }
     setBusy(true); setError('');
     try {
       await saveBuffet(restaurant.id, {
@@ -79,6 +122,8 @@ export function Buffets() {
         kind: draft.kind,
         price: Number(draft.price) || 0,
         items: draft.items,
+        starts_at: timeToIso(draft.from),
+        ends_at: timeToIso(draft.to),
       });
       cancel();
       await load();
@@ -161,7 +206,31 @@ export function Buffets() {
           )}
         </div>
 
-        <p className="overline" style={{ marginBottom: 6 }}>
+        {/* THE SERVING WINDOW. The diner page has always printed this and the
+            portal could never set it, so every buffet showed no hours no matter
+            how carefully the rest was filled in. Optional -- an all-day buffet
+            leaves both blank and the diner simply sees no clock line. */}
+        <p className="overline" style={{ marginTop: 12, marginBottom: 6 }}>
+          Served between <span className="dim" style={{ fontWeight: 400 }}>(optional)</span>
+        </p>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <input
+            className="code-input" type="time" style={{ flex: '0 0 140px' }}
+            aria-label="Serving starts at"
+            value={draft.from} onChange={(e) => setDraft({ ...draft, from: e.target.value })} />
+          <span className="dim">to</span>
+          <input
+            className="code-input" type="time" style={{ flex: '0 0 140px' }}
+            aria-label="Serving ends at"
+            value={draft.to} onChange={(e) => setDraft({ ...draft, to: e.target.value })} />
+          {(draft.from || draft.to) && (
+            <button className="chip" onClick={() => setDraft({ ...draft, from: '', to: '' })}>
+              Clear
+            </button>
+          )}
+        </div>
+
+        <p className="overline" style={{ marginTop: 12, marginBottom: 6 }}>
           What is available ({draft.items.length} selected)
         </p>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, maxHeight: 260, overflowY: 'auto' }}>

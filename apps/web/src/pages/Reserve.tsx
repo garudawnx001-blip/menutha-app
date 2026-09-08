@@ -19,6 +19,7 @@ import { useStore } from '../store';
 import { createReservation } from '../lib/api';
 import { Wordmark } from '../components';
 import { useT } from '../lib/i18n';
+import { supabase } from '../lib/supabase';
 
 /** Local date, not toISOString().slice(0,10). ISO is UTC, so after 5:30am IST
  *  it names yesterday — a diner in Hospet would be offered a date already
@@ -41,6 +42,42 @@ export function Reserve() {
   const [error, setError] = useState('');
   const [done, setDone] = useState(false);
 
+  /**
+   * WHEN THE RESTAURANT IS ACTUALLY OPEN.
+   *
+   * The time field was a bare <input type="time">, so a diner could book a
+   * table for 3am and the restaurant would find the booking in the morning
+   * with nobody to honour it. Availability is not a new feature here -- the
+   * hours already exist on the restaurant and the owner already edits them --
+   * the reservation form simply never asked for them.
+   *
+   * FETCHED SEPARATELY rather than added to resolveToken's select, and that is
+   * deliberate. resolveToken is the scan path: PostgREST 400s on a column it
+   * does not know, so widening that select is how one missing column takes out
+   * every QR in the restaurant. This query can fail harmlessly -- the field
+   * just goes back to being unconstrained, which is where it started.
+   */
+  const [hours, setHours] = useState<{ open: string; close: string } | null>(null);
+  useEffect(() => {
+    if (!session?.restaurant.id) return;
+    let alive = true;
+    supabase
+      .from('restaurant')
+      .select('open_time, close_time')
+      .eq('id', session.restaurant.id)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (!alive || !data?.open_time || !data?.close_time) return;
+        setHours({ open: String(data.open_time).slice(0, 5), close: String(data.close_time).slice(0, 5) });
+      }, () => {});
+    return () => { alive = false; };
+  }, [session?.restaurant.id]);
+
+  /** Overnight venues close after midnight, so "close < open" is a real and
+   *  common case rather than bad data -- and a min/max pair cannot express it.
+   *  Those keep the free field and are checked on submit instead. */
+  const sameDayHours = hours && hours.open < hours.close ? hours : null;
+
   useEffect(() => {
     if (!session) nav('/table', { replace: true });
   }, [session]);
@@ -57,6 +94,16 @@ export function Reserve() {
     // it there is no way to reach the RPC from a scanned table.
     const slug = restaurant.slug;
     if (!slug) { setError(t('reserve.unavailable')); return; }
+    /* THE REAL GUARD. min/max on a time input is advisory -- several mobile
+       browsers ignore it outright -- so the check that actually decides is
+       here. Same-day hours only: an overnight venue (close < open) spans
+       midnight and a simple between-test would reject its whole service. */
+    if (sameDayHours && (time < sameDayHours.open || time > sameDayHours.close)) {
+      setError(t('reserve.outsideHours')
+        .replace('{open}', sameDayHours.open)
+        .replace('{close}', sameDayHours.close));
+      return;
+    }
     setBusy(true); setError('');
     try {
       await createReservation({
@@ -110,10 +157,21 @@ export function Reserve() {
             </label>
             <label style={{ flex: '1 1 110px' }}>
               <span className="overline">{t('reserve.time')}</span>
-              <input className="code-input" type="time" value={time}
+              <input
+                className="code-input" type="time" value={time}
+                min={sameDayHours?.open} max={sameDayHours?.close}
                 onChange={(e) => setTime(e.target.value)} />
             </label>
           </div>
+          {/* SAYING the hours, not only enforcing them. min/max on a time input
+              is silently ignored by some mobile browsers, and even where it is
+              honoured the diner is told nothing about WHY their choice snapped
+              back. One line removes both problems. */}
+          {hours && (
+            <p className="dim" style={{ fontSize: 12.5, marginTop: -6 }}>
+              {t('reserve.hours').replace('{open}', hours.open).replace('{close}', hours.close)}
+            </p>
+          )}
 
           <label>
             <span className="overline">{t('reserve.party')}</span>
