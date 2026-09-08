@@ -123,6 +123,62 @@ export async function completeReset(identifier: string, code: string, newPasswor
   if (setErr) throw setErr;
 }
 
+/**
+ * THE PASSWORD RULE, in one place so both surfaces enforce the same one.
+ *
+ * Eight characters with a letter and a digit. Deliberately not a wall of
+ * classes: a rule an owner cannot satisfy on a busy floor gets written on a
+ * sticky note beside the till, which is worse than a slightly shorter
+ * password. Length is what actually resists guessing.
+ */
+export function passwordProblem(pw: string): string | null {
+  if (pw.length < 8) return 'Use at least 8 characters.';
+  if (!/[A-Za-z]/.test(pw) || !/\d/.test(pw)) return 'Include at least one letter and one number.';
+  return null;
+}
+
+/**
+ * CHANGE THE PASSWORD OF SOMEONE WHO IS SIGNED IN AND KNOWS THE OLD ONE.
+ *
+ * This is the ordinary case and it must NOT involve a code: a person who can
+ * already prove who they are should not be sent to their inbox. The forgot
+ * path (completeReset) is for someone who cannot.
+ *
+ * Supabase has no "verify my current password" call, so the current password
+ * is checked by signing in with it. That is the verification -- a wrong one
+ * fails here and nothing is changed. It re-issues a session for the SAME
+ * user, so the person stays signed in either way; updateUser then sets the
+ * new password on that freshly proven session.
+ *
+ * Without this check, anyone who found an unlocked counter PC could set a new
+ * password without knowing the old one and lock the owner out of their own
+ * restaurant.
+ */
+export async function changePassword(
+  email: string, currentPw: string, newPw: string, logOutOthers = false,
+): Promise<void> {
+  const problem = passwordProblem(newPw);
+  if (problem) throw new Error(problem);
+  if (currentPw === newPw) throw new Error('That is your current password — choose a different one.');
+
+  const { error: reauth } = await supabase.auth.signInWithPassword({ email, password: currentPw });
+  if (reauth) {
+    throw new Error(/invalid login credentials/i.test(reauth.message)
+      ? 'That is not your current password.'
+      : loginErrorSentence(reauth.message));
+  }
+
+  const { error } = await supabase.auth.updateUser({ password: newPw });
+  if (error) throw new Error(error.message);
+
+  // Everywhere else is signed out only when asked. Someone changing a
+  // password because they think it leaked wants this; someone tidying up does
+  // not, and silently ending their other sessions would be a surprise.
+  if (logOutOthers) {
+    try { await supabase.auth.signOut({ scope: 'others' }); } catch { /* best effort */ }
+  }
+}
+
 /** Supabase's OTP failures, in words the person typing can act on. */
 export function otpErrorSentence(message: string): string {
   if (/expired/i.test(message)) return 'That code has expired — send a new one.';

@@ -20,7 +20,9 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { showAppleButton, providerError } from '../../lib/authProviders';
-import { resetByIdentifier, completeReset } from '../../lib/auth';
+import {
+  resetByIdentifier, completeReset, changePassword, passwordProblem,
+} from '../../lib/auth';
 
 export function Account() {
   const nav = useNavigate();
@@ -40,9 +42,45 @@ export function Account() {
    * goes through completeReset like every other reset, so there is exactly
    * one way a password changes in this product and one place it can be wrong.
    */
-  const [pwStep, setPwStep] = useState<'off' | 'code'>('off');
+  /**
+   * TWO FLOWS, AND THE DIFFERENCE IS WHETHER THEY KNOW THE OLD PASSWORD.
+   *
+   *   'form'  signed in and remembers it: current + new + re-type. No code --
+   *           someone who can already prove who they are should not be sent
+   *           to their inbox to do it again.
+   *   'code'  they do not remember it: the same six-digit code the login
+   *           screen's Forgot password uses, reachable from the link below.
+   *
+   * Instagram draws exactly this pair, and the link between them is what
+   * stops the first screen being a dead end for the person who needs it most.
+   */
+  const [pwStep, setPwStep] = useState<'off' | 'form' | 'code'>('off');
+  const [pwCurrent, setPwCurrent] = useState('');
+  const [pwRetype, setPwRetype] = useState('');
+  const [pwOthers, setPwOthers] = useState(false);
   const [pwCode, setPwCode] = useState('');
   const [pwNew, setPwNew] = useState('');
+
+  const resetPwFields = () => {
+    setPwCurrent(''); setPwNew(''); setPwRetype(''); setPwCode(''); setPwOthers(false);
+  };
+
+  const submitChange = async () => {
+    if (!email) { setError('This account has no email address.'); return; }
+    if (pwNew !== pwRetype) { setError('The two new passwords do not match.'); return; }
+    const problem = passwordProblem(pwNew);
+    if (problem) { setError(problem); return; }
+    setBusy(true); setError(''); setMsg('');
+    try {
+      await changePassword(email, pwCurrent, pwNew, pwOthers);
+      setPwStep('off'); resetPwFields();
+      setMsg(pwOthers
+        ? 'Password changed, and other devices have been signed out.'
+        : 'Password changed. It works here and in the app.');
+    } catch (e: any) {
+      setError(e?.message ?? 'Could not change the password.');
+    } finally { setBusy(false); }
+  };
 
   const sendPasswordCode = async () => {
     if (!email) { setError('This account has no email address to send a code to.'); return; }
@@ -58,7 +96,8 @@ export function Account() {
 
   const savePassword = async () => {
     if (!/^\d{6}$/.test(pwCode)) { setError('Enter the 6-digit code from the email.'); return; }
-    if (pwNew.length < 8) { setError('Choose a password of at least 8 characters.'); return; }
+    const problem = passwordProblem(pwNew);
+    if (problem) { setError(problem); return; }
     setBusy(true); setError(''); setMsg('');
     try {
       await completeReset(email!, pwCode, pwNew);
@@ -151,12 +190,51 @@ export function Account() {
         <p className="overline" style={{ marginBottom: 8 }}>Password</p>
         {pwStep === 'off' ? (
           <>
-            <button className={`btn btn-glass btn-block${busy ? ' is-busy' : ''}`} disabled={busy} onClick={sendPasswordCode}>
+            <button className={`btn btn-glass btn-block${busy ? ' is-busy' : ''}`} disabled={busy}
+              onClick={() => { resetPwFields(); setError(''); setMsg(''); setPwStep('form'); }}>
               Change password
             </button>
             <p className="dim" style={{ fontSize: 12.5, marginTop: 8 }}>
-              We email a 6-digit code to {email ?? 'your address'}, then you choose the new one here.
+              Enter your current password and choose a new one. Forgotten it? There is a link on
+              that screen.
             </p>
+          </>
+        ) : pwStep === 'form' ? (
+          /* FLOW 1: signed in and remembers the old password. No code. */
+          <>
+            <label className="field-label" htmlFor="pw-current">Current password</label>
+            <input id="pw-current" className="code-input" type="password" autoComplete="current-password"
+              autoFocus value={pwCurrent} onChange={(e) => setPwCurrent(e.target.value)} />
+            <label className="field-label" htmlFor="pw-new">New password</label>
+            <input id="pw-new" className="code-input" type="password" autoComplete="new-password"
+              placeholder="At least 8 characters, with a number"
+              value={pwNew} onChange={(e) => setPwNew(e.target.value)} />
+            <label className="field-label" htmlFor="pw-retype">Re-type new password</label>
+            <input id="pw-retype" className="code-input" type="password" autoComplete="new-password"
+              value={pwRetype} onChange={(e) => setPwRetype(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && submitChange()} />
+
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '4px 0 4px', cursor: 'pointer' }}>
+              <input type="checkbox" checked={pwOthers} onChange={(e) => setPwOthers(e.target.checked)} />
+              <span style={{ fontSize: 13.5 }}>Log out of other devices</span>
+            </label>
+
+            {error && <p className="field-error">{error}</p>}
+            <button className={`btn btn-glass btn-block${busy ? ' is-busy' : ''}`} style={{ marginTop: 8 }}
+              disabled={busy} onClick={submitChange}>
+              Change password
+            </button>
+            <div style={{ display: 'grid', gap: 4, marginTop: 8 }}>
+              {/* THE WAY OUT for the person who cannot fill the first field --
+                  without it this screen is a dead end for exactly the owner
+                  who needs it most. It starts flow 2 in place. */}
+              <button className="btn btn-link" disabled={busy} onClick={sendPasswordCode}>
+                Forgot your password?
+              </button>
+              <button className="btn btn-link" onClick={() => { setPwStep('off'); resetPwFields(); setError(''); }}>
+                Cancel
+              </button>
+            </div>
           </>
         ) : (
           <>
@@ -177,7 +255,7 @@ export function Account() {
             </button>
             <div style={{ display: 'grid', gap: 4, marginTop: 8 }}>
               <button className="btn btn-link" disabled={busy} onClick={sendPasswordCode}>Send another code</button>
-              <button className="btn btn-link" onClick={() => { setPwStep('off'); setError(''); setMsg(''); }}>Cancel</button>
+              <button className="btn btn-link" onClick={() => { setPwStep('form'); setError(''); setMsg(''); }}>‹ Back</button>
             </div>
           </>
         )}
