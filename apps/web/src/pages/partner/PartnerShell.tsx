@@ -39,21 +39,20 @@ export function usePartner(): PartnerCtx {
  * the right edge of a scroller with its scrollbar hidden. Nothing on screen
  * said they were there.
  */
-const NAV: { to: string; label: string; icon: string; roles: PortalRole[]; primary?: boolean }[] = [
-  { to: '/partner/orders', label: 'Orders', icon: '🧾', roles: ['owner', 'manager', 'waiter', 'kitchen'], primary: true },
-  { to: '/partner/menu', label: 'Menu', icon: '🍛', roles: ['owner', 'manager'], primary: true },
-  { to: '/partner/tables', label: 'Tables & QR', icon: '🪑', roles: ['owner', 'manager'], primary: true },
-  { to: '/partner/billing', label: 'Billing', icon: '💳', roles: ['owner', 'manager', 'waiter'], primary: true },
-  { to: '/partner/reports', label: 'Reports', icon: '📈', roles: ['owner', 'manager'] },
-  { to: '/partner/reservations', label: 'Reservations', icon: '📅', roles: ['owner', 'manager'] },
-  { to: '/partner/buffets', label: 'Buffets', icon: '🍽', roles: ['owner', 'manager'] },
-  { to: '/partner/showcase', label: 'Showcase', icon: '🖼', roles: ['owner', 'manager'] },
-  { to: '/partner/staff', label: 'Staff', icon: '👥', roles: ['owner'] },
-  { to: '/partner/plan', label: 'Plan', icon: '⭐', roles: ['owner'] },
+const NAV: { to: string; label: string; icon: string; primary?: boolean }[] = [
+  { to: '/partner/orders', label: 'Orders', icon: '🧾', primary: true },
+  { to: '/partner/menu', label: 'Menu', icon: '🍛', primary: true },
+  { to: '/partner/tables', label: 'Tables & QR', icon: '🪑', primary: true },
+  { to: '/partner/billing', label: 'Billing', icon: '💳', primary: true },
+  { to: '/partner/reports', label: 'Reports', icon: '📈' },
+  { to: '/partner/reservations', label: 'Reservations', icon: '📅' },
+  { to: '/partner/buffets', label: 'Buffets', icon: '🍽' },
+  { to: '/partner/showcase', label: 'Showcase', icon: '🖼' },
+  { to: '/partner/plan', label: 'Plan', icon: '⭐' },
   // "Restaurant profile", not "Settings": the overflow button is Settings now,
   // and a Settings menu whose contents include Settings is a path nobody reads
   // twice without pausing. Mirrors the app.
-  { to: '/partner/settings', label: 'Restaurant profile', icon: '⚙️', roles: ['owner', 'manager'] },
+  { to: '/partner/settings', label: 'Restaurant profile', icon: '⚙️' },
 ];
 
 export function PartnerShell() {
@@ -106,7 +105,13 @@ export function PartnerShell() {
     );
   }
 
-  const items = NAV.filter((n) => n.roles.includes(member.role));
+  /* NO ROLE FILTER ANY MORE. Menutha is a single-owner product: there are no
+     staff logins to hide sections from, so every section in NAV is a section
+     this person can open. The filter was the last thing reading `roles`, which
+     is why the field is gone from the list above rather than left set to
+     ['owner'] on every row -- a filter that always passes is a filter someone
+     later has to read and work out is dead. */
+  const items = NAV;
 
   return (
     <Ctx.Provider

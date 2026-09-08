@@ -27,8 +27,6 @@ export async function loadMembership(): Promise<Membership | null> {
   const { data: session } = await supabase.auth.getSession();
   const uid = session.session?.user?.id;
   if (!uid) return null;
-  // Claim any pending staff invites for this phone (no-op otherwise).
-  await supabase.rpc('claim_staff_invites').then(() => {}, () => {});
   const { data } = await supabase
     .from('restaurant_member')
     .select('member_role, restaurant(*)')
@@ -447,47 +445,6 @@ export async function setReservationStatus(id: string, status: 'confirmed' | 'se
   if (error) throw error;
 }
 
-// ── Staff ──────────────────────────────────────────────────────────────────
-
-export interface StaffRow { id: string; member_role: PortalRole; user: { name: string | null; phone: string | null; email: string | null } }
-
-export async function fetchStaff(restaurantId: string): Promise<StaffRow[]> {
-  const { data, error } = await supabase
-    .from('restaurant_member')
-    .select('id, member_role, app_user(name, phone, email)')
-    .eq('restaurant_id', restaurantId);
-  if (error) throw error;
-  return (data ?? []).map((r: any) => ({
-    id: r.id, member_role: r.member_role,
-    user: (Array.isArray(r.app_user) ? r.app_user[0] : r.app_user) ?? { name: null, phone: null, email: null },
-  }));
-}
-
-export async function inviteStaff(restaurantId: string, phone: string, role: 'manager' | 'waiter' | 'kitchen') {
-  const digits = phone.replace(/\D/g, '');
-  if (digits.length < 10) throw new Error('Enter a valid phone number.');
-  const { error } = await supabase.from('staff_invite').insert({
-    restaurant_id: restaurantId, phone: digits, invite_role: role,
-  });
-  if (error) throw error;
-}
-
-export async function fetchInvites(restaurantId: string) {
-  const { data } = await supabase
-    .from('staff_invite').select('id, phone, invite_role, claimed_at')
-    .eq('restaurant_id', restaurantId).is('claimed_at', null);
-  return data ?? [];
-}
-
-export async function removeStaff(memberId: string) {
-  const { error } = await supabase.from('restaurant_member').delete().eq('id', memberId);
-  if (error) throw error;
-}
-
-export async function revokeInvite(id: string) {
-  const { error } = await supabase.from('staff_invite').delete().eq('id', id);
-  if (error) throw error;
-}
 
 // ── Settings ───────────────────────────────────────────────────────────────
 
