@@ -1,6 +1,8 @@
 export declare const TIER_FEATURES: Record<string, string[]>;
 export declare const ADDON_FEATURES: Record<string, string[]>;
 export declare const GRACE_DAYS: number;
+/** The tier a trial runs at: Enterprise, so the trial shows the whole product. */
+export declare const TRIAL_TIER: string;
 
 export interface PlanStateInput {
   plan_tier?: string | null;
@@ -21,6 +23,8 @@ export interface Entitlements {
 
 export declare function entitlementsFor(r: PlanStateInput, now?: number): Entitlements;
 export declare function hasFeature(ent: Entitlements, feature: string): boolean;
+/** Outlets this restaurant may hold, itself included. Infinity on Enterprise. */
+export declare function outletLimit(ent: Entitlements): number;
 export declare function applySubscriptionEvent(
   eventType: string,
   sub: { plan_id?: string },

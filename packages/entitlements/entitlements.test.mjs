@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   entitlementsFor,
   hasFeature,
+  outletLimit,
   applySubscriptionEvent,
   GRACE_DAYS,
 } from './index.js';
@@ -12,17 +13,52 @@ const DAY = 864e5;
 
 // ── Gating matrix ──────────────────────────────────────────────────────────
 
-test('active trial grants full Growth', () => {
+test('active trial grants full Enterprise — the trial shows the whole product', () => {
   const e = entitlementsFor(
     { plan_status: 'trialing', trial_ends_at: new Date(NOW + 5 * DAY).toISOString() },
     NOW,
   );
   assert.equal(e.state, 'trial');
-  assert.equal(e.tier, 'growth');
+  assert.equal(e.tier, 'enterprise');
   assert.ok(hasFeature(e, 'excel_upload'));
   assert.ok(hasFeature(e, 'analytics'));
-  assert.ok(!hasFeature(e, 'white_label'));
+  // The trial used to run at Growth, so white_label was asserted ABSENT here.
+  // A restaurant that never sees a feature cannot decide it wants to pay for
+  // it, so the trial now runs at the top tier -- reservations, chat, multiple
+  // outlets and all.
+  assert.ok(hasFeature(e, 'white_label'));
+  assert.ok(hasFeature(e, 'multi_outlet'));
+  assert.ok(hasFeature(e, 'reservations'));
   assert.ok(e.canOrder);
+});
+
+test('location is on every tier, and off when locked', () => {
+  for (const tier of ['basic', 'growth', 'enterprise']) {
+    const e = entitlementsFor({ plan_status: 'active', plan_tier: tier }, NOW);
+    assert.ok(hasFeature(e, 'location'), `${tier} should have location`);
+  }
+  const locked = entitlementsFor(
+    { plan_status: 'trialing', trial_ends_at: new Date(NOW - DAY).toISOString() }, NOW,
+  );
+  assert.ok(!hasFeature(locked, 'location'));
+});
+
+test('outlet limit: one everywhere except Enterprise', () => {
+  assert.equal(outletLimit(entitlementsFor({ plan_status: 'active', plan_tier: 'basic' }, NOW)), 1);
+  assert.equal(outletLimit(entitlementsFor({ plan_status: 'active', plan_tier: 'growth' }, NOW)), 1);
+  assert.equal(outletLimit(entitlementsFor({ plan_status: 'active', plan_tier: 'enterprise' }, NOW)), Infinity);
+  // A trial runs at Enterprise, so it can open outlets too.
+  assert.equal(
+    outletLimit(entitlementsFor({ plan_status: 'trialing', trial_ends_at: new Date(NOW + DAY).toISOString() }, NOW)),
+    Infinity,
+  );
+});
+
+test('each tier contains the one below it', () => {
+  const of = (t) => entitlementsFor({ plan_status: 'active', plan_tier: t }, NOW).features;
+  const [basic, growth, ent] = [of('basic'), of('growth'), of('enterprise')];
+  for (const f of basic) assert.ok(growth.has(f), `growth is missing ${f}`);
+  for (const f of growth) assert.ok(ent.has(f), `enterprise is missing ${f}`);
 });
 
 test('null trial_ends_at while trialing = unlimited (v1 semantics)', () => {
