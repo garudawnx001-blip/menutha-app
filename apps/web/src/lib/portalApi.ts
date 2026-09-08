@@ -55,6 +55,8 @@ export interface PortalOrder {
   notes?: string | null;
   placed_at: string;
   table_label?: string;
+  /** The table id, so an alert that names a table can find its ticket. */
+  table_id?: string | null;
   guest_name?: string | null;
   guest_phone?: string | null;
   ready_at?: string | null;
@@ -73,10 +75,10 @@ export async function fetchLiveOrders(restaurantId: string, statuses: string[]):
   // service_charge rides along: the printed bill sums it off the orders
   // (#R -- the AC rate is already inside it), and it was silently printing as
   // zero while the total included it.
-  const COLS = 'id, order_no, status, is_parcel, subtotal, packing_charge, service_charge, gst_amount, total, notes, placed_at, ready_at, released_at, guest_name, guest_phone, dining_table(label), order_item(id, name, qty, unit_price, is_veg), payment(id, status, provider)';
+  const COLS = 'id, order_no, status, is_parcel, subtotal, packing_charge, service_charge, gst_amount, total, notes, placed_at, ready_at, released_at, guest_name, guest_phone, table_id, dining_table(label), order_item(id, name, qty, unit_price, is_veg), payment(id, status, provider)';
 
   /**
-   * #V â A SETTLED ORDER IS NEITHER LIVE WORK NOR BILLABLE.
+   * #V — A SETTLED ORDER IS NEITHER LIVE WORK NOR BILLABLE.
    *
    * mark_bill_paid has never written food_order.status, so a paid-for order
    * keeps a live status for ever and stays on the board. Both callers want the

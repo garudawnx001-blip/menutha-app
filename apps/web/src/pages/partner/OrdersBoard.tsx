@@ -3,7 +3,7 @@
  *  (advance buttons still shown: waiters marking Served is normal floor work,
  *  and the RPC enforces staff membership server-side). */
 import React, { useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { subscribeOrders } from '../../lib/realtimeWeb';
 import {
   fetchLiveOrders, advanceOrder, NEXT_STATUS,
@@ -79,6 +79,15 @@ function notifyOrder(o: PortalOrder) {
 export function OrdersBoard() {
   const { restaurant, role } = usePartner();
   const nav = useNavigate();
+  /** ?order= / ?table= -- the ticket an Alerts row named. It is sorted to
+   *  the top and outlined, so landing here from an alert lands ON the thing
+   *  the alert was about rather than on a board to hunt through. The app's
+   *  Orders board honours the same two params. */
+  const [params] = useSearchParams();
+  const focusOrder = params.get('order');
+  const focusTable = params.get('table');
+  const isFocused = (all: PortalOrder[]) =>
+    all.some((x) => (!!focusOrder && x.id === focusOrder) || (!!focusTable && x.table_id === focusTable));
   const [orders, setOrders] = useState<PortalOrder[] | null>(null);
   const [servedToday, setServedToday] = useState<PortalOrder[]>([]);
   const [busy, setBusy] = useState('');
@@ -167,8 +176,11 @@ export function OrdersBoard() {
       });
       if (g) g.sibs.push(ord); else out.push({ o: ord, sibs: [] });
     }
+    if (focusOrder || focusTable) {
+      out.sort((a, b) => Number(isFocused([b.o, ...b.sibs])) - Number(isFocused([a.o, ...a.sibs])));
+    }
     return out;
-  }, [orders]);
+  }, [orders, focusOrder, focusTable]);
 
   /** Cancel everything on this ticket. A ticket is what the kitchen sees, so
    *  cancelling half of one and leaving the rest on the pass is not a state
@@ -336,7 +348,7 @@ export function OrdersBoard() {
           return (
           <div
             key={o.id}
-            className={all.some((x) => justIn.has(x.id)) ? 'ticket glass ticket-new' : 'ticket glass'}
+            className={`ticket glass${all.some((x) => justIn.has(x.id)) ? ' ticket-new' : ''}${isFocused(all) ? ' ticket-focus' : ''}`}
             style={{ borderColor: o.status === 'placed' ? 'var(--gold)' : undefined }}
           >
             <div className="ticket-head">
