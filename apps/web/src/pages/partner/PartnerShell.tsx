@@ -237,8 +237,8 @@ export function PartnerShell() {
  *  screenshot. */
 export function PartnerPreviewProvider({ children }: { children: React.ReactNode }) {
   const restaurant = {
-    id: 'preview', name: 'Ashwamedha Lodge & Family Restaurant', city: 'Hospet', address: 'Station Road',
-    phone: '98765 43210', gstin: '29ABCDE1234F1Z5', upi_vpa: 'ashwamedha@okhdfcbank', upi_account_type: 'merchant',
+    id: 'preview', name: 'The Green Fork', city: 'Bengaluru', address: '12 Residency Road',
+    phone: '98765 43210', gstin: '29ABCDE1234F1Z5', upi_vpa: 'greenfork@okhdfcbank', upi_account_type: 'merchant',
     open_time: '11:00', close_time: '23:00', cuisine_tags: 'North Indian · South Indian · Chinese',
     plan_tier: 'trial', plan_status: 'trialing', is_open: true,
     trial_ends_at: new Date(Date.now() + 25 * 864e5).toISOString(),

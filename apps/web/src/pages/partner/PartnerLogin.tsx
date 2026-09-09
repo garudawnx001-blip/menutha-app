@@ -485,7 +485,7 @@ export function PartnerLogin() {
                   <input
                     id="auth-username"
                     className="code-input" type="text" autoComplete="username"
-                    placeholder="ashwamedha_lodge" value={username}
+                    placeholder="your_restaurant" value={username}
                     onChange={(e) => setUsername(cleanHandle(e.target.value))} />
                 </>
               )}

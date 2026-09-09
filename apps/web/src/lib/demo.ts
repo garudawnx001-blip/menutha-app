@@ -24,9 +24,13 @@ export const demoRestaurant: Restaurant = {
 export const directoryFallback: Restaurant[] = [
   demoRestaurant,
   {
-    id: 'ashwamedha',
-    name: 'Ashwamedha Lodge and Family Restaurant',
-    city: 'Hospet',
+    // A REAL CUSTOMER IS NOT A FIXTURE. This directory fallback is what a
+    // visitor sees when the live list cannot load, so shipping a paying
+    // restaurant's name and city as sample data puts their business in front
+    // of strangers as an illustration of the product.
+    id: 'demo-green-fork',
+    name: 'The Green Fork',
+    city: 'Bengaluru',
     banner_url: '',
     logo_url: '',
     is_open: true,

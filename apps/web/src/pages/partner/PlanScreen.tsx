@@ -134,7 +134,7 @@ export function PlanScreen({ preview }: { preview?: boolean } = {}) {
       // on a given duration so every term can be looked at (and screenshotted).
       const want = Number(new URLSearchParams(window.location.search).get('months'));
       if ([1, 3, 6, 12].includes(want)) setMonths(want);
-      setRestaurant({ id: 'preview', name: 'Ashwamedha Lodge' } as any);
+      setRestaurant({ id: 'preview', name: 'The Green Fork' } as any);
       setPlans(PREVIEW_PLANS as any);
       setState({
         plan_tier: 'trial', plan_status: 'trialing', grace_until: null, addons: [],
@@ -217,9 +217,21 @@ export function PlanScreen({ preview }: { preview?: boolean } = {}) {
     // that runs during this render would throw before it exists.
     const end = state?.trial_ends_at ? Date.parse(state.trial_ends_at) : NaN;
     const left = Number.isFinite(end) ? Math.max(0, Math.ceil((end - Date.now()) / 864e5)) : 0;
+    /**
+     * SAY IT THE WAY A STREAMING SERVICE SAYS IT.
+     *
+     * "Nothing is charged today" is true and still reads as a caveat -- the
+     * owner had just watched a sheet say "Processing your payment ₹3,539" and
+     * did not believe it. The shape people already trust is one sentence with
+     * three facts in a fixed order: what is free, for how long, what happens
+     * after, and that they can stop. No asterisk, no arithmetic.
+     *
+     * The backend already defers the first debit (start_at, deployed), so this
+     * is only the promise being said plainly enough to be believed.
+     */
     return left > 0
-      ? `Nothing is charged today — your first payment is in ${left} day(s), when the trial ends.`
-      : 'Set-up authorises a nominal amount that Razorpay refunds automatically.';
+      ? `Free for ${left} more day(s) — then billing starts. Cancel any time.`
+      : 'Free for 30 days — then billing starts. Cancel any time.';
   }, [state]);
 
   /** Which plan row the live subscription is actually on, so only that card
@@ -420,8 +432,15 @@ export function PlanScreen({ preview }: { preview?: boolean } = {}) {
                     : (ent?.state === 'active' ? 'Switch to this plan' : `Choose ${tierLabel(p)}`)}
                 </button>
               )}
+              {/* THE WHOLE PROMISE, ON THE CARD IT APPLIES TO. The note used to
+                  say only that nothing is charged today; naming THIS plan's own
+                  price and cycle is what turns a caveat into an offer somebody
+                  can act on without doing arithmetic of their own. */}
               <p className="dim" style={{ fontSize: 11.5, margin: 0 }}>
-                {trialNote}
+                {trialNote.replace(
+                  'billing starts',
+                  `${inr(g.total)} ${p.duration_months > 1 ? `every ${p.duration_months} months` : 'a month'}`,
+                )}
               </p>
             </div>
           );

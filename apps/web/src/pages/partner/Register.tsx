@@ -66,7 +66,7 @@ export function Register({ previewPhase }: { previewPhase?: Phase } = {}) {
   };
 
   useEffect(() => {
-    if (previewPhase) { setEmail('priya@ashwamedha.in'); return; }
+    if (previewPhase) { setEmail('owner@your-restaurant.in'); return; }
     readState();
     const { data: sub } = supabase.auth.onAuthStateChange(() => { readState(); });
     return () => sub.subscription.unsubscribe();
@@ -166,7 +166,7 @@ export function Register({ previewPhase }: { previewPhase?: Phase } = {}) {
             <input
               id="setup-username"
               className="code-input" type="text" autoComplete="username" autoFocus
-              placeholder="ashwamedha_lodge" value={username}
+              placeholder="your_restaurant" value={username}
               onChange={(e) => setUsername(cleanHandle(e.target.value))} />
             <label className="field-label" htmlFor="setup-password">Password</label>
             <input id="setup-password" className="code-input" type="password" autoComplete="new-password"
