@@ -168,12 +168,18 @@ export interface PortalOrder {
 /** Set once if the database has no food_order.settled_at yet (#V is a staged
  *  migration run by hand). Module scope: a fact about the server. */
 let settledColumnMissing = false;
+/** service_waived arrives with a staged migration, and PostgREST 400s the WHOLE
+ *  query on a column it has not seen -- which would take the Billing board down
+ *  rather than costing one label. Asked for once, dropped for the session. */
+let waivedColumnMissing = false;
 
 export async function fetchLiveOrders(restaurantId: string, statuses: string[]): Promise<PortalOrder[]> {
   // service_charge rides along: the printed bill sums it off the orders
   // (#R -- the AC rate is already inside it), and it was silently printing as
   // zero while the total included it.
-  const COLS = 'id, order_no, status, is_parcel, subtotal, packing_charge, service_charge, gst_amount, total, notes, placed_at, ready_at, released_at, guest_name, guest_phone, table_id, dining_table(label), order_item(id, name, qty, unit_price, is_veg), payment(id, status, provider)';
+  const BASE = 'id, order_no, status, is_parcel, subtotal, packing_charge, service_charge, gst_amount, total, notes, placed_at, ready_at, released_at, guest_name, guest_phone, table_id, dining_table(label), order_item(id, name, qty, unit_price, is_veg), payment(id, status, provider)';
+  // service_waived tells Billing whether the charge is already off this bill.
+  const cols = () => (waivedColumnMissing ? BASE : `${BASE}, service_waived`);
 
   /**
    * #V — A SETTLED ORDER IS NEITHER LIVE WORK NOR BILLABLE.
@@ -189,7 +195,7 @@ export async function fetchLiveOrders(restaurantId: string, statuses: string[]):
   const run = (withSettled: boolean) => {
     let q = supabase
       .from('food_order')
-      .select(COLS)
+      .select(cols())
       .eq('restaurant_id', restaurantId)
       .in('status', statuses)
       // The grace window is a query predicate, not a job: an order becomes
@@ -202,9 +208,21 @@ export async function fetchLiveOrders(restaurantId: string, statuses: string[]):
   };
 
   let { data, error } = settledColumnMissing ? await run(false) : await run(true);
-  // Until the migration runs, the board behaves exactly as it does today
-  // rather than failing. Losing the live board because a filter column is
-  // absent would be far worse than showing a settled ticket on it.
+  /**
+   * TWO STAGED COLUMNS, SO TWO STEPS -- and in this order, because they cost
+   * different things.
+   *
+   * Until the migrations run, the board behaves as it does today rather than
+   * failing. Losing the live board because a column is absent would be far
+   * worse than showing a settled ticket on it, or than not knowing whether a
+   * service charge was waived. 42703 does not say WHICH column, so the first
+   * retry drops the cheaper one (a label) and only the second drops the
+   * filter (a behaviour).
+   */
+  if (error && error.code === '42703' && !waivedColumnMissing) {
+    waivedColumnMissing = true;
+    ({ data, error } = settledColumnMissing ? await run(false) : await run(true));
+  }
   if (error && error.code === '42703') {
     settledColumnMissing = true;
     ({ data, error } = await run(false));
@@ -265,7 +283,69 @@ export async function fetchMenuAdmin(restaurantId: string) {
   return { categories: (cats ?? []) as PortalCategory[], items: (items ?? []) as unknown as PortalDish[] };
 }
 
-export async function upsertCategory(restaurantId: string, name: string, id?: string) {
+/**
+ * A BILL FOR SOMEONE WHO NEVER SCANNED ANYTHING.
+ *
+ * Most diners scan the QR. Some walk in, sit down and tell the counter what
+ * they want -- and until now the till had no way to bill them at all, which
+ * made the whole product conditional on the customer owning a working phone.
+ *
+ * THIS GOES THROUGH place_order, THE SAME RPC THE DINER'S PHONE CALLS, and
+ * that is the entire design. Prices, option deltas, the packing charge, the
+ * service rate, SGST and CGST are all computed server-side from ids and
+ * quantities; the client sends no money at all. A second "manual" path that
+ * priced things itself would be a second opinion about what somebody owes,
+ * and the first time the two disagreed it would be over a real bill in a real
+ * customer's hand.
+ *
+ * So a walk-in order is an ordinary order. It reaches the board, the kitchen,
+ * Billing and the reports exactly like a scanned one, and everything
+ * downstream -- waivers, discounts, GST, the printed sheet -- already works on
+ * it without knowing where it came from.
+ */
+export async function placeStaffOrder(
+  restaurantId: string,
+  tableId: string,
+  lines: { menuItemId: string; qty: number }[],
+  guestName?: string,
+): Promise<string> {
+  if (!lines.length) throw new Error('Add at least one dish.');
+  const { data, error } = await supabase.rpc('place_order', {
+    p_restaurant_id: restaurantId,
+    p_table_id: tableId,
+    p_items: lines.map((l) => ({ menu_item_id: l.menuItemId, qty: l.qty, option_ids: [] })),
+    p_notes: 'Taken at the counter',
+    // The ticket says who it is for. "Walk-in" is not decoration: on a board of
+    // scanned orders the one nobody scanned for is the one staff have to
+    // attribute by memory.
+    p_guest_name: guestName?.trim() || 'Walk-in',
+    p_guest_phone: null,
+  });
+  if (error) throw new Error(error.message);
+  return (data as any)?.id as string;
+}
+
+/**
+ * REMOVE (or restore) THE SERVICE CHARGE ON A BILL.
+ *
+ * A per-bill decision, made at the till because a diner asked -- which is why
+ * it lives in Billing and not in Bill settings, where the defaults live.
+ *
+ * The server does the arithmetic. GST is charged on subtotal PLUS service, so
+ * dropping the charge changes the tax and the total; waive_order_service sets
+ * the flag and repricess, and service, SGST, CGST and total all fall out of
+ * the one existing calculation. Nothing here computes money.
+ */
+export async function waiveService(orderIds: string[], waive: boolean): Promise<void> {
+  const { error } = await supabase.rpc('waive_order_service', {
+    p_order_ids: orderIds,
+    p_waive: waive,
+  });
+  if (error) throw new Error(error.message);
+}
+
+export async function upsertCategory(
+restaurantId: string, name: string, id?: string) {
   const { error } = id
     ? await supabase.from('menu_category').update({ name }).eq('id', id)
     : await supabase.from('menu_category').insert({ restaurant_id: restaurantId, name, sort_order: 99 });

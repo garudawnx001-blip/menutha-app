@@ -4,7 +4,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import QRCode from 'qrcode';
-import { fetchLiveOrders, createBill, payBill, fetchBillLayout, setOrdersAc, type PortalOrder } from '../../lib/portalApi';
+import { fetchLiveOrders, createBill, payBill, fetchBillLayout, setOrdersAc, waiveService, type PortalOrder } from '../../lib/portalApi';
+import { WalkIn } from './WalkIn';
 import { renderBillHtml, type BillData } from '../../lib/billTemplate';
 import { printBillHtml } from '../../lib/printBill';
 import { inr } from '../../lib/types';
@@ -30,6 +31,7 @@ export function Billing() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [discount, setDiscount] = useState('');
   const [bill, setBill] = useState<BillDraft | null>(null);
+  const [waiving, setWaiving] = useState(false);
   const [billQr, setBillQr] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -89,6 +91,32 @@ export function Billing() {
   const acPricing = (restaurant as any).ac_pricing === true;
   const subtotal = chosen.reduce((a, o) => a + o.subtotal + o.packing_charge, 0);
   const service = chosen.reduce((a, o) => a + Number((o as any).service_charge ?? 0), 0);
+
+  /**
+   * WAIVED IS READ OFF THE ORDERS, not held in a checkbox.
+   *
+   * The server owns this: waive_order_service sets the flag and repricess, so
+   * the orders coming back from the board already say what happened. A local
+   * boolean would be a second opinion that survives a reload and outlives a
+   * failed call -- the screen claiming a charge was dropped when it was not.
+   */
+  const waived = chosen.length > 0 && chosen.every((o) => (o as any).service_waived === true);
+
+  const toggleWaive = async (next: boolean) => {
+    if (!chosen.length || waiving) return;
+    setWaiving(true); setError('');
+    try {
+      await waiveService(chosen.map((o) => o.id), next);
+      await load();
+    } catch (e: any) {
+      // PGRST202 is PostgREST saying the function is not in its schema -- the
+      // migration has not been run. That is a sentence somebody can act on,
+      // where the raw error is not.
+      setError(/PGRST202|could not find the function/i.test(String(e?.message ?? ''))
+        ? 'Removing the service charge needs the database update that is staged for this restaurant. Nothing has changed on this bill.'
+        : (e?.message ?? 'Could not change the service charge.'));
+    } finally { setWaiving(false); }
+  };
   /**
    * A DISCOUNT CANNOT BE NEGATIVE, and this was only clamped at the top.
    *
@@ -267,6 +295,7 @@ export function Billing() {
       sgst: Math.round(b.gst_amount * (sgstPct / rateSum) * 100) / 100,
       cgst: Math.round(b.gst_amount * (cgstPct / rateSum) * 100) / 100,
       total: b.total,
+      serviceWaived: waived,
       payQrDataUri: billQr || null,
       upiVpa: (restaurant as any).upi_vpa ?? null,
     };
@@ -305,6 +334,12 @@ export function Billing() {
         or your own UPI.
       </p>
       {error && <p style={{ color: 'var(--error)', fontSize: 14, margin: '10px 0' }}>{error}</p>}
+
+      {/* THE COUNTER'S OWN ORDER PAD. Not every customer scans -- some walk in
+          and say what they want -- and without this the till could not bill
+          them at all, which made a working customer phone a precondition for
+          taking money. */}
+      <WalkIn restaurantId={restaurant.id} onCreated={() => load()} />
 
       {byTable.length === 0 && (
         <div className="glass" style={{ padding: 20, marginTop: 14, textAlign: 'center' }}>
@@ -391,8 +426,26 @@ export function Billing() {
                 inputMode="decimal" placeholder="0" value={discount} onChange={(e) => setDiscount(e.target.value)} />
             </div>
           )}
-          {service > 0 && (
-            <div className="bill-row"><span>Service charge</span><span>{inr(service)}</span></div>
+          {/* SERVICE CHARGE, WAIVED HERE AND NOWHERE ELSE. It is a decision
+              about THIS bill for THIS customer who just asked -- the same kind
+              of decision as the discount beside it -- so it lives on the bill,
+              not in Bill settings, which holds defaults and layout.
+
+              Waiving repricess the orders on the server: service, SGST, CGST
+              and total all fall out of the one calculation. GST is charged on
+              subtotal PLUS service, so a waiver that only hid the line would
+              print a total that does not add up. */}
+          {(service > 0 || waived) && (
+            <div className="bill-row">
+              <span>Service charge</span>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span>{waived ? 'Waived' : inr(service)}</span>
+                <button className={`chip${waiving ? ' is-busy' : ''}`} disabled={waiving}
+                  onClick={() => toggleWaive(!waived)}>
+                  {waived ? 'Put it back' : 'Remove'}
+                </button>
+              </span>
+            </div>
           )}
           {/* #R — THE FALLBACK, and it is only a fallback.
               The AC rate applies AUTOMATICALLY from the table's own is_ac flag:

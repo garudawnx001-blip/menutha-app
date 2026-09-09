@@ -342,8 +342,27 @@ export function renderBillHtml(d: BillData, layoutRaw: any): string {
   .sheet.fill { min-height: 100vh; display: flex; flex-direction: column; }
   .sheet.fill .band-mid { flex: 1 1 auto; }
 
-  /* A THERMAL ROLL IS NOT A SMALL A4. Under 80mm the rate and quantity columns
+  /* ── AUTO-FIT, AND NOBODY IS ASKED WHICH PAPER ────────────────────────────
+     The document reads the real page width and adapts to it. There is no
+     paper picker anywhere in this product and there must not be one: the
+     printer already knows what is loaded and the print dialog already asks,
+     so a third place to answer is only a third place to be wrong — and
+     answering it wrong prints a ruined sheet.
 
+     Three regimes, and the boundaries are the papers that actually exist:
+
+       over 80mm   sheet stock (A4, Letter, a billing machine's own paper):
+                   the full GST table, and the page filled to the foot.
+       58–80mm     the common 80mm till roll: the Rate column folds away, the
+                   totals take the full width, type drops a step.
+       under 58mm  a 58mm roll, about 32 characters wide: another step down,
+                   and the pay-QR shrinks — on a roll, LENGTH is the scarce
+                   resource, not width.
+
+     Every step is CSS on one document. A restaurant that moves from a laser
+     to a till roll changes no setting and reprints the same bill. */
+
+  /* A THERMAL ROLL IS NOT A SMALL A4. Under 80mm the rate and quantity columns
      have about four characters each, so they fold into the item cell and the
      totals block stops floating to the side and takes the full width. */
   @media print and (max-width: 80mm) {
@@ -354,6 +373,21 @@ export function renderBillHtml(d: BillData, layoutRaw: any): string {
     /* No page to fill. Roll stock is continuous, so stretching to a notional
        page height would feed blank paper after every bill. */
     .sheet.fill { min-height: 0; display: block; }
+    /* About 42 characters at this size. Anything larger wraps every second
+       dish name onto three lines. */
+    body { font-size: 11pt; }
+    .logo { max-height: 14mm; }
+  }
+
+  /* A 58mm ROLL — about 32 characters. This step exists because the 80mm
+     rules alone overflowed it: a dish name and its amount could not share a
+     line, so the amount wrapped underneath its own dish and the bill stopped
+     reading as a column of money. */
+  @media print and (max-width: 58mm) {
+    body { font-size: 9.5pt; }
+    .logo { max-height: 10mm; }
+    .pay img { width: 18mm; height: 18mm; }
+    .totals .row { gap: 2mm; }
   }
 </style></head><body>${(() => {
   /**
