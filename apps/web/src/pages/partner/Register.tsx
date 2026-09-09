@@ -149,7 +149,7 @@ export function Register({ previewPhase }: { previewPhase?: Phase } = {}) {
             <p className="muted auth-sub">
               {phase === 'finish'
                 ? 'Google confirmed your email. Choose a username and a password so you can also sign in without Google — on the portal and in the app.'
-                : 'A few details and your restaurant is live. Full Growth features for 30 days, no card needed.'}
+                : 'A few details and your restaurant is live. Full Enterprise features for 30 days, no card needed.'}
             </p>
           </div>
         )}
@@ -205,7 +205,7 @@ export function Register({ previewPhase }: { previewPhase?: Phase } = {}) {
             {'Start free trial'}
           </button>
           <p className="dim" style={{ fontSize: 12, marginTop: 10 }}>
-            Full Growth features for 30 days · no card needed · zero commission always.
+            Full Enterprise features for 30 days · no card needed · zero commission always.
           </p>
         </div>
         )}

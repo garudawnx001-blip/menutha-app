@@ -6,6 +6,7 @@ import { useSearchParams } from 'react-router-dom';
 import QRCode from 'qrcode';
 import { fetchLiveOrders, createBill, payBill, fetchBillLayout, setOrdersAc, type PortalOrder } from '../../lib/portalApi';
 import { renderBillHtml, type BillData } from '../../lib/billTemplate';
+import { printBillHtml } from '../../lib/printBill';
 import { inr } from '../../lib/types';
 import { usePartner } from './PartnerShell';
 import { Spinner } from '../../components';
@@ -32,7 +33,6 @@ export function Billing() {
   const [billQr, setBillQr] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const [printing, setPrinting] = useState(false);
   // The owner's bill layout. Null until it loads and null forever if the
   // column is not there yet -- normaliseLayout inside the template turns both
   // into the house layout, so printing never waits on this.
@@ -276,11 +276,23 @@ export function Billing() {
     fetchBillLayout(restaurant.id).then(setLayout).catch(() => {});
   }, [restaurant.id]);
 
-  useEffect(() => {
-    if (!printing) return;
-    const t = setTimeout(() => { window.print(); setPrinting(false); }, 300);
-    return () => clearTimeout(t);
-  }, [printing]);
+  /**
+   * THE REAL BILL PRINTS THE SAME WAY THE SAMPLE DOES -- through an isolated
+   * iframe, not by printing this page.
+   *
+   * It used to inject the bill into the portal and call window.print(), which
+   * gave the PORTAL's print CSS a say in what came out. On paper under 100mm
+   * that stylesheet forces .printable to Courier and overrides the sizes, so
+   * a real bill on an 80mm thermal roll printed in a different typeface from
+   * the sample the owner had just approved on the same screen -- and from the
+   * phone's. The iframe carries none of this page's CSS, so the template's
+   * own thermal rules are the only ones in force and all three documents are
+   * the same one.
+   */
+  const printBill = () => {
+    if (!bill) return;
+    printBillHtml(renderBillHtml(printData(), layout));
+  };
 
   if (orders === null) return <Spinner label="Loading unpaid orders…" />;
 
@@ -423,7 +435,7 @@ export function Billing() {
           <div className="topbar" style={{ padding: 0 }}>
             <strong>Bill #{bill.bill_no}</strong>
             <span style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
-              <button className="chip" onClick={() => setPrinting(true)}>🖨 Print bill</button>
+              <button className="chip" onClick={printBill}>🖨 Print bill</button>
             </span>
           </div>
           <div className="bill-row total"><span>To collect</span><span>{inr(bill.total)}</span></div>
@@ -455,26 +467,6 @@ export function Billing() {
         </div>
       )}
 
-      {printing && bill && (
-        /**
-         * THE PRINTED BILL IS THE SHARED TEMPLATE NOW, not JSX that happened
-         * to look similar. This block used to be its own markup — a narrow
-         * centred receipt — while the phone printed a wide A4 GST table, so a
-         * diner handed one from the counter and one from the phone was looking
-         * at two products. Both call renderBillHtml today.
-         *
-         * dangerouslySetInnerHTML is doing what it says and it is safe here
-         * for a specific reason rather than a hopeful one: every value the
-         * template interpolates goes through its own `esc`, and the string is
-         * assembled by a function in this repo, not fetched. React's escaping
-         * is not available to us because the thing being inserted IS a
-         * document — that is the point of sharing it.
-         */
-        <div
-          className="printable"
-          dangerouslySetInnerHTML={{ __html: renderBillHtml(printData(), layout) }}
-        />
-      )}
     </div>
   );
 }

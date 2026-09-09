@@ -289,7 +289,7 @@ export function PlanScreen({ preview }: { preview?: boolean } = {}) {
 
       {ent?.state === 'trial' && (
         <div className="glass" style={{ padding: 14, marginTop: 14, borderColor: 'var(--gold)' }}>
-          <strong style={{ color: '#8a6a25' }}>Free trial — full Growth features.</strong>{' '}
+          <strong style={{ color: '#8a6a25' }}>Free trial — full Enterprise features.</strong>{' '}
           <span className="muted" style={{ fontSize: 14 }}>
             {ent.trialEndsAt === null
               ? 'No end date set.'

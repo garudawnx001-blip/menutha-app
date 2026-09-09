@@ -708,8 +708,6 @@ input.code-input::placeholder { color: var(--text-dim); }
 }
 .row-item:last-child { border-bottom: none; }
 
-/* Print: only the printable sheet */
-
 /* ── Diet filter chips (Veg green / Non-veg red selected states) ─────────── */
 .diet-chip { gap: 7px; }
 .diet-chip .veg-mark { width: 14px; height: 14px; min-width: 14px; }
@@ -1196,10 +1194,10 @@ input.code-input::placeholder { color: var(--text-dim); }
 .pick-some > summary:hover { color: var(--text); }
 
 /* ── Print ──────────────────────────────────────────────────────────────────
-   The printable node was absolutely positioned at inset:0, which on a second
-   page left content clipped and the margins uneven. Static flow with real
-   page margins prints a clean document that tears off straight, and
-   print-color-adjust keeps the QR and accent bands from being stripped. */
+   What is left here governs the QR SHEET and the portal chrome. Bills are not
+   styled in this file: they are a self-contained document written into an
+   isolated iframe by lib/printBill.ts, so every paper rule a bill obeys lives
+   in lib/billTemplate.ts beside the markup it styles. See the note below. */
 @page {
   /* `auto`, not A4. The page box then becomes whatever paper the person picked
      in their own print dialog — A4, Letter, a 100x150 label, an 80mm roll — and
@@ -1213,8 +1211,7 @@ input.code-input::placeholder { color: var(--text-dim); }
      content for a card that measures 36mm, so every small-format card was
      guaranteed to be cut — simulated against the real rules across A4, Letter,
      100x150, 50x50 and 40x40.
-     Breathing room on big paper is added back as padding on .printable below,
-     where it can be conditional. Margin cannot be: making @page margin depend
+     Margin cannot be conditional anyway: making @page margin depend
      on a width media query is circular, since the margin decides the width the
      query then reads. */
   margin: 4mm;
@@ -1225,80 +1222,26 @@ input.code-input::placeholder { color: var(--text-dim); }
     margin: 0 !important;
     padding: 0 !important;
   }
-  /* COLLAPSE, don't just hide.
-     This used visibility:hidden alone, and a hidden element still occupies its
-     full box. So the portal sidebar, the page heading and the format chips all
-     reserved a page's worth of empty space above the card — which is exactly
-     the reported "page 1 blank, card on page 2" when printing a table QR.
-     Anything that neither IS the printable region nor CONTAINS it now takes no
-     space at all; ancestors on the path to it stay in flow so the region
-     paginates normally across multiple cards. */
-  .portal-nav { display: none !important; }
-  .portal-main *:not(:has(.printable)):not(.printable):not(.printable *) {
-    display: none !important;
-  }
+  /* THE .printable MECHANISM IS GONE, and its absence is the fix.
 
-  body * { visibility: hidden; }
-  .printable, .printable * { visibility: visible; }
-  .printable {
-    position: static !important;
-    inset: auto !important;
-    width: 100% !important;
-    max-width: 100% !important;
-    padding: 0 !important;
-    margin: 0 !important;
-    background: #fff !important;
-    color: #000 !important;
-    font-size: 12px;
-    line-height: 1.45;
-  }
-  .printable * {
-    -webkit-print-color-adjust: exact;
-    print-color-adjust: exact;
-  }
-  /* Never split a bill row, a total or a QR block across pages. */
-  .printable .bill-row,
-  .printable img,
-  .printable .qr-card { break-inside: avoid; page-break-inside: avoid; }
-  .printable table { width: 100%; border-collapse: collapse; }
-  .printable td, .printable th { padding: 3px 0; vertical-align: top; }
-  /* Money columns line up on the decimal, which is what makes a bill look
-     professional rather than hand-made. */
-  .printable td:last-child, .printable th:last-child,
-  .printable .bill-row > span:last-child {
-    text-align: right;
-    font-variant-numeric: tabular-nums;
-  }
-  .portal-nav, .cartbar-wrap, .btn, .chip, .seg, .growth-wrap { display: none !important; }
-}
+     Printing used to work by hiding the whole document and revealing one
+     node: `body * { visibility: hidden }` plus `.printable { visible }`.
+     Two things were wrong with that.
 
-/* ── Bills on whatever roll is loaded ───────────────────────────────────────
-   A restaurant prints on the paper physically in the machine. Asking them to
-   name it first, in our words, before the print dialog asked them again, only
-   created a way to be wrong — so the picker is gone and the bill reads the
-   real page width instead.
+     The PARTNER's bill was then styled by THIS stylesheet rather than by the
+     bill template -- under 100mm it was forced to Courier with its own sizes,
+     so a real bill on a thermal roll printed unlike the sample the owner had
+     just approved on the same screen, and unlike the phone's.
 
-   Anything narrower than about 100mm is a thermal roll: monospace, tighter
-   leading, and the logo and pay-QR capped hard because roll length is the
-   scarce resource. Below 65mm is a 58mm roll, which needs another step down. */
-@media print and (max-width: 100mm) {
-  .printable {
-    font-family: "Courier New", Courier, monospace !important;
-    line-height: 1.35;
-    font-size: 10.5px;
-  }
-  .printable .bill-logo { max-height: 34px !important; }
-  .printable img[alt=""] { max-width: 34mm; height: auto; }
-  .printable td:first-child { word-break: break-word; padding-right: 4px; }
-  .printable td:last-child { width: 20mm; }
-  .printable hr { border: 0; border-top: 1px dashed #000; }
-}
+     And the DINER's bill and tracking pages carry no .printable node at all,
+     so `body * { visibility: hidden }` applied to them with nothing to
+     reveal: their Save/Print button printed a blank sheet.
 
-@media print and (max-width: 65mm) {
-  .printable { font-size: 9px; }
-  .printable .bill-logo { max-height: 26px !important; }
-  .printable img[alt=""] { max-width: 26mm; height: auto; }
-  .printable td:last-child { width: 16mm; }
+     Both bills go through printBill.ts now, which writes the shared template
+     into an isolated iframe that nothing in this file can reach. What is left
+     here is only the portal chrome, hidden so a stray Ctrl+P on a section
+     page does not print a sidebar next to the content. */
+  .portal-nav, .cartbar-wrap, .growth-wrap { display: none !important; }
 }
 
 /* Prep countdown on the order card. A kitchen tool, not a diner promise —
@@ -1429,33 +1372,6 @@ input.code-input::placeholder { color: var(--text-dim); }
   .qr-sheet .qr-table { font-size: 9px; margin: 1mm 0 0; padding: .5mm 2mm; }
 }
 
-/* ── Bill document pass ─────────────────────────────────────────────────────
-   The complaint was "not at all proper" — this is the alignment and rhythm
-   pass. The money column is the spine of a bill: it gets a fixed width,
-   tabular figures and a hard right edge so every number lines up on the
-   decimal regardless of how long the dish name is. */
-@media print {
-  .printable { color: #000; }
-  .printable table { width: 100%; border-collapse: collapse; table-layout: fixed; }
-  .printable td { vertical-align: top; padding: 3px 0; }
-  /* Dish names wrap; amounts never do. */
-  .printable td:first-child { width: auto; word-break: break-word; padding-right: 6px; }
-  .printable td:last-child {
-    width: 22mm; text-align: right; white-space: nowrap;
-    font-variant-numeric: tabular-nums;
-  }
-  /* Totals separated by rule, not by guesswork. */
-  .printable tr.t td, .printable .bill-row.total {
-    border-top: 1px solid #000; padding-top: 5px; font-weight: 700;
-  }
-  .printable hr { border: 0; border-top: 1px solid #000; margin: 6px 0; }
-  /* Header block reads as a letterhead: centred, tight, no orphan lines. */
-  .printable h2 { margin: 0 0 2px; line-height: 1.2; }
-  .printable h2 + p, .printable p { margin: 1px 0; line-height: 1.35; }
-  .printable .bill-logo { margin-bottom: 4px; }
-  /* Never split a bill across pages mid-total. */
-  .printable tr, .printable .bill-row { break-inside: avoid; page-break-inside: avoid; }
-}
 
 /* ── Menu manager: dish rows, thumbnails, wide edit sheet ─────────────── */
 
@@ -1594,14 +1510,6 @@ input.code-input::placeholder { color: var(--text-dim); }
   .portal-rest { display: flex; flex-direction: column; position: static; background: none; border: 0; box-shadow: none; padding: 0; }
   .portal-rest .portal-link:last-child { margin-top: 12px; }
   .portal-more { display: none; }
-}
-
-/* Breathing room, added where there is room to spare. Sheet paper gets a
-   comfortable inner margin; label stock and rolls get none, because on a 40mm
-   square every millimetre spent on white space is taken from the QR — the one
-   element that has to work. */
-@media print and (min-width: 120mm) {
-  .printable { padding: 6mm !important; }
 }
 
 /* Smallest labels: the code and the table number, sized to actually fit.
