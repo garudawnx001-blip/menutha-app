@@ -5,6 +5,7 @@ import { NavLink } from 'react-router-dom';
 import QRCode from 'qrcode';
 import { fetchTables, createTable, removeTable, setTableCapacity, setTableAc, type PortalTable } from '../../lib/portalApi';
 import { renderQrSheetHtml, accentFor } from '../../lib/billTemplate';
+import { printBillHtml } from '../../lib/printBill';
 import { usePartner } from './PartnerShell';
 import { Spinner } from '../../components';
 
@@ -144,21 +145,10 @@ export function TablesQR() {
         accent: accentFor(t.label),
       })));
 
-      const frame = document.createElement('iframe');
-      frame.setAttribute('aria-hidden', 'true');
-      frame.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;';
-      document.body.appendChild(frame);
-      const doc = frame.contentDocument;
-      if (!doc) { document.body.removeChild(frame); setError('Could not open the print sheet.'); return; }
-      doc.open();
-      doc.write(renderQrSheetHtml(cards));
-      doc.close();
-      // The QRs are inline SVG and parse with the document, so there is nothing
-      // to wait on but layout. The frame is removed after the dialog returns;
-      // removing it sooner cancels the print on some browsers.
-      frame.contentWindow?.focus();
-      frame.contentWindow?.print();
-      setTimeout(() => { try { document.body.removeChild(frame); } catch { /* already gone */ } }, 1000);
+      // The same isolated-iframe printer the bill uses. It had its own copy
+      // of this, with a 1s cleanup that cancelled the job on browsers where
+      // print() resolves when the dialog OPENS rather than when it closes.
+      printBillHtml(renderQrSheetHtml(cards));
     } catch (e: any) {
       setError(e?.message ?? 'Could not prepare the cards for printing.');
     }

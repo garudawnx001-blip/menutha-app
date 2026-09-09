@@ -480,6 +480,18 @@ export function renderQrSheetHtml(cards: QrCardData[]): string {
      closed the string and took the file out with three TS1005s. */
   .sheet { display: flex; flex-wrap: wrap; gap: 6mm;
            justify-content: center; align-content: flex-start; }
+  /* ONE CARD SITS IN THE MIDDLE OF THE PAGE, both ways.
+     Centring horizontally was already here and it was only half the job: a
+     single card was centred across the width and pinned to the TOP, so an
+     owner printing one table's QR got a card floating at the top of a page of
+     white, which is what was reported. 100vh inside a print context resolves
+     to the PAGE BOX -- whatever paper the dialog chose -- so this centres on
+     A4, on Letter and on a 100x150 label without knowing which it is.
+     Only when there is ONE card. A dozen cards must stack from the top or the
+     page breaks land in the middle of a card, and a short last row floating
+     mid-page is worse than a tidy grid. */
+  .sheet.one { min-height: 100vh; align-content: center; align-items: center; }
+
   /* On SCREEN -- the share/preview path -- give the page a little air and stop
      it being a card marooned in a white field. Print is untouched: @page owns
      the paper margin and this block does not apply to it. */
@@ -503,9 +515,13 @@ export function renderQrSheetHtml(cards: QrCardData[]): string {
      only things that survive legibly are the code and the table number. */
   @media print and (max-width: 80mm) {
     .sheet { gap: 0; }
+    /* Not on a roll. Roll paper is billed by the millimetre, and centring on
+       a "page" the printer treats as continuous would feed blank stock before
+       and after the card. */
+    .sheet.one { min-height: 0; align-content: flex-start; }
     .card { flex: 0 0 100%; border: none; padding: 2mm; }
     .eyebrow, .steps, .foot { display: none; }
     .well { width: 40mm; height: 40mm; }
   }
-</style></head><body><div class="sheet">${cards.map(card).join('')}</div></body></html>`;
+</style></head><body><div class="sheet${cards.length === 1 ? ' one' : ''}">${cards.map(card).join('')}</div></body></html>`;
 }
