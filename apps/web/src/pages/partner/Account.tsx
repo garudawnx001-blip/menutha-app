@@ -22,6 +22,7 @@ import { supabase } from '../../lib/supabase';
 import { showAppleButton, providerError } from '../../lib/authProviders';
 import {
   resetByIdentifier, completeReset, changePassword, passwordProblem,
+  usernameAvailable, usernameProblem, cleanHandle,
 } from '../../lib/auth';
 
 export function Account() {
@@ -30,6 +31,13 @@ export function Account() {
   const [username, setUsername] = useState<string | null>(null);
   const [googleEmail, setGoogleEmail] = useState<string | null>(null);
   const [googleLinked, setGoogleLinked] = useState(false);
+  /** Username and email, EDITABLE. Both surfaces showed them read-only, and
+   *  "unable to add username" was the accurate report: an owner who arrived
+   *  by Google before the finish-setup step, or any account with no handle,
+   *  had nowhere to set one. Built here first; the phone mirrors it. */
+  const [idStep, setIdStep] = useState<'off' | 'form'>('off');
+  const [newHandle, setNewHandle] = useState('');
+  const [newEmail, setNewEmail] = useState('');
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState('');
   const [error, setError] = useState('');
@@ -108,6 +116,62 @@ export function Account() {
     } finally { setBusy(false); }
   };
 
+  /**
+   * SAVE USERNAME AND/OR EMAIL.
+   *
+   * Username: app_user.username is the row the login resolves (see the
+   * username-login function), and the "app_user: update own" policy lets an
+   * owner write their own row. The unique index on lower(username) is the
+   * final arbiter; its refusal (23505) becomes "taken". user_metadata is
+   * mirrored so the fallback this page reads agrees with the row.
+   *
+   * Email: Supabase changes it only after the owner confirms from the new
+   * inbox (and, with secure email change on, the old one too), so this
+   * cannot say "done" -- it says what to do next.
+   */
+  const saveIdentity = async () => {
+    const handle = cleanHandle(newHandle.trim());
+    const wantsHandle = handle !== (username ?? '');
+    const mail = newEmail.trim();
+    const wantsEmail = !!mail && mail !== (email ?? '');
+    if (!wantsHandle && !wantsEmail) { setIdStep('off'); return; }
+    if (wantsHandle) {
+      const problem = usernameProblem(handle);
+      if (problem) { setError(problem); return; }
+    }
+    if (wantsEmail && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(mail)) {
+      setError('That does not look like an email address.'); return;
+    }
+    setBusy(true); setError(''); setMsg('');
+    try {
+      const { data: u } = await supabase.auth.getUser();
+      const uid = u.user?.id;
+      if (!uid) throw new Error('Please sign in again.');
+      if (wantsHandle) {
+        if (!(await usernameAvailable(handle))) { setError('That username is taken. Try another.'); return; }
+        const { data: rows, error: err } = await supabase
+          .from('app_user').update({ username: handle }).eq('id', uid).select('id');
+        if (err) {
+          if ((err as any).code === '23505') { setError('That username is taken. Try another.'); return; }
+          throw err;
+        }
+        if (!rows || rows.length === 0) {
+          throw new Error('The username was not saved — you may not have permission to change it.');
+        }
+        await supabase.auth.updateUser({ data: { username: handle } });
+      }
+      if (wantsEmail) {
+        const { error: err } = await supabase.auth.updateUser({ email: mail });
+        if (err) throw err;
+        setMsg(`Check ${mail} for a confirmation link — the email changes once you open it.`);
+      }
+      setIdStep('off');
+      await read();
+    } catch (e: any) {
+      setError(e?.message ?? 'Could not save.');
+    } finally { setBusy(false); }
+  };
+
   const read = async () => {
     const { data } = await supabase.auth.getUser();
     setEmail(data.user?.email ?? null);
@@ -175,14 +239,50 @@ export function Account() {
         {/* THE HANDLE FIRST. It is what the owner types to log in, and it was
             the one thing this page did not show -- an owner who had forgotten
             it had nowhere to look. */}
-        <p className="overline" style={{ marginBottom: 4 }}>Username</p>
-        <strong style={{ fontSize: 18 }}>{username ? `@${username}` : '—'}</strong>
-        <p className="overline" style={{ margin: '12px 0 4px' }}>Email</p>
-        <strong style={{ fontSize: 15 }}>{email ?? 'Unknown'}</strong>
-        <p className="dim" style={{ fontSize: 13, marginTop: 8 }}>
-          Log in with either, and the same password. It is one account — the same login
-          works in the Menutha app on your phone.
-        </p>
+        {idStep === 'off' ? (
+          <>
+            <p className="overline" style={{ marginBottom: 4 }}>Username</p>
+            <strong style={{ fontSize: 18 }}>{username ? `@${username}` : '—'}</strong>
+            <p className="overline" style={{ margin: '12px 0 4px' }}>Email</p>
+            <strong style={{ fontSize: 15 }}>{email ?? 'Unknown'}</strong>
+            <p className="dim" style={{ fontSize: 13, marginTop: 8 }}>
+              Log in with either, and the same password. It is one account — the same login
+              works in the Menutha app on your phone.
+            </p>
+            <button className="btn btn-glass btn-block" style={{ marginTop: 12 }} disabled={busy}
+              onClick={() => { setNewHandle(username ?? ''); setNewEmail(email ?? ''); setError(''); setMsg(''); setIdStep('form'); }}>
+              {username ? 'Change username or email' : 'Set a username'}
+            </button>
+          </>
+        ) : (
+          <>
+            <label className="field-label" htmlFor="acct-username">Username</label>
+            {/* Lower-cased as typed, the same alphabet sign-up allows. */}
+            <input id="acct-username" className="code-input" type="text" autoComplete="username" autoFocus
+              placeholder="your_restaurant" value={newHandle}
+              onChange={(e) => setNewHandle(cleanHandle(e.target.value))} />
+            <p className="dim" style={{ fontSize: 12, margin: '4px 0 10px' }}>
+              3–30 letters, numbers, dots or underscores. This is what you type to log in.
+            </p>
+            <label className="field-label" htmlFor="acct-email">Email</label>
+            <input id="acct-email" className="code-input" type="email" autoComplete="email"
+              value={newEmail} onChange={(e) => setNewEmail(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && saveIdentity()} />
+            <p className="dim" style={{ fontSize: 12, margin: '4px 0 10px' }}>
+              A new address takes effect once you confirm it from the link we send there.
+            </p>
+            {/* Beside the field, not only at the foot of the page. */}
+            {error && <p className="field-error">{error}</p>}
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button className={`btn btn-primary${busy ? ' is-busy' : ''}`} style={{ flex: 1 }} disabled={busy} onClick={saveIdentity}>
+                Save
+              </button>
+              <button className="btn btn-ghost" style={{ flex: 1 }} disabled={busy} onClick={() => { setIdStep('off'); setError(''); }}>
+                Cancel
+              </button>
+            </div>
+          </>
+        )}
       </div>
 
       {/* CHANGE PASSWORD — the six-digit code, in place. */}
