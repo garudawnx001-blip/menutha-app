@@ -1389,9 +1389,9 @@ input.code-input::placeholder { color: var(--text-dim); }
   font-size: 17px; opacity: 0.45;
 }
 
-.dish-row { cursor: grab; }
-.dish-row.dragging { opacity: 0.45; cursor: grabbing; }
-.dish-row:active { cursor: grabbing; }
+/* The grab cursor lives on the grip now, not the whole row -- see the
+   category rules below, which dish rows share. A row that was all grab-cursor
+   with no handle was the "no drag handles" report. */
 /* Buttons inside a draggable row must stay clickable, not start a drag. */
 .dish-row button, .dish-row img { cursor: pointer; }
 
@@ -1461,27 +1461,34 @@ input.code-input::placeholder { color: var(--text-dim); }
    exactly), while the rows making room animate into place. Touch-action is
    pinned on the grip only, so the list still scrolls normally everywhere
    else — taking it off the whole row would trap the page. */
-.cat-row { position: relative; }
-.cat-row.sliding { transition: transform 180ms cubic-bezier(0.2, 0.9, 0.3, 1); }
-.cat-row.dragging {
+/* Categories AND dishes: one drag, one look. The dish list used HTML5
+   draggable, no handle, no touch -- it now carries the same grip. */
+.cat-row, .dish-row { position: relative; }
+.cat-row.sliding, .dish-row.sliding { transition: transform 180ms cubic-bezier(0.2, 0.9, 0.3, 1); }
+.cat-row.dragging, .dish-row.dragging {
   z-index: 5;
   box-shadow: 0 10px 24px rgba(0, 0, 0, 0.18);
   border-color: var(--accent);
   background: var(--surface);
   transition: none;
 }
-.cat-row .cat-grip {
+.row-item .cat-grip {
   cursor: grab;
   touch-action: none;
   user-select: none;
-  padding: 6px 4px;
-  border-radius: 6px;
+  /* 44px square: a grip you can find with a thumb, on a laptop trackpad too. */
+  min-width: 44px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
   color: var(--text-muted);
   font-size: 15px;
   line-height: 1;
 }
-.cat-row .cat-grip:active { cursor: grabbing; background: var(--surface-2, rgba(0,0,0,0.04)); }
-@media (prefers-reduced-motion: reduce) { .cat-row.sliding { transition: none; } }
+.row-item .cat-grip:active { cursor: grabbing; background: var(--surface-2, rgba(0,0,0,0.04)); }
+@media (prefers-reduced-motion: reduce) { .cat-row.sliding, .dish-row.sliding { transition: none; } }
 
 /* ── Chip rows wrap once there is room ─────────────────────────────────────
    Measured on /partner/menu at 1024px wide: scrollWidth 1892 against

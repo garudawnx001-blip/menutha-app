@@ -54,54 +54,14 @@ export function MenuManager() {
   // of the way, and the drop target is visible the whole time.
   //
   // No library: this is one measured row height and some arithmetic.
-  const [drag, setDrag] = useState<
-    { id: string; from: number; to: number; dy: number } | null
-  >(null);
-  const dragRef = useRef<{ id: string; from: number; startY: number; h: number } | null>(null);
-  const catCount = useRef(0);
-  catCount.current = cats.length;
-
-  const onGripDown = (e: React.PointerEvent, id: string, idx: number) => {
-    const row = (e.currentTarget as HTMLElement).closest('.cat-row') as HTMLElement | null;
-    const h = row?.getBoundingClientRect().height ?? 48;
-    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-    dragRef.current = { id, from: idx, startY: e.clientY, h };
-    setDrag({ id, from: idx, to: idx, dy: 0 });
-  };
-
-  const onGripMove = (e: React.PointerEvent) => {
-    const d = dragRef.current;
-    if (!d) return;
-    const dy = e.clientY - d.startY;
-    const to = Math.max(0, Math.min(catCount.current - 1, d.from + Math.round(dy / d.h)));
-    setDrag({ id: d.id, from: d.from, to, dy });
-
-    // Auto-scroll when the finger nears an edge, or a long list can only be
-    // reordered as far as the screen is tall.
-    const M = 90;
-    if (e.clientY < M) window.scrollBy({ top: -12, behavior: 'auto' });
-    else if (e.clientY > window.innerHeight - M) window.scrollBy({ top: 12, behavior: 'auto' });
-  };
-
-  const onGripUp = () => {
-    const d = dragRef.current;
-    const cur = drag;
-    dragRef.current = null;
-    setDrag(null);
-    if (d && cur && cur.to !== d.from) moveCatTo(d.id, cur.to);
-  };
-
-  /** How far a row slides to make room for the one being dragged. */
-  const rowShift = (idx: number) => {
-    if (!drag || !dragRef.current) return 0;
-    const h = dragRef.current.h;
-    if (idx === drag.from) return drag.dy;
-    if (drag.to > drag.from && idx > drag.from && idx <= drag.to) return -h;
-    if (drag.to < drag.from && idx < drag.from && idx >= drag.to) return h;
-    return 0;
-  };
-
-  const [dragDish, setDragDish] = useState<string | null>(null);
+  //
+  // ONE MECHANISM FOR BOTH LISTS. This began as category-only, and dishes
+  // kept HTML5 draggable/onDrop -- which has no handle to see and does not
+  // work on a touch screen. The client reported exactly that: "no drag
+  // handles", and reordering that did not take on his phone. The state and
+  // the three pointer handlers are `useGripDrag` at the foot of this file;
+  // the two lists each hold one, below `moveDishTo`, once the lists they act
+  // on exist. Same grip, same slide, same auto-scroll, same feel.
 
   // Bulk photos
   const photoRef = useRef<HTMLInputElement>(null);
@@ -171,10 +131,15 @@ export function MenuManager() {
     slots.forEach((slot, i) => { next[slot] = slice[i]; });
 
     setItems(next);
-    setDragDish(null);
     try { await reorderDishes(next.map((d) => d.id)); }
     catch (err: any) { setError(`Could not save the new order: ${err?.message ?? 'unknown error'}`); load(); }
   };
+
+  // Here and not at the top: `visible`, `moveCatTo` and `moveDishTo` are
+  // consts above, and a hook that read them earlier would hit them before
+  // they exist. See the note at "No library".
+  const cat = useGripDrag(cats.length, moveCatTo);
+  const dish = useGripDrag(visible.length, moveDishTo);
 
   /** Attach a whole folder of photos at once, matching each file to the dish
    *  whose name it resembles. Reports what did not match rather than dropping
@@ -395,20 +360,20 @@ export function MenuManager() {
                 key={c.id}
                 className={
                   'row-item cat-row'
-                  + (drag?.id === c.id ? ' dragging' : '')
-                  + (drag && drag.id !== c.id ? ' sliding' : '')
+                  + (cat.drag?.id === c.id ? ' dragging' : '')
+                  + (cat.drag && cat.drag.id !== c.id ? ' sliding' : '')
                 }
-                style={{ gap: 8, transform: `translateY(${rowShift(idx)}px)` }}
+                style={{ gap: 8, transform: `translateY(${cat.rowShift(idx)}px)` }}
               >
                 <span
                   className="cat-grip"
                   title="Drag to reorder"
                   role="button"
                   aria-label={`Reorder ${c.name}`}
-                  onPointerDown={(e) => onGripDown(e, c.id, idx)}
-                  onPointerMove={onGripMove}
-                  onPointerUp={onGripUp}
-                  onPointerCancel={onGripUp}
+                  onPointerDown={(e) => cat.onDown(e, c.id, idx)}
+                  onPointerMove={cat.onMove}
+                  onPointerUp={cat.onUp}
+                  onPointerCancel={cat.onUp}
                 ><DragHandleIcon size={15} /></span>
                 <span style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                   <button className="chip cat-nudge" disabled={idx === 0}
@@ -480,14 +445,27 @@ export function MenuManager() {
         {visible.map((d, i) => (
           <div
             key={d.id}
-            className={`row-item dish-row${dragDish === d.id ? ' dragging' : ''}`}
-            draggable
-            onDragStart={() => setDragDish(d.id)}
-            onDragEnd={() => setDragDish(null)}
-            onDragOver={(e) => e.preventDefault()}
-            onDrop={(e) => { e.preventDefault(); if (dragDish && dragDish !== d.id) moveDishTo(dragDish, i); }}
+            className={
+              'row-item dish-row'
+              + (dish.drag?.id === d.id ? ' dragging' : '')
+              + (dish.drag && dish.drag.id !== d.id ? ' sliding' : '')
+            }
+            style={{ transform: `translateY(${dish.rowShift(i)}px)` }}
           >
             <div style={{ display: 'flex', gap: 10, alignItems: 'center', minWidth: 0 }}>
+              {/* THE GRIP -- the same one the categories have. This row used
+                  HTML5 draggable, which draws no handle and does not respond
+                  to a finger; "no drag handles" was the accurate report. */}
+              <span
+                className="cat-grip"
+                title="Drag to reorder"
+                role="button"
+                aria-label={`Reorder ${d.name}`}
+                onPointerDown={(e) => dish.onDown(e, d.id, i)}
+                onPointerMove={dish.onMove}
+                onPointerUp={dish.onUp}
+                onPointerCancel={dish.onUp}
+              ><DragHandleIcon size={15} /></span>
               {/* THE DISH ARROWS ARE GONE at the partner's request -- "please
                   remove this arrow buttons".
                   Worth knowing what went with them: the note here used to say
@@ -761,4 +739,69 @@ export function MenuManager() {
       )}
     </div>
   );
+}
+
+/**
+ * GRIP DRAG, WITH POINTER EVENTS. See the note at "No library" in MenuManager.
+ *
+ * `count` is the length of the list being reordered. `onMove(id, to)` fires
+ * once, on release, only when the row landed somewhere new -- so a tap on
+ * the grip that goes nowhere writes nothing.
+ *
+ * The row height is measured from the grip's own `.row-item` on the way
+ * down, so category rows and dish rows -- different heights -- each slide by
+ * their own. Pointer capture keeps the gesture on the grip once it starts;
+ * `touch-action: none` on the grip (theme.css) is what stops the page
+ * scrolling underneath it on a phone. Both together are the whole reason
+ * this works where HTML5 draggable did not.
+ */
+function useGripDrag(count: number, onMove: (id: string, to: number) => void) {
+  const [drag, setDrag] = useState<{ id: string; from: number; to: number; dy: number } | null>(null);
+  const ref = useRef<{ id: string; from: number; startY: number; h: number } | null>(null);
+  const countRef = useRef(count);
+  countRef.current = count;
+  const onMoveRef = useRef(onMove);
+  onMoveRef.current = onMove;
+
+  const onDown = (e: React.PointerEvent, id: string, idx: number) => {
+    const row = (e.currentTarget as HTMLElement).closest('.row-item') as HTMLElement | null;
+    const h = row?.getBoundingClientRect().height ?? 48;
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    ref.current = { id, from: idx, startY: e.clientY, h };
+    setDrag({ id, from: idx, to: idx, dy: 0 });
+  };
+
+  const onPointerMove = (e: React.PointerEvent) => {
+    const d = ref.current;
+    if (!d) return;
+    const dy = e.clientY - d.startY;
+    const to = Math.max(0, Math.min(countRef.current - 1, d.from + Math.round(dy / d.h)));
+    setDrag({ id: d.id, from: d.from, to, dy });
+
+    // Auto-scroll when the finger nears an edge, or a long list can only be
+    // reordered as far as the screen is tall.
+    const M = 90;
+    if (e.clientY < M) window.scrollBy({ top: -12, behavior: 'auto' });
+    else if (e.clientY > window.innerHeight - M) window.scrollBy({ top: 12, behavior: 'auto' });
+  };
+
+  const onUp = () => {
+    const d = ref.current;
+    const cur = drag;
+    ref.current = null;
+    setDrag(null);
+    if (d && cur && cur.to !== d.from) onMoveRef.current(d.id, cur.to);
+  };
+
+  /** How far a row slides to make room for the one being dragged. */
+  const rowShift = (idx: number) => {
+    if (!drag || !ref.current) return 0;
+    const h = ref.current.h;
+    if (idx === drag.from) return drag.dy;
+    if (drag.to > drag.from && idx > drag.from && idx <= drag.to) return -h;
+    if (drag.to < drag.from && idx < drag.from && idx >= drag.to) return h;
+    return 0;
+  };
+
+  return { drag, onDown, onMove: onPointerMove, onUp, rowShift };
 }
