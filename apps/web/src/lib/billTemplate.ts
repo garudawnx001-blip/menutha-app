@@ -491,11 +491,74 @@ export function renderQrSheetHtml(cards: QrCardData[]): string {
      page breaks land in the middle of a card, and a short last row floating
      mid-page is worse than a tidy grid. */
   .sheet.one { min-height: 100vh; align-content: center; align-items: center; }
+  /* ONE CARD IS A FULL-PAGE POSTER, not a small code marooned in white paper.
+     A table tent is read from across a table by someone holding a phone at
+     arm's length, so the code wants every millimetre the paper can give it.
+
+     THE SQUARE IS min(width, height), and that one expression is what makes
+     this ratio-agnostic. In paged media vw and vh resolve to the PAGE AREA --
+     the paper inside the @page margin -- so on A4 portrait the height is the
+     binding constraint and on anything landscape the width is, without this
+     template being told which paper it landed on. 68vh rather than 100vh
+     leaves the house name above and the caption below their own room; the
+     type scales with it so the card reads as one designed page rather than a
+     small card blown up.
+
+     THE RESERVE IS MEASURED, NOT CHOSEN. Everything that is not the code --
+     eyebrow, name, table pill, caption, footer and the fixed mm margins
+     between them -- comes to about 105mm at these type sizes with the name on
+     two lines. Subtracting it from the page height before taking the square
+     is what makes this safe on paper of any shape: a flat percentage of the
+     height cannot work, because the text block does not shrink when the page
+     does. Rendered at A4 landscape a flat 60vh overflowed by 63px and would
+     have thrown the footer onto a second sheet -- a wasted page every time
+     somebody prints a table tent.
+
+     With the subtraction, A4 portrait comes out WIDTH-limited at about 174mm,
+     which is the largest square the margins allow, and A4 landscape comes out
+     height-limited at about 93mm and still fits. Neither case has to know
+     which paper it landed on.
+
+     Measured at US Letter: everything that is not the code comes to 99.4mm
+     with the name on two lines. The reserve is 112mm, which buys a third line
+     of a long restaurant name and still leaves the footer on the page.
+
+     The SCREEN value is 12mm larger because the screen preview -- the share
+     sheet, and the in-app look before anyone prints -- pays the body padding
+     that  pays for on paper. Without the difference Letter overflowed by
+     27px in the preview while printing perfectly, which is the kind of
+     disagreement that makes an owner stop trusting the preview. */
+  .sheet.one .card {
+    flex: 0 0 100%; width: 100%; min-height: 100vh; padding: 6mm;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+  }
+  .sheet.one          { --qr-reserve: 112mm; }
+  .sheet.one .well    { width: min(88vw, calc(100vh - var(--qr-reserve)));
+                        height: min(88vw, calc(100vh - var(--qr-reserve))); }
+  .sheet.one .eyebrow { font-size: 11pt; }
+  .sheet.one .house   { font-size: 24pt; margin-top: 2mm; }
+  .sheet.one .table   { font-size: 19pt; padding: 2mm 9mm; margin: 3mm 0 5mm; }
+  .sheet.one .cta     { font-size: 15pt; margin-top: 5mm; }
+  .sheet.one .steps   { font-size: 11pt; margin-top: 3mm; }
+  .sheet.one .foot    { font-size: 9pt; margin-top: 5mm; }
+
 
   /* On SCREEN -- the share/preview path -- give the page a little air and stop
      it being a card marooned in a white field. Print is untouched: @page owns
      the paper margin and this block does not apply to it. */
   @media screen { body { padding: 6mm; } }
+  /* That padding is charged on top of a 100vh card, so the SCREEN preview --
+     the share sheet and the in-app preview, which is what most people look at
+     before they ever print -- scrolled by exactly the padding and looked like
+     it would spill onto a second page. Print is unaffected either way (the
+     @page margin is already outside the 100vh page area), but a preview that
+     disagrees with the paper is a preview nobody can trust. Measured: 1168px
+     of document in an 1123px viewport, which is the 12mm to the pixel. */
+  @media screen {
+    .sheet.one, .sheet.one .card { min-height: calc(100vh - 12mm); }
+    .sheet.one { --qr-reserve: 124mm; }
+  }
   .card {
     flex: 0 0 88mm; max-width: 100%; padding: 7mm 6mm; text-align: center;
     border: 1.5px solid var(--accent); border-radius: 4mm;
@@ -515,10 +578,18 @@ export function renderQrSheetHtml(cards: QrCardData[]): string {
      only things that survive legibly are the code and the table number. */
   @media print and (max-width: 80mm) {
     .sheet { gap: 0; }
-    /* Not on a roll. Roll paper is billed by the millimetre, and centring on
-       a "page" the printer treats as continuous would feed blank stock before
-       and after the card. */
+    /* Not on a roll. Roll paper is billed by the millimetre, so neither the
+       centring nor the full-page sizing applies: a "page" the printer treats
+       as continuous would feed blank stock before and after the card, and a
+       68vh square on an unbounded page is not a number worth computing. Every
+       .sheet.one rule above is undone here -- they are more specific than the
+       plain ones in this block, so they have to be named to be beaten. */
     .sheet.one { min-height: 0; align-content: flex-start; }
+    .sheet.one .card { min-height: 0; padding: 2mm; display: block; }
+    .sheet.one .well { width: 40mm; height: 40mm; }
+    .sheet.one .house { font-size: 15pt; margin-top: 1.5mm; }
+    .sheet.one .table { font-size: 12pt; padding: 1mm 4mm; margin: 2mm 0 3mm; }
+    .sheet.one .cta   { font-size: 10pt; margin-top: 3mm; }
     .card { flex: 0 0 100%; border: none; padding: 2mm; }
     .eyebrow, .steps, .foot { display: none; }
     .well { width: 40mm; height: 40mm; }
