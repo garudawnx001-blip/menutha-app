@@ -244,6 +244,14 @@ export function PlanScreen({ preview }: { preview?: boolean } = {}) {
         key: data.razorpay_key_id,
         subscription_id: data.razorpay_subscription_id,
         name: 'Menutha',
+        // THE LOGO ON THE PAYMENT PAGE. Razorpay draws whatever `image` points
+        // at beside the business name; with none set the checkout showed a
+        // generic placeholder, so the one screen where somebody is handing
+        // over money was the least recognisably ours. A hosted URL rather
+        // than a data URI -- Razorpay fetches it server-side for the hosted
+        // page and for email receipts.
+        image: 'https://menutha.com/menutha-mark.svg',
+
         // What the sheet says must be what the mandate takes, GST included --
         // the plan row's charged figure, not its base.
         description: (() => {
@@ -252,7 +260,10 @@ export function PlanScreen({ preview }: { preview?: boolean } = {}) {
           const per = row && row.duration_months > 1 ? `every ${row.duration_months} months` : 'per month';
           return `${data.plan?.name ?? row?.name ?? 'Menutha'} — ${inr(total)} ${per}, GST included`;
         })(),
-        theme: { color: '#1B5E3F' },
+        // Terracotta, the accent every button in both products already uses.
+        // The forest green here matched nothing -- it was the only place in
+        // the payment flow wearing a second brand colour.
+        theme: { color: '#D97757' },
         handler: () => { setTimeout(load, 2500); }, // webhook flips state; refresh shortly after
       });
       rzp.open();
