@@ -44,7 +44,9 @@ export function Register({ previewPhase }: { previewPhase?: Phase } = {}) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
 
-  const [form, setForm] = useState({ owner: '', name: '', city: '', address: '', gstin: '' });
+  const [form, setForm] = useState({
+    owner: '', name: '', city: '', address: '', gstin: '', phone: '', maps_url: '',
+  });
 
   const readState = async () => {
     const { data } = await supabase.auth.getUser();
@@ -123,12 +125,42 @@ export function Register({ previewPhase }: { previewPhase?: Phase } = {}) {
       p_gstin: form.gstin.trim() || null,
       p_username: username || null,
     });
-    setBusy(false);
     if (err) {
+      setBusy(false);
       setError(err.message.includes('not authenticated')
         ? 'Please sign in first.' : err.message);
       return;
     }
+
+    /**
+     * PHONE AND THE MAP LINK, written straight after.
+     *
+     * complete_restaurant_signup takes a fixed set of parameters and is called
+     * by both surfaces; widening it would mean another migration through the
+     * one path where a failure costs somebody their entire sign-up. Both
+     * columns already exist, the restaurant is already created, and the owner
+     * is already its member — so this is an ordinary update.
+     *
+     * NOT FATAL IF IT FAILS. The account and the restaurant exist by this
+     * point and both fields are editable on Restaurant profile. Blocking a
+     * sign-up on a phone number would be the wrong trade.
+     */
+    if (form.phone.trim() || form.maps_url.trim()) {
+      try {
+        const { data: s } = await supabase.auth.getSession();
+        const uid = s.session?.user?.id;
+        const { data: m } = await supabase.from('restaurant_member')
+          .select('restaurant_id').eq('user_id', uid).limit(1).maybeSingle();
+        if (m?.restaurant_id) {
+          await supabase.from('restaurant').update({
+            phone: form.phone.trim() || null,
+            maps_url: form.maps_url.trim() || null,
+          }).eq('id', m.restaurant_id);
+        }
+      } catch { /* editable later on Restaurant profile */ }
+    }
+
+    setBusy(false);
     nav('/partner/orders', { replace: true });
   };
 
@@ -199,7 +231,29 @@ export function Register({ previewPhase }: { previewPhase?: Phase } = {}) {
             </div>
           </div>
           <p className="overline" style={{ margin: '12px 0 6px' }}>Address</p>
-          <input className="code-input" value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} />
+          <input className="code-input" placeholder="Street, area, landmark"
+            value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} />
+
+          <p className="overline" style={{ margin: '12px 0 6px' }}>Phone</p>
+          <input className="code-input" inputMode="tel" placeholder="For diners, and for us to reach you"
+            value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
+
+          {/* THE MAP LINK, BESIDE THE TYPED ADDRESS AND NOT INSTEAD OF IT.
+              A typed address is what prints on the bill; a Maps link is what a
+              diner taps to be driven there. Most owners already have one —
+              their restaurant is on Maps — and pasting it is faster and far
+              more accurate than describing a location in words. The pin picker
+              on Restaurant profile stays for anyone who would rather stand in
+              the doorway and press a button. */}
+          <p className="overline" style={{ margin: '12px 0 6px' }}>
+            Google Maps link <span className="dim">(optional)</span>
+          </p>
+          <input className="code-input" inputMode="url" placeholder="https://maps.app.goo.gl/…"
+            value={form.maps_url} onChange={(e) => setForm({ ...form, maps_url: e.target.value })} />
+          <p className="dim" style={{ fontSize: 12, margin: '6px 0 0' }}>
+            Open your restaurant in Google Maps, tap Share, and paste the link here. Diners tap it
+            to navigate. You can add or change this later in Restaurant profile.
+          </p>
           {error && <p style={{ color: 'var(--error)', fontSize: 13.5, marginTop: 10 }}>{error}</p>}
           <button className={`btn btn-primary btn-block${busy ? ' is-busy' : ''}`} style={{ marginTop: 16 }} disabled={busy} onClick={submit}>
             {'Start free trial'}

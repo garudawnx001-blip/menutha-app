@@ -57,6 +57,7 @@ export function Settings() {
     is_open: restaurant.is_open !== false,
     grace_seconds: String((restaurant as any).grace_seconds ?? 60),
     map_label: (restaurant as any).map_label ?? (restaurant as any).address ?? '',
+    maps_url: (restaurant as any).maps_url ?? '',
     /* The tax and service rates, the FSSAI number, the footer trio and the AC
        toggle are NOT here any more: they belong to Bill settings, which is the
        only page that shows or writes them. A page must not carry state it
@@ -140,6 +141,9 @@ export function Settings() {
         lat: pin ? pin.lat : null,
         lng: pin ? pin.lng : null,
         map_label: form.map_label.trim() || null,
+        // Set at sign-up, editable here for ever after -- an owner who skipped
+        // it, moved, or got a new short link should not have to re-register.
+        maps_url: form.maps_url.trim() || null,
         ...(can('white_label') || can('basic_theme') ? { brand_color: form.brand_color } : {}),
       });
       await reload();
@@ -192,6 +196,18 @@ export function Settings() {
             holding. See BillSettings. */}
         {/* WHERE THE OUTLET IS. Every tier -- knowing where a restaurant is is
             not a premium feature. Diners see this pin on the menu. */}
+        {/* THE LINK A DINER TAPS. The pin below answers "how far is it";
+            this answers "take me there", and the two are not the same job --
+            which is why both are here rather than one standing in for the
+            other. */}
+        <F label="Google Maps link">
+          <input className="code-input" inputMode="url" placeholder="https://maps.app.goo.gl/..."
+            value={form.maps_url} onChange={(e) => setForm({ ...form, maps_url: e.target.value })} />
+          <p className="dim" style={{ fontSize: 12, margin: '6px 0 0' }}>
+            Open your restaurant in Google Maps, tap Share, paste it here. Diners tap it to navigate.
+          </p>
+        </F>
+
         <F label="Location on the map">
           <LocationPicker
             value={pin}

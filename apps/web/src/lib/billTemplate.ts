@@ -333,8 +333,13 @@ export function renderBillHtml(d: BillData, layoutRaw: any): string {
     font-weight: 800; font-size: 1.22em; border-top: 1.5px solid #1C1A15;
     margin-top: 1.4mm; padding-top: 1.6mm;
   }
-  .pay { display: flex; gap: 4mm; align-items: center; margin-top: 4mm; }
-  .pay img { width: 28mm; height: 28mm; border: 1px solid #D8D0C0; border-radius: 2mm; }
+  /* THE PAY QR IS SCANNED FROM A PRINTED SHEET, at whatever distance the
+     bill happens to be lying at, by a phone somebody is holding one-handed
+     while paying. 28mm was sized like a decoration; 48mm is sized like the
+     thing it is. Centred in its own block rather than sitting beside the
+     caption, because a code the eye has to hunt for is a code nobody uses. */
+  .pay { display: block; text-align: center; margin-top: 5mm; }
+  .pay img { width: 48mm; height: 48mm; border: 1px solid #D8D0C0; border-radius: 2mm; display: block; margin: 0 auto 2mm; }
   .pay div { font-size: 10pt; line-height: 1.5; }
   .thanks { ${sec(l, 'thanks')}; font-weight: 700; margin: 4mm 0 0; }
   .terms  { ${sec(l, 'terms')}; color: #4A453B; white-space: pre-wrap; margin: 3mm 0 0;
@@ -383,7 +388,9 @@ export function renderBillHtml(d: BillData, layoutRaw: any): string {
     .sheet { max-width: 100%; }
     .i-rate { display: none; }
     .totals { width: 100%; }
-    .pay img { width: 22mm; height: 22mm; }
+    /* On a roll, LENGTH is the scarce resource -- every millimetre of QR is
+       paper fed and cut. Still bigger than it was on sheet paper before. */
+    .pay img { width: 34mm; height: 34mm; }
     /* No page to fill. Roll stock is continuous, so stretching to a notional
        page height would feed blank paper after every bill. */
     .sheet.fill { min-height: 0; display: block; }
