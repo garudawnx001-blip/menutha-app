@@ -179,7 +179,10 @@ export async function fetchLiveOrders(restaurantId: string, statuses: string[]):
   // zero while the total included it.
   const BASE = 'id, order_no, status, is_parcel, subtotal, packing_charge, service_charge, gst_amount, total, notes, placed_at, ready_at, released_at, guest_name, guest_phone, table_id, dining_table(label), order_item(id, name, qty, unit_price, is_veg), payment(id, status, provider)';
   // service_waived tells Billing whether the charge is already off this bill.
-  const cols = () => (waivedColumnMissing ? BASE : `${BASE}, service_waived`);
+  // charge_lines rides with service_waived: both arrive by staged migration and
+  // both are dropped together if PostgREST has not seen them, so one absent
+  // column cannot take the billing board down.
+  const cols = () => (waivedColumnMissing ? BASE : `${BASE}, service_waived, charge_lines`);
 
   /**
    * #V — A SETTLED ORDER IS NEITHER LIVE WORK NOR BILLABLE.

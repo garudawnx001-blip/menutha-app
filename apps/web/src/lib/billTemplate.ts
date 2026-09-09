@@ -213,6 +213,20 @@ export type BillData = {
    * opinion about what somebody owes.
    */
   serviceWaived?: boolean;
+  /**
+   * THE OWNER'S OWN CHARGE LINES, as they were actually applied to THIS bill.
+   *
+   * A snapshot taken when the order was priced (food_order.charge_lines), not
+   * the restaurant's current rules -- an owner who adds VAT on Friday must not
+   * retroactively add it to Thursday's printed bill, and a bill has to
+   * reconcile a year later. The amounts arrive computed; nothing here does
+   * arithmetic, because a template holding a second opinion about what
+   * somebody owes is how two documents start disagreeing about a total.
+   *
+   * Empty on every restaurant that has not configured any, which is why the
+   * SGST/CGST lines below still stand on their own.
+   */
+  chargeLines?: { label: string; amount: number }[];
 };
 
 /* ── Rendering ───────────────────────────────────────────────────────────── */
@@ -421,6 +435,7 @@ export function renderBillHtml(d: BillData, layoutRaw: any): string {
     ${d.discount > 0 ? `<div class="row"><span>Discount</span><span>− ${inr(d.discount)}</span></div>` : ''}
     ${d.packing > 0 ? `<div class="row"><span>Packing charge</span><span>${inr(d.packing)}</span></div>` : ''}
     ${serviceRow}
+    ${(d.chargeLines ?? []).map((c) => `<div class="row"><span>${esc(c.label)}</span><span>${inr(c.amount)}</span></div>`).join('')}
     <!-- The RATE on the label describes the money beside it. A bill that says
          2.5% while charging 9% is worse than one showing no rate at all. -->
     <div class="row"><span>SGST @ ${esc(d.sgstPct)}%</span><span>${inr(d.sgst)}</span></div>

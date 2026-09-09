@@ -295,6 +295,11 @@ export function Billing() {
       sgst: Math.round(b.gst_amount * (sgstPct / rateSum) * 100) / 100,
       cgst: Math.round(b.gst_amount * (cgstPct / rateSum) * 100) / 100,
       total: b.total,
+      // The owner's own lines, as applied to THIS order. A snapshot, not the
+      // restaurant's current rules -- see BillData.chargeLines.
+      chargeLines: (b.orders ?? []).flatMap((o: any) => (o.charge_lines ?? [])).map((c: any) => ({
+        label: String(c.label ?? 'Charge'), amount: Number(c.amount) || 0,
+      })),
       serviceWaived: waived,
       payQrDataUri: billQr || null,
       upiVpa: (restaurant as any).upi_vpa ?? null,

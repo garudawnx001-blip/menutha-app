@@ -20,7 +20,7 @@
 import React, { useState } from 'react';
 import { usePartner } from './PartnerShell';
 import { updateRestaurant, fetchBillLayout } from '../../lib/portalApi';
-import { BillCharges } from './BillCharges';
+import { BillChargeLines } from './BillChargeLines';
 import { BillLayoutEditor } from './BillLayoutEditor';
 import { PrinterIcon } from './Glyphs';
 import { printBillHtml, openBillHtml } from '../../lib/printBill';
@@ -172,8 +172,8 @@ export function BillSettings() {
 
       {/* Charges save themselves as they are added, so they sit outside the
           Save above -- see the note at the top. */}
-      <Section title="Custom charges" hint="Anything you charge beyond the dishes. Percentages are taken on the food subtotal, before tax.">
-        <BillCharges restaurantId={restaurant.id} acPricing={r.ac_pricing === true} />
+      <Section title="Taxes and charges" hint="GST, VAT, service, packing -- anything on top of the dishes. These are collected, printed, and counted in reports.">
+        <BillChargeLines restaurantId={restaurant.id} />
       </Section>
 
       {/* PRINT THE SAMPLE, with or without the logo.
