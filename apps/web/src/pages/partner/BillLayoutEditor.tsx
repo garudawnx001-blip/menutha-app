@@ -26,7 +26,7 @@
  */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  DEFAULT_LAYOUT, SECTIONS, MIN_SIZE, MAX_SIZE,
+  DEFAULT_LAYOUT, SECTIONS, MIN_SIZE, MAX_SIZE, PLACES,
   normaliseLayout, renderBillHtml, sampleBillData,
   type Align, type BillLayout, type SectionKey,
 } from '../../lib/billTemplate';
@@ -38,6 +38,12 @@ import { AlignLeftIcon, AlignCenterIcon, AlignRightIcon } from './Glyphs';
  * fonts do not ship -- which is why they rendered as tofu boxes on the
  * owner's screen. An SVG has no font behind it to be missing. See Glyphs.
  */
+/** Where a block sits ON THE PAGE, which is a different question from where
+ *  its text sits inside its own box. Words rather than icons: "bottom" is the
+ *  answer an owner is looking for when they want the terms at the foot of the
+ *  sheet, and there is no glyph for that. */
+const PLACE_LABEL: Record<string, string> = { top: 'Top', middle: 'Middle', bottom: 'Bottom' };
+
 const ALIGNS: { key: Align; label: string; Icon: (p: { size?: number }) => JSX.Element }[] = [
   { key: 'left',   label: 'Left',   Icon: AlignLeftIcon },
   { key: 'center', label: 'Centre', Icon: AlignCenterIcon },
@@ -255,6 +261,24 @@ export function BillLayoutEditor({
               In the order they appear on the bill. Sizes are in points, {MIN_SIZE}–{MAX_SIZE}.
             </p>
 
+            {/* FILL THE SHEET. Off, a short bill is a small block a third of
+                the way down a blank page; on, the closing lines sit on the
+                bottom margin the way a printed restaurant bill has always put
+                them. No effect on a till roll -- continuous stock has no page
+                height to fill, and stretching to a notional one would feed
+                blank paper after every bill. */}
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 700, fontSize: 13.5, marginBottom: 4 }}>
+              <input
+                type="checkbox"
+                checked={layout.fill}
+                onChange={(e) => edit((d) => { d.fill = e.target.checked; })}
+              />
+              Stretch the bill to fill the page
+            </label>
+            <p className="dim" style={{ fontSize: 11.5, marginBottom: 12 }}>
+              Blocks set to Bottom then sit on the bottom margin. Ignored on till rolls.
+            </p>
+
             {SECTIONS.map(({ key, label, hint }) => {
               const s = layout.sections[key];
               return (
@@ -272,6 +296,22 @@ export function BillLayoutEditor({
                   <div style={{ flex: '1 1 130px', minWidth: 120 }}>
                     <div style={{ fontSize: 13, fontWeight: 600 }}>{label}</div>
                     <div className="dim" style={{ fontSize: 11.5 }}>{hint}</div>
+                  </div>
+
+                  <div style={{ display: 'flex', gap: 4 }} role="group" aria-label={`${label} position on the page`}>
+                    {PLACES.map((p) => (
+                      <button
+                        key={p}
+                        type="button"
+                        className={s.place === p ? 'chip active' : 'chip'}
+                        aria-pressed={s.place === p}
+                        aria-label={`${label}: ${PLACE_LABEL[p]} of the page`}
+                        style={{ padding: '4px 8px', fontSize: 11.5 }}
+                        onClick={() => edit((dd) => { dd.sections[key].place = p; })}
+                      >
+                        {PLACE_LABEL[p]}
+                      </button>
+                    ))}
                   </div>
 
                   <div style={{ display: 'flex', gap: 4 }} role="group" aria-label={`${label} alignment`}>

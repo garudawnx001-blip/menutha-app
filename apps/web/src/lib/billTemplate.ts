@@ -4,8 +4,10 @@
  * ══════════════════════════════════════════════════════════════════════════
  *  MIRRORED FILE. The byte-identical twin lives at
  *      menutha-app-deploy/apps/web/src/lib/billTemplate.ts
- *  If you change one, change the other. `npm run check:template` compares
- *  their hashes and fails the build when they drift.
+ *  If you change one, change the other, and DIFF THEM -- the two live in
+ *  separate repositories, so no CI job can see both and nothing will catch a
+ *  drift for you. (An earlier version of this note claimed a
+ *  `npm run check:template` script did. It does not exist and never did.)
  * ══════════════════════════════════════════════════════════════════════════
  *
  * WHY THIS EXISTS. His acceptance bar is that the bill and the table QR card
@@ -43,10 +45,34 @@ export type Align = 'left' | 'center' | 'right';
 export type SectionKey =
   | 'name' | 'address' | 'ids' | 'meta' | 'items' | 'totals' | 'thanks' | 'terms' | 'footer';
 
-export type SectionStyle = { align: Align; size: number };
+/**
+ * WHERE A BLOCK SITS ON THE PAGE, as opposed to where its text sits in its own
+ * box. `align` was the only control and it could only ever centre a small
+ * receipt in the middle of a big sheet; a real restaurant bill uses the whole
+ * page, with the thank-you and the small print down at the foot.
+ *
+ * Three bands rather than free placement, deliberately. An owner arranging a
+ * bill wants "put the terms at the bottom", not a coordinate system, and three
+ * bands is the whole of what a printed bill has ever needed: what identifies
+ * the restaurant, what was eaten, and what is said afterwards.
+ */
+export type Place = 'top' | 'middle' | 'bottom';
+
+export type SectionStyle = { align: Align; size: number; place: Place };
 
 export type BillLayout = {
   logo: { show: boolean; source: 'profile' | 'custom'; url: string | null };
+  /**
+   * STRETCH TO THE FOOT OF THE PAGE. On paper with a height -- A4, Letter, a
+   * billing machine's sheet -- the document fills it: the middle band takes up
+   * the slack so the bottom band lands on the bottom margin instead of the
+   * bill trailing off a third of the way down a mostly-empty sheet.
+   *
+   * Ignored on a roll, and that is not a compromise: continuous stock has no
+   * page height to fill, and stretching to a notional one would feed blank
+   * paper out of a thermal printer after every bill.
+   */
+  fill: boolean;
   sections: Record<SectionKey, SectionStyle>;
 };
 
@@ -71,16 +97,22 @@ export const SECTIONS: { key: SectionKey; label: string; hint: string }[] = [
  *  turning the feature on changes nothing until somebody changes something. */
 export const DEFAULT_LAYOUT: BillLayout = {
   logo: { show: true, source: 'profile', url: null },
+  // ON by default, because "cover the page like a real restaurant bill" is what
+  // a bill is expected to look like, not an option somebody has to discover.
+  fill: true,
   sections: {
-    name:    { align: 'center', size: 20 },
-    address: { align: 'center', size: 12 },
-    ids:     { align: 'center', size: 11 },
-    meta:    { align: 'left',   size: 12 },
-    items:   { align: 'left',   size: 13 },
-    totals:  { align: 'right',  size: 13 },
-    thanks:  { align: 'center', size: 13 },
-    terms:   { align: 'left',   size: 11 },
-    footer:  { align: 'center', size: 10 },
+    name:    { align: 'center', size: 20, place: 'top' },
+    address: { align: 'center', size: 12, place: 'top' },
+    ids:     { align: 'center', size: 11, place: 'top' },
+    meta:    { align: 'left',   size: 12, place: 'top' },
+    items:   { align: 'left',   size: 13, place: 'top' },
+    totals:  { align: 'right',  size: 13, place: 'top' },
+    // The closing lines go to the FOOT of the page, which is where a printed
+    // restaurant bill has always put them and what makes the sheet read as
+    // full rather than abandoned halfway down.
+    thanks:  { align: 'center', size: 13, place: 'bottom' },
+    terms:   { align: 'left',   size: 11, place: 'bottom' },
+    footer:  { align: 'center', size: 10, place: 'bottom' },
   },
 };
 
@@ -88,6 +120,7 @@ export const MIN_SIZE = 8;
 export const MAX_SIZE = 28;
 
 const ALIGNS: Align[] = ['left', 'center', 'right'];
+export const PLACES: Place[] = ['top', 'middle', 'bottom'];
 
 /**
  * EVERY READ GOES THROUGH HERE. bill_layout is jsonb, which means the database
@@ -113,7 +146,8 @@ export function normaliseLayout(raw: any): BillLayout {
     const align: Align = ALIGNS.indexOf(s.align) >= 0 ? s.align : d.sections[key].align;
     const n = Number(s.size);
     const size = Number.isFinite(n) ? Math.min(MAX_SIZE, Math.max(MIN_SIZE, Math.round(n))) : d.sections[key].size;
-    sections[key] = { align, size };
+    const place: Place = PLACES.indexOf(s.place) >= 0 ? s.place : d.sections[key].place;
+    sections[key] = { align, size, place };
   }
 
   return {
@@ -122,6 +156,7 @@ export function normaliseLayout(raw: any): BillLayout {
       source: rawLogo.source === 'custom' ? 'custom' : 'profile',
       url: typeof rawLogo.url === 'string' && rawLogo.url ? rawLogo.url : null,
     },
+    fill: typeof src.fill === 'boolean' ? src.fill : d.fill,
     sections,
   };
 }
@@ -164,6 +199,20 @@ export type BillData = {
    *  file is deliberately dependency-free. */
   payQrDataUri: string | null;
   upiVpa: string | null;
+  /**
+   * SERVICE CHARGE WAIVED ON THIS BILL. Diners ask, and in India a service
+   * charge is not a tax -- it is discretionary, and the till has always been
+   * able to drop it. What it must never do is disappear silently: a bill that
+   * simply omits the line looks, to a customer who asked for it to go, like
+   * the request was ignored. So a waived charge PRINTS, as "Waived", and the
+   * gesture is on the paper.
+   *
+   * The money is not computed here. `service` and the tax figures arrive
+   * already correct from whoever built this data -- the server reprices the
+   * orders -- because a template that recalculated tax would be a second
+   * opinion about what somebody owes.
+   */
+  serviceWaived?: boolean;
 };
 
 /* ── Rendering ───────────────────────────────────────────────────────────── */
@@ -212,6 +261,12 @@ export function renderBillHtml(d: BillData, layoutRaw: any): string {
       <td class="i-amt">${inr(it.unit_price * it.qty)}</td>
     </tr>`).join('');
 
+  const serviceRow = d.serviceWaived
+    ? `<div class="row"><span>Service charge</span><span>Waived</span></div>`
+    : d.service > 0
+      ? `<div class="row"><span>Service charge</span><span>${inr(d.service)}</span></div>`
+      : '';
+
   const idLines = [
     d.restaurant.gstin ? `GSTIN: ${esc(d.restaurant.gstin)}` : '',
     d.restaurant.fssai ? `FSSAI: ${esc(d.restaurant.fssai)}` : '',
@@ -255,6 +310,11 @@ export function renderBillHtml(d: BillData, layoutRaw: any): string {
   .i-rate, .i-amt { text-align: right; white-space: nowrap; }
   .totals { ${sec(l, 'totals')}; margin: 3mm 0 0; margin-left: auto; width: 72mm; max-width: 100%; }
   .totals .row { display: flex; justify-content: space-between; gap: 6mm; padding: 0.9mm 0; }
+  /* THE TAX TOTAL, said once as a number of its own. SGST and CGST are halves
+     of one tax and a customer checking a bill against what they were told
+     should not have to add them up; an auditor reading it should not have to
+     either. */
+  .totals .taxtotal { border-top: 1px dotted #D8D0C0; margin-top: 0.8mm; padding-top: 1.2mm; font-weight: 700; }
   .totals .grand {
     font-weight: 800; font-size: 1.22em; border-top: 1.5px solid #1C1A15;
     margin-top: 1.4mm; padding-top: 1.6mm;
@@ -267,7 +327,23 @@ export function renderBillHtml(d: BillData, layoutRaw: any): string {
             border-top: 1px solid #EFE8DA; padding-top: 2mm; }
   .footer { ${sec(l, 'footer')}; color: #8A8475; margin: 4mm 0 0; }
 
+  /* FILL THE SHEET. The bill is a column the height of the page: what
+     identifies the restaurant and what was eaten at the top, the closing lines
+     at the foot, and a middle band that takes up whatever slack is left. That
+     band is the whole mechanism -- without it a short bill is a small block
+     stranded a third of the way down an otherwise blank page, which is what a
+     billing machine's output is never allowed to look like.
+
+     100vh in paged media is the page area inside the @page margin, so this
+     fills A4, Letter and a billing machine's own sheet without being told
+     which it got. Content taller than one page simply paginates and the
+     bottom band lands after it, which is correct: a three-page bill's footer
+     belongs on page three. */
+  .sheet.fill { min-height: 100vh; display: flex; flex-direction: column; }
+  .sheet.fill .band-mid { flex: 1 1 auto; }
+
   /* A THERMAL ROLL IS NOT A SMALL A4. Under 80mm the rate and quantity columns
+
      have about four characters each, so they fold into the item cell and the
      totals block stops floating to the side and takes the full width. */
   @media print and (max-width: 80mm) {
@@ -275,13 +351,25 @@ export function renderBillHtml(d: BillData, layoutRaw: any): string {
     .i-rate { display: none; }
     .totals { width: 100%; }
     .pay img { width: 22mm; height: 22mm; }
+    /* No page to fill. Roll stock is continuous, so stretching to a notional
+       page height would feed blank paper after every bill. */
+    .sheet.fill { min-height: 0; display: block; }
   }
-</style></head><body><div class="sheet">
-  ${logo ? `<img class="logo" src="${esc(logo)}" alt="">` : ''}
-  <div class="name">${esc(d.restaurant.name)}</div>
-  ${addrLines ? `<div class="address">${addrLines}</div>` : ''}
-  ${idLines ? `<div class="ids">${idLines}</div>` : ''}
-  <hr class="rule">
+</style></head><body>${(() => {
+  /**
+   * EACH SECTION BUILT ONCE, THEN PUT WHERE THE OWNER ASKED FOR IT.
+   *
+   * The markup used to be one flat list in a fixed order, so "where does this
+   * block sit" had no answer other than "wherever it was written". Building a
+   * map first means placement is a lookup rather than a rewrite, and the order
+   * WITHIN a band stays the order in SECTIONS -- an owner moving the terms to
+   * the foot does not also reshuffle everything around them.
+   */
+  const html: Record<SectionKey, string> = {
+    name:    `<div class="name">${esc(d.restaurant.name)}</div>`,
+    address: addrLines ? `<div class="address">${addrLines}</div>` : '',
+    ids:     idLines ? `<div class="ids">${idLines}</div>` : '',
+    meta:    `<hr class="rule">
   <div class="meta">
     <b>TAX INVOICE — ${esc(d.billNo)}</b><br>
     ${esc(d.dateText)} · ${esc(d.tableText)}${
@@ -289,20 +377,21 @@ export function renderBillHtml(d: BillData, layoutRaw: any): string {
         ? `<br>Bill to: ${esc(d.customer.name)}${d.customer.phone ? ` · ${esc(d.customer.phone)}` : ''}`
         : ''
     }
-  </div>
-  <table class="items">
+  </div>`,
+    items:   `<table class="items">
     <thead><tr><th>Item</th><th class="i-qty">Qty</th><th class="i-rate">Rate</th><th class="i-amt">Amount</th></tr></thead>
     <tbody>${rows}</tbody>
-  </table>
-  <div class="totals">
+  </table>`,
+    totals:  `<div class="totals">
     <div class="row"><span>Subtotal</span><span>${inr(d.subtotal)}</span></div>
     ${d.discount > 0 ? `<div class="row"><span>Discount</span><span>− ${inr(d.discount)}</span></div>` : ''}
     ${d.packing > 0 ? `<div class="row"><span>Packing charge</span><span>${inr(d.packing)}</span></div>` : ''}
-    ${d.service > 0 ? `<div class="row"><span>Service charge</span><span>${inr(d.service)}</span></div>` : ''}
+    ${serviceRow}
     <!-- The RATE on the label describes the money beside it. A bill that says
          2.5% while charging 9% is worse than one showing no rate at all. -->
     <div class="row"><span>SGST @ ${esc(d.sgstPct)}%</span><span>${inr(d.sgst)}</span></div>
     <div class="row"><span>CGST @ ${esc(d.cgstPct)}%</span><span>${inr(d.cgst)}</span></div>
+    <div class="row taxtotal"><span>Total tax</span><span>${inr(d.sgst + d.cgst)}</span></div>
     <div class="row grand"><span>Total</span><span>${inr(d.total)}</span></div>
   </div>
   ${d.payQrDataUri ? `<div class="pay">
@@ -310,12 +399,31 @@ export function renderBillHtml(d: BillData, layoutRaw: any): string {
     <div><b>Scan to pay ${inr(d.total)}</b><br>Any UPI app · pays ${esc(d.restaurant.name)} directly${
       d.upiVpa ? `<br><span style="color:#6B6557">${esc(d.upiVpa)}</span>` : ''
     }</div>
-  </div>` : ''}
-  ${d.restaurant.thanks ? `<div class="thanks">${esc(d.restaurant.thanks)}</div>` : ''}
-  ${d.restaurant.terms ? `<div class="terms">${esc(d.restaurant.terms)}</div>` : ''}
-  <div class="footer">SAC ${SAC} · computer-generated GST invoice · powered by Menutha</div>
-</div></body></html>`;
+  </div>` : ''}`,
+    thanks:  d.restaurant.thanks ? `<div class="thanks">${esc(d.restaurant.thanks)}</div>` : '',
+    terms:   d.restaurant.terms ? `<div class="terms">${esc(d.restaurant.terms)}</div>` : '',
+    footer:  `<div class="footer">SAC ${SAC} · computer-generated GST invoice · powered by Menutha</div>`,
+  };
+
+  const band = (p: Place) => SECTIONS
+    .filter((s) => l.sections[s.key].place === p)
+    .map((s) => html[s.key])
+    .filter(Boolean)
+    .join('\n  ');
+
+  // The logo is not a section -- it has its own switch -- and it belongs above
+  // whatever the owner put first, so it rides at the head of the top band.
+  const top = [logo ? `<img class="logo" src="${esc(logo)}" alt="">` : '', band('top')]
+    .filter(Boolean).join('\n  ');
+
+  return `<div class="sheet${l.fill ? ' fill' : ''}">
+  <div class="band-top">${top}</div>
+  <div class="band-mid">${band('middle')}</div>
+  <div class="band-bot">${band('bottom')}</div>
+</div>`;
+})()}</body></html>`;
 }
+
 
 
 /**
