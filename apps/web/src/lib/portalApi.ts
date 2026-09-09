@@ -357,18 +357,30 @@ restaurantId: string, name: string, id?: string) {
 
 export async function saveDish(restaurantId: string, dish: Partial<PortalDish> & { name: string; price: number }, id?: string) {
   const payload: Record<string, unknown> = { ...dish, restaurant_id: restaurantId };
+  // `.select('id')` is what makes a refusal detectable -- the same reason it
+  // is on deleteDish below. A write the policy filters out comes back with no
+  // error and no rows, and without this that reported SUCCESS. toggleAvailable
+  // is optimistic, so the owner would watch the switch flip while the database
+  // kept the old value, and nothing on screen would ever say so.
   const write = (p: Record<string, unknown>) =>
-    id ? supabase.from('menu_item').update(p).eq('id', id) : supabase.from('menu_item').insert(p);
+    id
+      ? supabase.from('menu_item').update(p).eq('id', id).select('id')
+      : supabase.from('menu_item').insert(p).select('id');
 
-  let { error } = await write(payload);
+  let { data, error } = await write(payload);
   if (error) {
     // Before the name_kn/name_hi migration reaches a database, writing them is
     // a 400 — and a failed save loses the owner's typing. Retry without them so
     // the dish itself still saves; the translated names simply wait.
     const { name_kn, name_hi, ...rest } = payload;
-    if (name_kn !== undefined || name_hi !== undefined) ({ error } = await write(rest));
+    if (name_kn !== undefined || name_hi !== undefined) ({ data, error } = await write(rest));
   }
   if (error) throw error;
+  if (!data || data.length === 0) {
+    throw new Error(id
+      ? 'The dish was not saved — you may not have permission to change it.'
+      : 'The dish was not added — you may not have permission to change this menu.');
+  }
 }
 
 /**
