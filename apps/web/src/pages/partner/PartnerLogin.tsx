@@ -28,7 +28,7 @@ import {
   showAppleButton, APPLE_COMING_SOON, APPLE_PENDING_MESSAGE, providerError,
 } from '../../lib/authProviders';
 import {
-  loginWithIdentifier, resetByIdentifier, completeReset, otpErrorSentence,
+  loginWithIdentifier, resetByIdentifier, completeReset, otpErrorSentence, passwordProblem,
   usernameAvailable, usernameProblem, cleanHandle,
 } from '../../lib/auth';
 import { GoogleMark } from './GoogleMark';
@@ -64,7 +64,35 @@ export function PartnerLogin() {
     if (!data.session) { setError('That code did not match. Check it and try again.'); return; }
     nav('/partner/register', { replace: true });
   };
+  /**
+   * THE CODE THAT NEVER ARRIVED.
+   *
+   * Without this the screen was a dead end: the only way out was "Use a
+   * different email", and going back to change it and submitting the same
+   * address returns "already registered" -- so an owner whose mail was slow,
+   * filtered or mistyped had no way forward at all. The phone has offered a
+   * resend since this screen was built. Cooldown for the same reason it has
+   * one: Supabase rate-limits resends, and a disabled button that says when
+   * is kinder than an error that says no.
+   */
+  const [signupAgain, setSignupAgain] = useState(0);
+  const [signupNote, setSignupNote] = useState('');
+  const resendSignup = async () => {
+    setBusy(true); setError(''); setSignupNote('');
+    const { error: err } = await supabase.auth.resend({
+      type: 'signup',
+      email: email.trim(),
+      options: { emailRedirectTo: `${window.location.origin}/partner/register` },
+    });
+    setBusy(false);
+    if (err) { setError(err.message); return; }
+    setSignupCode('');
+    setSignupNote('Sent. It can take a minute to arrive.');
+    setSignupAgain(Date.now() + 24_000);
+  };
+
   /** Instagram-style handle, sign-up only. Checked for format and
+
    *  availability before the account is created; CLAIMED when the restaurant
    *  is (Register), because that is the first call with a session. */
   const [username, setUsername] = useState('');
@@ -152,7 +180,12 @@ export function PartnerLogin() {
     const em = (emailRef.current?.value || email).trim();
     const pw = passwordRef.current?.value || password;
     if (!em || !pw) { setError('Enter your email and choose a password.'); return; }
-    if (pw.length < 8) { setError('Choose a password of at least 8 characters.'); return; }
+    // ONE PASSWORD RULE, WHEREVER A PASSWORD IS SET. This asked for eight
+    // characters and nothing else while Change password also required a
+    // letter and a digit, so an owner could sign up with "aaaaaaaa" and meet
+    // the real rule months later on a different screen.
+    const pwBad = passwordProblem(pw);
+    if (pwBad) { setError(pwBad); return; }
     const handle = username.trim().toLowerCase();
     const problem = usernameProblem(handle);
     if (problem) { setError(problem); return; }
@@ -199,6 +232,23 @@ export function PartnerLogin() {
   const [resetPw, setResetPw] = useState('');
   const [resetAgain, setResetAgain] = useState(0);
 
+  /**
+   * A COOLDOWN THAT ENDS ON ITS OWN.
+   *
+   * Both resend buttons compared Date.now() DURING RENDER, and a comparison
+   * in render only re-evaluates when something else causes a render. Nothing
+   * does for those twenty-four seconds -- so the button stayed disabled
+   * saying "in a moment" until the reader happened to type in a field, which
+   * on this screen they have no reason to do. The clock has to tick.
+   */
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    const until = Math.max(resetAgain, signupAgain);
+    if (until <= Date.now()) return;
+    const id = setTimeout(() => setNow(Date.now()), until - Date.now() + 50);
+    return () => clearTimeout(id);
+  }, [resetAgain, signupAgain]);
+
   const forgotPassword = async () => {
     const id = (emailRef.current?.value || email).trim();
     if (!id) { setError('Type your username or email above first, then use “Forgot password?”.'); return; }
@@ -218,7 +268,11 @@ export function PartnerLogin() {
 
   const saveResetPassword = async () => {
     if (!/^\d{6}$/.test(resetCode)) { setError('Enter the 6-digit code from the email.'); return; }
-    if (resetPw.length < 8) { setError('Choose a password of at least 8 characters.'); return; }
+    // A reset SETS a password, so it asks what setting one asks everywhere
+    // else. Meeting the rule for the first time while locked out is the worst
+    // moment to meet it.
+    const resetBad = passwordProblem(resetPw);
+    if (resetBad) { setError(resetBad); return; }
     setBusy(true); setError('');
     try {
       await completeReset(resetIdent, resetCode, resetPw);
@@ -338,8 +392,8 @@ export function PartnerLogin() {
               Set password and log in
             </button>
             <div className="auth-providers" style={{ marginTop: 12 }}>
-              <button className="btn btn-link" disabled={busy || Date.now() < resetAgain} onClick={forgotPassword}>
-                {Date.now() < resetAgain ? 'Send another code in a moment' : 'Send another code'}
+              <button className="btn btn-link" disabled={busy || now < resetAgain} onClick={forgotPassword}>
+                {now < resetAgain ? 'Send another code in a moment' : 'Send another code'}
               </button>
               <button className="btn btn-link" onClick={() => { setResetStep('off'); setError(''); }}>
                 ‹ Back to log in
@@ -402,9 +456,15 @@ export function PartnerLogin() {
                 disabled={busy} onClick={confirmSignupCode}>
                 Confirm and continue
               </button>
-              <button className="btn btn-link" style={{ marginTop: 8 }} onClick={() => { setSignupSent(false); setError(''); setSignupCode(''); }}>
-                Use a different email
-              </button>
+              {signupNote && <p className="dim" style={{ fontSize: 12.5, margin: '8px 0 0' }}>{signupNote}</p>}
+              <div style={{ display: 'flex', gap: 12, justifyContent: 'center', marginTop: 8, flexWrap: 'wrap' }}>
+                <button className="btn btn-link" disabled={busy || now < signupAgain} onClick={resendSignup}>
+                  {now < signupAgain ? 'Send another code in a moment' : 'Send another code'}
+                </button>
+                <button className="btn btn-link" onClick={() => { setSignupSent(false); setError(''); setSignupCode(''); setSignupNote(''); }}>
+                  Use a different email
+                </button>
+              </div>
             </div>
           ) : (
             <>

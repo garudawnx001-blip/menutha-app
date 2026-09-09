@@ -25,7 +25,7 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { Wordmark } from '../../components';
 import { loadMembership } from '../../lib/portalApi';
-import { usernameAvailable, usernameProblem, cleanHandle } from '../../lib/auth';
+import { usernameAvailable, usernameProblem, cleanHandle, passwordProblem } from '../../lib/auth';
 
 type Phase = 'checking' | 'finish' | 'restaurant';
 
@@ -85,7 +85,11 @@ export function Register({ previewPhase }: { previewPhase?: Phase } = {}) {
     const handle = username.trim().toLowerCase();
     const problem = usernameProblem(handle);
     if (problem) { setError(problem); return; }
-    if (password.length < 8) { setError('Choose a password of at least 8 characters.'); return; }
+    // Finish-setup SETS the first password on a Google-created account, so it
+    // is the same rule as sign-up and as Change password -- and it was the
+    // one place with no letter-and-digit check at all.
+    const pwBad = passwordProblem(password);
+    if (pwBad) { setError(pwBad); return; }
     setBusy(true); setError('');
     try {
       if (!(await usernameAvailable(handle))) { setError('That username is taken. Try another.'); return; }

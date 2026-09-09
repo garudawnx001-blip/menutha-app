@@ -61,6 +61,7 @@ function ChatFixture({ state, thread }: { state: ThreadsState; thread?: boolean 
         text={text}
         onText={setText}
         onSend={() => setText('')}
+        onQuick={() => {}}
         sending={false}
       />
     </div>

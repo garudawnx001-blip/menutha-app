@@ -1886,6 +1886,14 @@ select.code-input:focus { border-color: var(--primary); }
   font-size: 10.5px;
   color: var(--text-muted);
 }
+/* The quick-reply row: one line, scrolls sideways rather than wrapping into
+   a block that pushes the composer off a phone screen. */
+.chat-quick {
+  display: flex; gap: 8px; overflow-x: auto; padding: 2px 0 8px;
+  scrollbar-width: none;
+}
+.chat-quick::-webkit-scrollbar { display: none; }
+.chat-quick .chip { white-space: nowrap; flex: 0 0 auto; }
 .chat-compose { display: flex; gap: 8px; align-items: center; }
 .chat-compose .code-input { flex: 1; min-width: 0; }
 

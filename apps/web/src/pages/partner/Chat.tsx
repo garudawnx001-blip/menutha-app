@@ -27,6 +27,28 @@ import {
 import { usePartner } from './PartnerShell';
 import { UpgradeNudge } from './Gate';
 
+/**
+ * QUICK REPLIES, and the portal did not have them at all.
+ *
+ * The phone has offered a row of one-tap answers since Chat was built and
+ * this screen never did, so the same conversation was two different jobs
+ * depending on which device was in reach -- one tap on a phone, a typed
+ * sentence on the counter PC, during service.
+ *
+ * The list is the phone's, exactly (see mobile ChatScreen). It is also a
+ * CORRECTED list: it used to carry 'Need restock' and 'Table 5 urgent',
+ * written as if this were a staff channel, when every thread here belongs to
+ * a DINER -- so one of them sent a stock note to a customer and the other
+ * told the person at table 5 about table 5.
+ */
+const QUICK_REPLIES = [
+  'On it',
+  'Almost done',
+  'Your order is ready',
+  'Sorry for the wait',
+  'Not available today',
+];
+
 const time = (iso: string) => {
   try {
     return new Date(iso).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit', hour12: true });
@@ -50,6 +72,8 @@ export interface ChatViewProps {
   text: string;
   onText: (t: string) => void;
   onSend: () => void;
+  /** Send this exact text now. Separate from onSend, which sends the box. */
+  onQuick: (text: string) => void;
   sending: boolean;
 }
 
@@ -143,6 +167,12 @@ export function ChatView(p: ChatViewProps) {
               })}
               <div ref={endRef} />
             </div>
+            <div className="chat-quick">
+              {QUICK_REPLIES.map((qr) => (
+                <button key={qr} type="button" className="chip" disabled={p.sending}
+                  onClick={() => p.onQuick(qr)}>{qr}</button>
+              ))}
+            </div>
             <div className="chat-compose">
               <input
                 className="code-input"
@@ -232,16 +262,19 @@ export function Chat() {
     if (th && openRef.current !== wanted) open(th.table_id);
   }, [wanted, state]);
 
-  const send = async () => {
-    const body = text.trim();
+  /** ONE SEND PATH, two ways in: the box, or a quick-reply chip. Extracted
+   *  so a tapped reply cannot drift from a typed one -- same table, same
+   *  error sentence, same busy state. */
+  const deliver = async (body: string, clearBox: boolean) => {
     if (!body || !openTable || busy) return;
     setBusy(true); setMsgsError('');
     try {
       await sendRestaurantMessage(restaurant.id, openTable, body);
-      setText('');
+      if (clearBox) setText('');
     } catch { setMsgsError('Could not send that. Please try again.'); }
     finally { setBusy(false); }
   };
+  const send = () => deliver(text.trim(), true);
 
   /* GROWTH AND UP. Table chat is the feature an owner is most likely to meet
      by accident -- a diner sends a message and the counter never sees it -- so
@@ -264,6 +297,7 @@ export function Chat() {
       text={text}
       onText={setText}
       onSend={send}
+      onQuick={(qr) => deliver(qr, false)}
       sending={busy}
     />
   );
