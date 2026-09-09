@@ -264,13 +264,26 @@ export function PlanScreen({ preview }: { preview?: boolean } = {}) {
         // page and for email receipts.
         image: 'https://menutha.com/menutha-mark.svg',
 
-        // What the sheet says must be what the mandate takes, GST included --
-        // the plan row's charged figure, not its base.
+        /**
+         * THE PROMISE LEADS, THE PRICE FOLLOWS — on Razorpay's own sheet.
+         *
+         * This is the screen the owner photographed with "Processing your
+         * payment ₹3,539" on it, and the description is the one line we
+         * control there. It used to open with a plan name and a price, which
+         * is exactly what somebody expecting a free month reads as a charge.
+         *
+         * Saying "Free for 30 days" first puts the reassurance on the payment
+         * sheet itself rather than only on the page they came from. The figure
+         * is still what the mandate takes — the plan row's charged amount, GST
+         * included, for the term being bought — just said in the order that
+         * makes it legible.
+         */
         description: (() => {
           const row = plans.find((x) => x.id === planId);
           const total = row ? gstLines(row.price_inr, row.charge_inr).total : data.plan?.price_inr;
-          const per = row && row.duration_months > 1 ? `every ${row.duration_months} months` : 'per month';
-          return `${data.plan?.name ?? row?.name ?? 'Menutha'} — ${inr(total)} ${per}, GST included`;
+          const per = row && row.duration_months > 1 ? `every ${row.duration_months} months` : 'a month';
+          const name = data.plan?.name ?? row?.name ?? 'Menutha';
+          return `Free for 30 days — then ${inr(total)} ${per}. Cancel any time. (${name})`;
         })(),
         // Terracotta, the accent every button in both products already uses.
         // The forest green here matched nothing -- it was the only place in
@@ -310,14 +323,30 @@ export function PlanScreen({ preview }: { preview?: boolean } = {}) {
         Menutha's only charge.
       </p>
 
+      {/* THE OFFER, STATED ONCE AND LOUDLY, ABOVE THE CARDS.
+
+          Every plan on this page is free for the first 30 days -- the
+          deferral is per-subscription (start_at), so it applies whichever tier
+          and whichever billing cycle is chosen, not only the cheapest. That is
+          worth saying at the top, because a page of prices with a small note
+          under each button reads as a page of prices.
+
+          Three facts, the order every streaming service uses: it is free, for
+          how long, and that stopping is allowed. What it costs afterwards
+          belongs on the card, where it differs per plan. */}
       {ent?.state === 'trial' && (
-        <div className="glass" style={{ padding: 14, marginTop: 14, borderColor: 'var(--gold)' }}>
-          <strong style={{ color: '#8a6a25' }}>Free trial — full Enterprise features.</strong>{' '}
-          <span className="muted" style={{ fontSize: 14 }}>
+        <div className="glass" style={{ padding: 16, marginTop: 14, borderColor: 'var(--gold)' }}>
+          <strong style={{ color: '#8a6a25', fontSize: 16 }}>
             {ent.trialEndsAt === null
-              ? 'No end date set.'
-              : `${daysLeft(ent.trialEndsAt)} day(s) left — pick a plan below to keep everything running.`}
-          </span>
+              ? 'Free for your first 30 days'
+              : `Free for ${daysLeft(ent.trialEndsAt)} more day(s)`}
+          </strong>
+          <p className="muted" style={{ fontSize: 14, margin: '6px 0 0' }}>
+            Every plan below starts free — any tier, any billing cycle. Nothing is
+            charged today: you set up autopay now and the first payment is taken
+            when the free period ends. Cancel any time before then and you pay
+            nothing at all.
+          </p>
         </div>
       )}
       {ent?.state === 'grace' && (
