@@ -338,7 +338,7 @@ export function Billing() {
         Pick the orders to merge into one bill. Diners pay you directly — cash
         or your own UPI.
       </p>
-      {error && <p style={{ color: 'var(--error)', fontSize: 14, margin: '10px 0' }}>{error}</p>}
+      {error && <p className="inline-error" style={{ margin: '10px 0' }}>{error}</p>}
 
       {/* THE COUNTER'S OWN ORDER PAD. Not every customer scans -- some walk in
           and say what they want -- and without this the till could not bill
@@ -386,7 +386,7 @@ export function Billing() {
                       {theirs.length} order{theirs.length === 1 ? '' : 's'}
                     </span>
                   </span>
-                  <button className="btn btn-primary" style={{ padding: '8px 14px', fontSize: 13 }}
+                  <button className="btn btn-primary btn-sm"
                     disabled={busy} onClick={() => billNow(theirs)}>
                     Bill {inr(sumOf(theirs))}
                   </button>
@@ -493,7 +493,7 @@ export function Billing() {
           <div className="topbar" style={{ padding: 0 }}>
             <strong>Bill #{bill.bill_no}</strong>
             <span style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
-              <button className="chip" onClick={printBill}>🖨 Print bill</button>
+              <button className="btn btn-glass btn-sm" onClick={printBill}>🖨 Print bill</button>
             </span>
           </div>
           <div className="bill-row total"><span>To collect</span><span>{inr(bill.total)}</span></div>

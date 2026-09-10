@@ -151,7 +151,7 @@ export function WalkIn({ restaurantId, onCreated }: {
         )}
       </div>
 
-      {error && <p style={{ color: 'var(--error)', fontSize: 13.5, margin: '10px 0 0' }}>{error}</p>}
+      {error && <p className="inline-error" style={{ margin: '10px 0 0' }}>{error}</p>}
 
       <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginTop: 12 }}>
         <button className={`btn btn-primary${busy ? ' is-busy' : ''}`} disabled={busy || !lines.length}
