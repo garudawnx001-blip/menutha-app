@@ -166,7 +166,7 @@ export function Settings() {
     <div className="fade-in" style={{ maxWidth: 640 }}>
       <p className="overline" style={{ marginTop: 12 }}>Restaurant profile</p>
       <h1 className="display" style={{ fontSize: 26, marginBottom: 14 }}>{restaurant.name}</h1>
-      {error && <p style={{ color: 'var(--error)', fontSize: 14, marginBottom: 10 }}>{error}</p>}
+      {error && <p className="inline-error">{error}</p>}
 
       <div className="glass" style={{ padding: 16, marginBottom: 14 }}>
         <F label="Restaurant name">
@@ -347,11 +347,11 @@ export function Settings() {
       <div className="glass" style={{ padding: 16, marginBottom: 14 }}>
         <h3 style={{ fontWeight: 700, marginBottom: 10 }}>Branding {can('white_label') && <span className="badge gold">White-label</span>}</h3>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-          <label className="chip" style={{ cursor: 'pointer' }}>
+          <label className="btn btn-glass btn-sm" style={{ cursor: 'pointer' }}>
             🖼 Logo
             <input type="file" accept="image/*" hidden onChange={(e) => uploadBrand('logos', e.target.files?.[0])} />
           </label>
-          <label className="chip" style={{ cursor: 'pointer' }}>
+          <label className="btn btn-glass btn-sm" style={{ cursor: 'pointer' }}>
             🖼 Banner
             <input type="file" accept="image/*" hidden onChange={(e) => uploadBrand('banners', e.target.files?.[0])} />
           </label>

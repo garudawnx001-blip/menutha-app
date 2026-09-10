@@ -190,7 +190,7 @@ export function BillChargeLines({ restaurantId }: { restaurantId: string }) {
                 <b>{l.label}</b>{' '}
                 <span className="dim">{l.kind === 'percent' ? `${l.value}%` : inr(l.value)}</span>
               </span>
-              <button className="chip" onClick={() => adoptLegacy(l)}>Add it</button>
+              <button className="btn btn-glass btn-sm" onClick={() => adoptLegacy(l)}>Add it</button>
             </div>
           ))}
           <p className="dim" style={{ fontSize: 11.5, margin: '8px 0 0' }}>
@@ -240,9 +240,9 @@ export function BillChargeLines({ restaurantId }: { restaurantId: string }) {
               On the bill
             </label>
             <span style={{ flex: 1 }} />
-            <button className="chip" disabled={i === 0} onClick={() => move(i, -1)} aria-label={`Move ${l.label || 'line'} up`}>↑</button>
-            <button className="chip" disabled={i === lines.length - 1} onClick={() => move(i, +1)} aria-label={`Move ${l.label || 'line'} down`}>↓</button>
-            <button className="chip" onClick={() => setLines((ls) => ls.filter((x) => x.id !== l.id))}>Remove</button>
+            <button className="btn btn-glass btn-sm" disabled={i === 0} onClick={() => move(i, -1)} aria-label={`Move ${l.label || 'line'} up`}>↑</button>
+            <button className="btn btn-glass btn-sm" disabled={i === lines.length - 1} onClick={() => move(i, +1)} aria-label={`Move ${l.label || 'line'} down`}>↓</button>
+            <button className="btn btn-glass btn-sm" style={{ color: 'var(--error)' }} onClick={() => setLines((ls) => ls.filter((x) => x.id !== l.id))}>Remove</button>
           </div>
         </div>
       ))}
@@ -257,8 +257,8 @@ export function BillChargeLines({ restaurantId }: { restaurantId: string }) {
             </option>
           ))}
         </select>
-        <button className="chip" disabled={!presetKey} onClick={addPreset}>Add</button>
-        <button className="chip" onClick={addCustom}>＋ Add your own</button>
+        <button className="btn btn-glass btn-sm" disabled={!presetKey} onClick={addPreset}>Add</button>
+        <button className="btn btn-glass btn-sm" onClick={addCustom}>＋ Add your own</button>
       </div>
 
       {/* THE PREVIEW IS THE EXPLANATION. "on the running total" is abstract
@@ -275,7 +275,7 @@ export function BillChargeLines({ restaurantId }: { restaurantId: string }) {
         </div>
       </div>
 
-      {error && <p style={{ color: 'var(--error)', fontSize: 13.5, marginTop: 10 }}>{error}</p>}
+      {error && <p className="inline-error" style={{ marginTop: 10 }}>{error}</p>}
       {note && <p className="dim" style={{ fontSize: 13, marginTop: 10 }}>{note}</p>}
 
       <button className={`btn btn-primary${busy ? ' is-busy' : ''}`} style={{ marginTop: 12 }}
