@@ -340,14 +340,14 @@ export function OrdersBoard() {
           </button>
         </div>
       </div>
-      {error && <p style={{ color: 'var(--error)', fontSize: 14, marginBottom: 10 }}>{error}</p>}
+      {error && <p className="inline-error">{error}</p>}
 
       {/* The period, above the number it governs. Same control, same options
           and the same one-day/range toggle as Reports (Growth.tsx). */}
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 10 }}>
         <select
           className="code-input"
-          style={{ padding: '0 10px', fontSize: 14, width: 'auto', minHeight: 44 }}
+          style={{ padding: '0 10px', fontSize: 14, width: 'auto' }}
           value={period}
           onChange={(e) => setPeriod(e.target.value as GrowthPeriod)}
           aria-label="Period"
@@ -362,7 +362,6 @@ export function OrdersBoard() {
           <>
             <button
               className={single ? 'chip active' : 'chip'}
-              style={{ minHeight: 44 }}
               onClick={() => { const next = !single; setSingle(next); if (next) setTo(from); }}
               title={single ? 'Switch back to a date range' : 'One day'}
             >
@@ -370,14 +369,14 @@ export function OrdersBoard() {
             </button>
             <input type="date" className="code-input"
               aria-label={single ? 'Date' : 'From date'}
-              style={{ padding: '7px 8px', fontSize: 12.5, width: 'auto', minHeight: 44 }}
+              style={{ padding: '0 8px', fontSize: 13, width: 'auto' }}
               value={from} max={single ? iso(new Date()) : to}
               onChange={(e) => { setFrom(e.target.value); if (single) setTo(e.target.value); }} />
             {!single && (
               <>
                 <span className="dim" style={{ fontSize: 12 }}>to</span>
                 <input type="date" className="code-input" aria-label="To date"
-                  style={{ padding: '7px 8px', fontSize: 12.5, width: 'auto', minHeight: 44 }}
+                  style={{ padding: '0 8px', fontSize: 13, width: 'auto' }}
                   value={to} min={from} max={iso(new Date())} onChange={(e) => setTo(e.target.value)} />
               </>
             )}
@@ -488,11 +487,11 @@ export function OrdersBoard() {
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
               {canEdit && (
                 <>
-                  <button className="chip" disabled={busy === o.id}
+                  <button className="btn btn-glass btn-sm" disabled={busy === o.id}
                     onClick={() => setEditing(all)} title="Change what is on this ticket">
                     Edit
                   </button>
-                  <button className="chip" disabled={busy === o.id}
+                  <button className="btn btn-glass btn-sm" disabled={busy === o.id}
                     style={{ color: 'var(--error)' }}
                     onClick={() => cancel(all)} title="Cancel this ticket">
                     Cancel
@@ -512,7 +511,7 @@ export function OrdersBoard() {
                     <p className="overline" style={{ marginBottom: 6 }}>
                       Diner says they paid by {all.find((x) => x.pendingPayment)!.pendingPayment!.provider === 'cash' ? 'cash' : 'UPI'}
                     </p>
-                    <button className="btn btn-primary btn-block" style={{ padding: '10px 12px', fontSize: 13 }}
+                    <button className="btn btn-primary btn-block btn-sm"
                       disabled={busy === o.id} onClick={() => quickPaid(all, 'cash')}>
                       Confirm we received it ✓
                     </button>
@@ -521,9 +520,9 @@ export function OrdersBoard() {
                   <>
                     <p className="overline" style={{ marginBottom: 6 }}>Record payment received</p>
                     <div style={{ display: 'flex', gap: 8 }}>
-                      <button className="btn btn-ghost" style={{ padding: '10px 12px', fontSize: 13, flex: 1 }}
+                      <button className="btn btn-glass btn-sm" style={{ flex: 1 }}
                         disabled={busy === o.id} onClick={() => quickPaid(all, 'cash')}>Cash</button>
-                      <button className="btn btn-ghost" style={{ padding: '10px 12px', fontSize: 13, flex: 1 }}
+                      <button className="btn btn-glass btn-sm" style={{ flex: 1 }}
                         disabled={busy === o.id} onClick={() => quickPaid(all, 'upi_qr')}>UPI</button>
                     </div>
                     <p className="dim" style={{ fontSize: 11.5, marginTop: 6 }}>
@@ -660,10 +659,10 @@ export function OrdersBoard() {
             </p>
 
             <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
-              <button className="btn btn-ghost" style={{ flex: 1 }} onClick={() => setEditing(null)}>
+              <button className="btn btn-glass" style={{ flex: 1 }} onClick={() => setEditing(null)}>
                 Done
               </button>
-              <button className="chip" disabled={!!busy}
+              <button className="btn btn-glass btn-sm" disabled={!!busy}
                 style={{ color: 'var(--error)' }} onClick={() => cancel(editing)}>
                 {editing.length === 1 ? 'Cancel order' : 'Cancel ticket'}
               </button>

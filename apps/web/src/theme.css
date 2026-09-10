@@ -2004,3 +2004,13 @@ select.code-input:focus { border-color: var(--primary); }
   cursor: pointer;
 }
 .outlet-switch:hover { border-color: var(--gold); color: var(--ink); }
+
+/* ── Polish pass ─────────────────────────────────────────────────────────────
+   Three small rules the pages kept re-inventing inline. */
+/* A quieter button: same floor, same material, smaller type. Ticket actions,
+   in-card controls. */
+.btn-sm { padding: 8px 14px; font-size: 13px; }
+/* A page-level error line: the same voice as .field-error, without a field. */
+.inline-error { color: var(--error); font-size: 13.5px; line-height: 1.4; margin: 0 0 10px; }
+/* Every input holds the touch floor, whatever padding a page gives it. */
+.code-input { min-height: 48px; }
