@@ -8,7 +8,7 @@ import { subscribeOrders } from '../../lib/realtimeWeb';
 import {
   fetchLiveOrders, advanceOrder, NEXT_STATUS,
   createBill, payBill, confirmPayment, staffUpdateOrderItem, staffCancelOrder,
-  fetchServedSales,
+  fetchServedSales, fetchDoneOrders,
   type PortalOrder, type GrowthPeriod,
 } from '../../lib/portalApi';
 import { inr } from '../../lib/types';
@@ -119,8 +119,12 @@ export function OrdersBoard() {
   const load = async () => {
     try {
       const live = await fetchLiveOrders(restaurant.id, LIVE);
-      const served = (await fetchLiveOrders(restaurant.id, ['served']))
-        .filter((o) => new Date(o.placed_at).toDateString() === new Date().toDateString())
+      // DONE, not merely served: served OR settled, today. fetchLiveOrders
+      // hides settled orders on purpose, so asking it for ['served'] gave a
+      // list of served-and-not-yet-paid -- and a restaurant that bills
+      // straight from `placed` saw nothing here at all. See fetchDoneOrders.
+      const dayStart = new Date(); dayStart.setHours(0, 0, 0, 0);
+      const served = (await fetchDoneOrders(restaurant.id, dayStart.toISOString(), new Date(Date.now() + 60_000).toISOString()))
         .reverse();
 
       if (seen.current === null) {
@@ -385,7 +389,7 @@ export function OrdersBoard() {
         <div className="kpi glass">
           <span className="kpi-label">{periodLabel}</span>
           <span className="kpi-value">{inr(shownSales)}</span>
-          <span className="kpi-sub">{shownCount} served</span>
+          <span className="kpi-sub">{shownCount} done</span>
         </div>
         <div className="kpi glass">
           <span className="kpi-label">Live now</span>
@@ -536,7 +540,7 @@ export function OrdersBoard() {
 
       {servedToday.length > 0 && (
         <>
-          <h2 className="cat-heading">Served today ({servedToday.length})</h2>
+          <h2 className="cat-heading">Done today ({servedToday.length})</h2>
           <div className="glass" style={{ padding: '4px 16px' }}>
             {/* Rows were a one-line summary with no way to see what was in the
                 order — "expand the cards". Tap a row for the full itemisation. */}

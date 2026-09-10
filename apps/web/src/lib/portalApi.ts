@@ -240,6 +240,50 @@ export async function fetchLiveOrders(restaurantId: string, statuses: string[]):
   }));
 }
 
+/**
+ * WHAT IS DONE -- served, OR settled, and not cancelled.
+ *
+ * The tester: "tickets are not moving to reports". They were, all along;
+ * what was wrong was the board's own count. mark_bill_paid sets settled_at
+ * and leaves status alone (a dish still owed is still owed), and the ladder
+ * placed → accepted → preparing → ready → served is only climbed by tapping
+ * the ticket. A restaurant that bills straight from `placed` -- Ashwamedha:
+ * 39 orders in seven days, every one still `placed`, none `served` -- had a
+ * "Served today" of nothing, because fetchLiveOrders also HIDES settled
+ * orders, by design. Every number keyed on served undercounted; Reports,
+ * which counts every non-cancelled order, did not. So the board and the
+ * headers count what Reports counts: an order is done when it was served or
+ * when it was paid for, whichever the counter got to first.
+ */
+export async function fetchDoneOrders(
+  restaurantId: string, sinceISO: string, untilISO: string,
+): Promise<PortalOrder[]> {
+  const BASE = 'id, order_no, status, is_parcel, subtotal, packing_charge, service_charge, gst_amount, total, notes, placed_at, ready_at, released_at, guest_name, guest_phone, table_id, dining_table(label), order_item(id, name, qty, unit_price, is_veg), payment(id, status, provider)';
+  const q = supabase
+    .from('food_order')
+    .select(BASE)
+    .eq('restaurant_id', restaurantId)
+    .neq('status', 'cancelled')
+    .or('status.eq.served,settled_at.not.is.null')
+    .gte('placed_at', sinceISO).lte('placed_at', untilISO)
+    .order('placed_at', { ascending: true });
+  const { data, error } = await q;
+  if (error) {
+    // settled_at is a staged column; before it lands, served is all there is.
+    if ((error as any).code === '42703') {
+      const { data: d2, error: e2 } = await supabase
+        .from('food_order').select(BASE)
+        .eq('restaurant_id', restaurantId).eq('status', 'served')
+        .gte('placed_at', sinceISO).lte('placed_at', untilISO)
+        .order('placed_at', { ascending: true });
+      if (e2) throw e2;
+      return (d2 ?? []) as unknown as PortalOrder[];
+    }
+    throw error;
+  }
+  return (data ?? []) as unknown as PortalOrder[];
+}
+
 export const NEXT_STATUS: Record<string, string> = {
   placed: 'accepted',
   accepted: 'preparing',
@@ -880,9 +924,11 @@ export async function bulkUploadDishImages(
 export async function fetchServedSales(
   restaurantId: string, sinceISO: string, untilISO: string,
 ): Promise<{ sales: number; count: number }> {
+  // Done = served OR settled, not cancelled -- see fetchDoneOrders.
   const { data, error } = await supabase
     .from('food_order').select('total')
-    .eq('restaurant_id', restaurantId).eq('status', 'served')
+    .eq('restaurant_id', restaurantId).neq('status', 'cancelled')
+    .or('status.eq.served,settled_at.not.is.null')
     .gte('placed_at', sinceISO).lte('placed_at', untilISO);
   if (error) throw error;
   const rows = data ?? [];
