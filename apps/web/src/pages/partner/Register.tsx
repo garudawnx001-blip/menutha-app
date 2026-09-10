@@ -175,7 +175,7 @@ export function Register({ previewPhase }: { previewPhase?: Phase } = {}) {
     nav('/partner/orders', { replace: true });
   };
 
-  const stepLabel = phase === 'finish' ? 'Step 1 of 2' : 'Step 2 of 2';
+  const stepLabel = phase === 'finish' ? 'Step 2 of 3' : 'Step 3 of 3';
   const title = phase === 'finish' ? 'Finish setting up' : 'Register your restaurant';
 
   return (
@@ -228,36 +228,39 @@ export function Register({ previewPhase }: { previewPhase?: Phase } = {}) {
               onChange={(e) => setPassword(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && finishSetup()} />
             {error && <p className="field-error">{error}</p>}
-            <button className={`btn btn-glass btn-block auth-primary${busy ? ' is-busy' : ''}`} disabled={busy} onClick={finishSetup}>
+            <button className={`btn btn-primary btn-block auth-primary${busy ? ' is-busy' : ''}`} disabled={busy} onClick={finishSetup}>
               Continue
             </button>
             <p className="dim auth-note">Your restaurant details are next. No card, nothing is charged.</p>
           </div>
         ) : (
-        <div className="glass" style={{ width: '100%', maxWidth: 460, padding: 20, textAlign: 'left' }}>
-          <p className="dim" style={{ fontSize: 12.5, margin: '0 0 12px' }}>
+        {/* THE SAME CARD AS STEP 2. This was a bare .glass with its own width,
+            padding and label style (overline + inline margins); the step before
+            it used auth-card and field-label. One form system across the three
+            steps now, and the same one the phone draws. */}
+        <div className="glass auth-card">
+          <p className="dim auth-signed">
             ✓ Signed in as {email}{username ? ` · @${username}` : ''}
           </p>
-          <p className="overline" style={{ marginBottom: 6 }}>Your name</p>
-          <input className="code-input" value={form.owner} onChange={(e) => setForm({ ...form, owner: e.target.value })} />
-          <p className="overline" style={{ margin: '12px 0 6px' }}>Restaurant name</p>
-          <input className="code-input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-          <div style={{ display: 'flex', gap: 10 }}>
-            <div style={{ flex: 1 }}>
-              <p className="overline" style={{ margin: '12px 0 6px' }}>City</p>
-              <input className="code-input" value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} />
+          <label className="field-label" htmlFor="reg-owner">Your name</label>
+          <input id="reg-owner" className="code-input" autoComplete="name" value={form.owner} onChange={(e) => setForm({ ...form, owner: e.target.value })} />
+          <label className="field-label" htmlFor="reg-name">Restaurant name</label>
+          <input id="reg-name" className="code-input" autoComplete="organization" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+          <div className="field-2col">
+            <div>
+              <label className="field-label" htmlFor="reg-city">City</label>
+              <input id="reg-city" className="code-input" autoComplete="address-level2" value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} />
             </div>
-            <div style={{ flex: 1 }}>
-              <p className="overline" style={{ margin: '12px 0 6px' }}>GSTIN (optional)</p>
-              <input className="code-input" value={form.gstin} onChange={(e) => setForm({ ...form, gstin: e.target.value })} />
+            <div>
+              <label className="field-label" htmlFor="reg-gstin">GSTIN <span className="field-opt">(optional)</span></label>
+              <input id="reg-gstin" className="code-input" value={form.gstin} onChange={(e) => setForm({ ...form, gstin: e.target.value })} />
             </div>
           </div>
-          <p className="overline" style={{ margin: '12px 0 6px' }}>Address</p>
-          <input className="code-input" placeholder="Street, area, landmark"
+          <label className="field-label" htmlFor="reg-address">Address</label>
+          <input id="reg-address" className="code-input" placeholder="Street, area, landmark" autoComplete="street-address"
             value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} />
-
-          <p className="overline" style={{ margin: '12px 0 6px' }}>Phone</p>
-          <input className="code-input" inputMode="tel" placeholder="For diners, and for us to reach you"
+          <label className="field-label" htmlFor="reg-phone">Phone</label>
+          <input id="reg-phone" className="code-input" inputMode="tel" autoComplete="tel" placeholder="For diners, and for us to reach you"
             value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
 
           {/* THE MAP LINK, BESIDE THE TYPED ADDRESS AND NOT INSTEAD OF IT.
@@ -267,20 +270,20 @@ export function Register({ previewPhase }: { previewPhase?: Phase } = {}) {
               more accurate than describing a location in words. The pin picker
               on Restaurant profile stays for anyone who would rather stand in
               the doorway and press a button. */}
-          <p className="overline" style={{ margin: '12px 0 6px' }}>
-            Google Maps link <span className="dim">(optional)</span>
-          </p>
-          <input className="code-input" inputMode="url" placeholder="https://maps.app.goo.gl/…"
+          <label className="field-label" htmlFor="reg-maps">
+            Google Maps link <span className="field-opt">(optional)</span>
+          </label>
+          <input id="reg-maps" className="code-input" inputMode="url" placeholder="https://maps.app.goo.gl/…"
             value={form.maps_url} onChange={(e) => setForm({ ...form, maps_url: e.target.value })} />
-          <p className="dim" style={{ fontSize: 12, margin: '6px 0 0' }}>
+          <p className="dim field-help">
             Open your restaurant in Google Maps, tap Share, and paste the link here. Diners tap it
             to navigate. You can add or change this later in Restaurant profile.
           </p>
-          {error && <p style={{ color: 'var(--error)', fontSize: 13.5, marginTop: 10 }}>{error}</p>}
-          <button className={`btn btn-primary btn-block${busy ? ' is-busy' : ''}`} style={{ marginTop: 16 }} disabled={busy} onClick={submit}>
+          {error && <p className="field-error">{error}</p>}
+          <button className={`btn btn-primary btn-block auth-primary${busy ? ' is-busy' : ''}`} disabled={busy} onClick={submit}>
             Start 30-day free trial
           </button>
-          <p className="dim" style={{ fontSize: 12, marginTop: 10 }}>
+          <p className="dim auth-note">
             Full Enterprise features for 30 days · no card needed · zero commission always.
           </p>
         </div>

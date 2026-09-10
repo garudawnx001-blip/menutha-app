@@ -299,7 +299,7 @@ export function PartnerLogin() {
               onChange={(e) => setResetPw(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && saveResetPassword()} />
             {error && <p className="field-error">{error}</p>}
-            <button className={`btn btn-glass btn-block auth-primary${busy ? ' is-busy' : ''}`}
+            <button className={`btn btn-primary btn-block auth-primary${busy ? ' is-busy' : ''}`}
               disabled={busy} onClick={saveResetPassword}>
               Set password and log in
             </button>
@@ -417,7 +417,7 @@ export function PartnerLogin() {
           <p className="dim auth-anchor-note">
             {mode === 'login' ? 'New to Menutha?' : 'Already have an account?'}
           </p>
-          <button className="btn btn-ghost auth-anchor-btn" onClick={() => switchMode(mode === 'login' ? 'signup' : 'login')}>
+          <button className="btn btn-glass btn-glass-accent auth-anchor-btn" onClick={() => switchMode(mode === 'login' ? 'signup' : 'login')}>
             {mode === 'login' ? 'Create new account' : 'Log in'}
           </button>
           <p className="dim auth-fine">30 days free · 0% commission · no card to start</p>
