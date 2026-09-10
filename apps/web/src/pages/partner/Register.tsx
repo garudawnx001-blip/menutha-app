@@ -234,11 +234,11 @@ export function Register({ previewPhase }: { previewPhase?: Phase } = {}) {
             <p className="dim auth-note">Your restaurant details are next. No card, nothing is charged.</p>
           </div>
         ) : (
-        {/* THE SAME CARD AS STEP 2. This was a bare .glass with its own width,
-            padding and label style (overline + inline margins); the step before
-            it used auth-card and field-label. One form system across the three
-            steps now, and the same one the phone draws. */}
         <div className="glass auth-card">
+          {/* THE SAME CARD AS STEP 2. This was a bare .glass with its own width,
+              padding and label style (overline + inline margins); the step before
+              it used auth-card and field-label. One form system across the three
+              steps now, and the same one the phone draws. */}
           <p className="dim auth-signed">
             ✓ Signed in as {email}{username ? ` · @${username}` : ''}
           </p>
