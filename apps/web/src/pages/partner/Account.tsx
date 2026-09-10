@@ -320,7 +320,7 @@ export function Account() {
             </label>
 
             {error && <p className="field-error">{error}</p>}
-            <button className={`btn btn-glass btn-block${busy ? ' is-busy' : ''}`} style={{ marginTop: 8 }}
+            <button className={`btn btn-primary btn-block${busy ? ' is-busy' : ''}`} style={{ marginTop: 8 }}
               disabled={busy} onClick={submitChange}>
               Change password
             </button>
@@ -349,7 +349,7 @@ export function Account() {
               placeholder="8+ characters, with a letter and a number" value={pwNew}
               onChange={(e) => setPwNew(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && savePassword()} />
-            <button className={`btn btn-glass btn-block${busy ? ' is-busy' : ''}`} style={{ marginTop: 12 }}
+            <button className={`btn btn-primary btn-block${busy ? ' is-busy' : ''}`} style={{ marginTop: 12 }}
               disabled={busy} onClick={savePassword}>
               Save new password
             </button>
@@ -376,7 +376,7 @@ export function Account() {
                 : 'Any Google account — it does not have to match your email'}
             </small>
           </span>
-          <button className={`chip${busy ? ' is-busy' : ''}`} disabled={busy} onClick={googleLinked ? unlink : link}>
+          <button className={`btn btn-glass btn-sm${busy ? ' is-busy' : ''}`} disabled={busy} onClick={googleLinked ? unlink : link}>
             {googleLinked ? 'Unlink' : 'Link'}
           </button>
         </div>
@@ -389,9 +389,9 @@ export function Account() {
       </div>
 
       {msg && <p className="dim" style={{ fontSize: 13.5, marginBottom: 10 }}>{msg}</p>}
-      {error && <p style={{ color: 'var(--error)', fontSize: 13.5, marginBottom: 10 }}>{error}</p>}
+      {error && <p className="inline-error">{error}</p>}
 
-      <button className="btn btn-ghost" onClick={signOut}>Sign out</button>
+      <button className="btn btn-glass" style={{ color: 'var(--error)' }} onClick={signOut}>Sign out</button>
     </div>
   );
 }

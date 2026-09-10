@@ -216,14 +216,14 @@ export function LocationPicker({ value, label, onChange, onLabelChange, mapsUrl,
         onKeyDown={(e) => e.key === 'Enter' && findAddress()}
       />
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 4 }}>
-        <button type="button" className={`btn btn-ghost${busy ? ' is-busy' : ''}`} style={{ minHeight: 44 }} disabled={busy} onClick={findAddress}>
+        <button type="button" className={`btn btn-ghost${busy ? ' is-busy' : ''}`} disabled={busy} onClick={findAddress}>
           Find on map
         </button>
-        <button type="button" className={`btn btn-ghost${busy ? ' is-busy' : ''}`} style={{ minHeight: 44 }} disabled={busy} onClick={useMyLocation}>
+        <button type="button" className={`btn btn-ghost${busy ? ' is-busy' : ''}`} disabled={busy} onClick={useMyLocation}>
           Use my current location
         </button>
         {value && (
-          <button type="button" className="btn btn-link" style={{ minHeight: 44 }} onClick={() => { onChange(null); setNote(''); }}>
+          <button type="button" className="btn btn-link" onClick={() => { onChange(null); setNote(''); }}>
             Clear pin
           </button>
         )}
