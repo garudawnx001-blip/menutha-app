@@ -52,6 +52,17 @@ export function coordsFromMapsUrl(u: string): LatLng | null {
 export const isShortMapsLink = (u: string) =>
   /(^|\/\/)(maps\.app\.goo\.gl|goo\.gl\/maps|g\.co\/kgs)/i.test(u.trim());
 
+/**
+ * Google calls this global on an auth or billing refusal -- the grey map with
+ * "this page can't load Google Maps correctly" and the development-only
+ * watermark. It is not a script error, so onerror never fires and the map
+ * looks broken rather than absent. Recording it lets the picker show the
+ * address form instead of a dead tile.
+ */
+let mapsAuthFailed = false;
+(window as any).gm_authFailure = () => { mapsAuthFailed = true; };
+export const mapsBlocked = () => mapsAuthFailed;
+
 let mapsPromise: Promise<void> | null = null;
 function loadMaps(): Promise<void> {
   if (!MAPS_KEY) return Promise.reject(new Error('no key'));
@@ -59,7 +70,7 @@ function loadMaps(): Promise<void> {
   if (mapsPromise) return mapsPromise;
   mapsPromise = new Promise<void>((resolve, reject) => {
     const s = document.createElement('script');
-    s.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(MAPS_KEY)}&libraries=geocoding`;
+    s.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(MAPS_KEY)}&libraries=geocoding,places`;
     s.async = true;
     s.onload = () => resolve();
     s.onerror = () => { mapsPromise = null; reject(new Error('Maps failed to load')); };
@@ -121,14 +132,16 @@ function LiveMap({ at, label, onChange }: { at: LatLng | null; label: string; on
     }
   }, [at?.lat, at?.lng, label]);
 
-  if (!MAPS_KEY || failed) {
+  if (!MAPS_KEY || failed || mapsBlocked()) {
     return (
       <div className="state-card" style={{ padding: 18 }}>
         <strong>{at ? 'Location saved' : 'No pin yet'}</strong>
         <p className="dim">
           {at ? `${at.lat.toFixed(6)}, ${at.lng.toFixed(6)}` : 'Diners see this on the menu, so they know which outlet they are ordering from.'}
           <br />
-          The map appears once the Google Maps key is set on this deployment.
+          {mapsBlocked()
+            ? ' Google refused to draw the map for this key. That is a Google Cloud setting, not this site: billing has to be on for the project, the Maps JavaScript and Places APIs enabled, and menutha.com allowed under the key2019s HTTP referrers.'
+            : ' The map appears once the Google Maps key is set on this deployment.'}
         </p>
       </div>
     );
@@ -148,6 +161,49 @@ export function LocationPicker({ value, label, onChange, onLabelChange, mapsUrl,
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState('');
   const [error, setError] = useState('');
+  const addrRef = useRef<HTMLInputElement>(null);
+
+  /**
+   * PLACES ON THE ADDRESS FIELD.
+   *
+   * Bound once, to the live input, and left alone: Autocomplete keeps its own
+   * session token, and rebuilding it on every keystroke both loses the session
+   * and bills each request separately. The listener writes through the same
+   * two callbacks a click on the map uses, so a searched pin and a dropped pin
+   * are the same event as far as the rest of the form is concerned.
+   *
+   * Wrapped in try/catch and gated on `places` actually being present, because
+   * a key with Maps enabled but Places switched off loads the script fine and
+   * then throws here -- which would take the whole panel down over a feature
+   * that is meant to be a convenience.
+   */
+  useEffect(() => {
+    let ac: any = null;
+    let listener: any = null;
+    loadMaps()
+      .then(() => {
+        const g = (window as any).google;
+        if (!g?.maps?.places?.Autocomplete || !addrRef.current || mapsBlocked()) return;
+        ac = new g.maps.places.Autocomplete(addrRef.current, {
+          fields: ['geometry', 'name', 'formatted_address'],
+          componentRestrictions: { country: 'in' },
+        });
+        listener = ac.addListener('place_changed', () => {
+          const p = ac.getPlace();
+          if (!p?.geometry?.location) return;
+          onChange({
+            lat: Number(p.geometry.location.lat().toFixed(6)),
+            lng: Number(p.geometry.location.lng().toFixed(6)),
+          });
+          onLabelChange(p.formatted_address || p.name || '');
+          setNote('Pin set from the search. Save to keep it.');
+        });
+      })
+      .catch(() => { /* no key, or the script is blocked -- the fallback covers it */ });
+    return () => { if (listener && (window as any).google) (window as any).google.maps.event.removeListener(listener); };
+    // Bound once on purpose; the callbacks are read through the closure above.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const useMyLocation = () => {
     setError(''); setNote('');
@@ -208,9 +264,15 @@ export function LocationPicker({ value, label, onChange, onLabelChange, mapsUrl,
   return (
     <div>
       <label className="field-label" htmlFor="loc-address">Address or landmark</label>
+      {/* Type-ahead, not just a geocode on Enter. The picker had a search --
+          Find on map -- but it only ran once you had typed the whole thing and
+          guessed right. Places suggests as you type and returns the exact
+          coordinates of the place chosen, so the pin lands without anyone
+          dragging it. Enter still geocodes, for a key without Places. */}
       <input
+        ref={addrRef}
         id="loc-address" className="code-input"
-        placeholder="Station Road, Hospet"
+        placeholder="Search your restaurant, or type the address"
         value={label}
         onChange={(e) => onLabelChange(e.target.value)}
         onKeyDown={(e) => e.key === 'Enter' && findAddress()}
