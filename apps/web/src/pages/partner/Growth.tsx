@@ -83,7 +83,10 @@ const PERIODS: { key: GrowthPeriod; label: string }[] = [
   { key: 'week', label: 'This week' },
   { key: 'month', label: '30 days' },
   { key: 'year', label: '12 months' },
-  { key: 'custom', label: 'Custom range' },
+  // "Pick dates", which is what the app's two period controls say. One
+  // phrase for one control across both surfaces -- the label is the only
+  // thing that ever differed between them.
+  { key: 'custom', label: 'Pick dates' },
 ];
 
 /**

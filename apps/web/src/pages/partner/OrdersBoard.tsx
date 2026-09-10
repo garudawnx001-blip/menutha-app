@@ -356,7 +356,7 @@ export function OrdersBoard() {
           <option value="week">This week</option>
           <option value="month">30 days</option>
           <option value="year">12 months</option>
-          <option value="custom">Custom range</option>
+          <option value="custom">Pick dates</option>
         </select>
         {period === 'custom' && (
           <>
