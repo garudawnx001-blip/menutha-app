@@ -255,19 +255,21 @@ export function OrdersBoard() {
     finally { setBusy(''); }
   };
 
-  if (orders === null) return <Spinner label="Loading live orders…" />;
-
-  const NEXT_LABEL: Record<string, string> = {
-    placed: 'Accept', accepted: 'Start preparing', preparing: 'Mark ready', ready: 'Mark served',
-  };
-
-  // Today's-sales header (Swiggy/Zomato-partner style) — realized sales are the
-  // orders served today; live + unpaid give the floor its at-a-glance state.
-  const salesToday = servedToday.reduce((a, o) => a + Number(o.total || 0), 0);
-
-  // The chosen period's bounds. Local midnight; custom is inclusive of both
-  // days. Today needs no query of its own -- it is what the live fetch already
-  // sums -- so periodKpi is only consulted for the other periods.
+  /**
+   * ABOVE THE EARLY RETURN, and that is the whole point of where it sits.
+   *
+   * This effect was added below `if (orders === null) return <Spinner/>`. On
+   * the first render orders IS null, so the component returned before ever
+   * reaching this line and registered one hook fewer. The moment the first
+   * fetch resolved, render carried past the return, this hook appeared, and
+   * React counted more hooks than the render before it -- error #310, which
+   * takes the whole Orders route down with it. The board therefore crashed
+   * precisely when it finished loading, which is why it looked like the page
+   * simply would not open.
+   *
+   * Hooks run unconditionally or not at all. Nothing below an early return may
+   * ever be one.
+   */
   useEffect(() => {
     if (period === 'day') { setPeriodKpi(null); return; }
     let alive = true;
@@ -285,6 +287,16 @@ export function OrdersBoard() {
       .catch(() => alive && setPeriodKpi(null));
     return () => { alive = false; };
   }, [restaurant.id, period, from, to]);
+  if (orders === null) return <Spinner label="Loading live orders…" />;
+
+  const NEXT_LABEL: Record<string, string> = {
+    placed: 'Accept', accepted: 'Start preparing', preparing: 'Mark ready', ready: 'Mark served',
+  };
+
+  // Today's-sales header (Swiggy/Zomato-partner style) — realized sales are the
+  // orders served today; live + unpaid give the floor its at-a-glance state.
+  const salesToday = servedToday.reduce((a, o) => a + Number(o.total || 0), 0);
+
   const periodLabel = period === 'day' ? "Today's sales"
     : period === 'week' ? 'Sales · this week' : period === 'month' ? 'Sales · 30 days'
     : period === 'year' ? 'Sales · 12 months' : single ? `Sales · ${from}` : `Sales · ${from} to ${to}`;
