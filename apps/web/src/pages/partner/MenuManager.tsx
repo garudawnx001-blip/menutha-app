@@ -249,13 +249,13 @@ export function MenuManager() {
               ? <>✕&nbsp;Done editing categories</>
               : <><PencilIcon size={14} />&nbsp;Edit categories</>}
           </button>
-          <button className="btn btn-primary" style={{ padding: '10px 16px', fontSize: 14 }}
+          <button className="btn btn-primary btn-sm"
             onClick={() => setDraft(emptyDraft(activeCat === 'all' ? cats[0]?.id ?? null : activeCat))}>
             + Add dish
           </button>
         </div>
       </div>
-      {error && <p style={{ color: 'var(--error)', fontSize: 14, marginBottom: 10 }}>{error}</p>}
+      {error && <p className="inline-error">{error}</p>}
 
       {bulk && (
         <div className="glass" style={{ padding: 16, marginBottom: 12 }}>
@@ -398,7 +398,8 @@ export function MenuManager() {
                   {used} dish{used === 1 ? '' : 'es'}
                 </span>
                 <button
-                  className="chip"
+                  className="btn btn-glass btn-sm"
+                  style={{ color: 'var(--error)' }}
                   title="Delete this category"
                   onClick={async () => {
                     // Dishes are the valuable thing, categories are labels. So a
@@ -425,7 +426,7 @@ export function MenuManager() {
             <input className="code-input" style={{ flex: 1, padding: '8px 10px', fontSize: 14 }}
               placeholder="New category name" value={newCat}
               onChange={(e) => setNewCat(e.target.value)} />
-            <button className="btn btn-primary" style={{ padding: '8px 16px', fontSize: 14 }} disabled={!newCat.trim()}
+            <button className="btn btn-primary btn-sm" disabled={!newCat.trim()}
               onClick={async () => {
                 try { await upsertCategory(restaurant.id, newCat.trim()); setNewCat(''); load(); }
                 catch (err: any) { setError(`Could not add category: ${err?.message ?? 'unknown error'}`); }
@@ -508,7 +509,7 @@ export function MenuManager() {
               >
                 {d.is_available ? 'In stock' : 'Out'}
               </button>
-              <button className="chip" onClick={() => setDraft({
+              <button className="btn btn-glass btn-sm" onClick={() => setDraft({
                 id: d.id, name: d.name, price: String(d.price), category_id: d.category_id,
                 description: d.description ?? '', is_veg: d.is_veg, is_available: d.is_available,
                 photo_url: d.photo_url,
@@ -666,7 +667,7 @@ export function MenuManager() {
                 that failed reported itself somewhere he could not see, which is
                 indistinguishable from reporting nothing. */}
             {error && (
-              <p style={{ color: 'var(--error)', fontSize: 13.5, marginTop: 14 }}>{error}</p>
+              <p className="inline-error" style={{ marginTop: 14 }}>{error}</p>
             )}
             {/* THE DISH IS ON PAST ORDERS. Plain language and a way forward,
                 which is what the old message had neither of — it named a
@@ -718,7 +719,7 @@ export function MenuManager() {
                   the file out with a syntax error. Third time in this
                   codebase, hence the note. */}
               {draft.id && (
-                <button className="btn btn-ghost" disabled={busy} onClick={async () => {
+                <button className="btn btn-glass" style={{ color: 'var(--error)' }} disabled={busy} onClick={async () => {
                   if (!confirm(`Delete "${draft.name}"?\n\nPast orders keep their record of it.`)) return;
                   setBusy(true); setError(''); setInUse(false);
                   try {

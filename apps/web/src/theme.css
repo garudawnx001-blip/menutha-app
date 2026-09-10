@@ -1275,7 +1275,8 @@ input.code-input::placeholder { color: var(--text-dim); }
    thumb on a moving list is fiddly, and they are the accessible path. */
 .cat-row { align-items: center; }
 .cat-nudge {
-  padding: 1px 7px; font-size: 10px; line-height: 1.4; min-height: 0;
+  /* A stacked pair inside a 48px row: each half is 24px, sized as a pair. */
+  padding: 0; min-width: 32px; min-height: 24px; font-size: 10px; line-height: 1;
 }
 .cat-nudge:disabled { opacity: 0.35; cursor: default; }
 
