@@ -331,7 +331,7 @@ export function PartnerLogin() {
           <Header
             eyebrow="Password reset"
             title={done ? 'Password changed' : 'Choose a new password'}
-            sub={done ? 'Use it on the portal and in the Menutha app — it is the same account.' : 'At least 8 characters. It works on the portal and in the app.'}
+            sub={done ? 'Use it on the portal and in the Menutha app — it is the same account.' : '8+ characters, with a letter and a number. It works on the portal and in the app.'}
           />
           <div className="glass auth-card">
             {done ? (
@@ -342,7 +342,7 @@ export function PartnerLogin() {
               <>
                 <label className="field-label" htmlFor="new-password">New password</label>
                 <input id="new-password" className="code-input" type="password" autoComplete="new-password"
-                  placeholder="At least 8 characters" autoFocus
+                  placeholder="8+ characters, with a letter and a number" autoFocus
                   value={newPassword} onChange={(e) => setNewPassword(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && saveNewPassword()} />
                 {error && <p className="field-error">{error}</p>}
@@ -383,7 +383,7 @@ export function PartnerLogin() {
             <label className="field-label" htmlFor="reset-pw">New password</label>
             <input
               id="reset-pw" className="code-input" type="password" autoComplete="new-password"
-              placeholder="At least 8 characters" value={resetPw}
+              placeholder="8+ characters, with a letter and a number" value={resetPw}
               onChange={(e) => setResetPw(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && saveResetPassword()} />
             {error && <p className="field-error">{error}</p>}
@@ -496,7 +496,7 @@ export function PartnerLogin() {
                   id="auth-password"
                   className="code-input" type={reveal ? 'text' : 'password'}
                   autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
-                  placeholder={mode === 'signup' ? 'At least 8 characters' : '••••••••'}
+                  placeholder={mode === 'signup' ? '8+ characters, with a letter and a number' : '••••••••'}
                   ref={passwordRef} value={password} onChange={(e) => setPassword(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && (mode === 'signup' ? signUpEmail() : signInEmail())} />
                 <button type="button" className="btn btn-link field-reveal" onClick={() => setReveal((r) => !r)}

@@ -307,7 +307,7 @@ export function Account() {
               autoFocus value={pwCurrent} onChange={(e) => setPwCurrent(e.target.value)} />
             <label className="field-label" htmlFor="pw-new">New password</label>
             <input id="pw-new" className="code-input" type="password" autoComplete="new-password"
-              placeholder="At least 8 characters, with a number"
+              placeholder="8+ characters, with a letter and a number"
               value={pwNew} onChange={(e) => setPwNew(e.target.value)} />
             <label className="field-label" htmlFor="pw-retype">Re-type new password</label>
             <input id="pw-retype" className="code-input" type="password" autoComplete="new-password"
@@ -346,7 +346,7 @@ export function Account() {
             <label className="field-label" htmlFor="acct-pw">New password</label>
             <input
               id="acct-pw" className="code-input" type="password" autoComplete="new-password"
-              placeholder="At least 8 characters" value={pwNew}
+              placeholder="8+ characters, with a letter and a number" value={pwNew}
               onChange={(e) => setPwNew(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && savePassword()} />
             <button className={`btn btn-glass btn-block${busy ? ' is-busy' : ''}`} style={{ marginTop: 12 }}

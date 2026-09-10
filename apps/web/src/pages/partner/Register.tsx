@@ -202,7 +202,7 @@ export function Register({ previewPhase }: { previewPhase?: Phase } = {}) {
               onChange={(e) => setUsername(cleanHandle(e.target.value))} />
             <label className="field-label" htmlFor="setup-password">Password</label>
             <input id="setup-password" className="code-input" type="password" autoComplete="new-password"
-              placeholder="At least 8 characters" value={password}
+              placeholder="8+ characters, with a letter and a number" value={password}
               onChange={(e) => setPassword(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && finishSetup()} />
             {error && <p className="field-error">{error}</p>}
