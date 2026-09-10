@@ -1,32 +1,57 @@
 /**
- * WHERE THE OUTLET IS — typed, or taken from the device, and shown on a map.
+ * WHERE THE RESTAURANT IS -- three ways in, one live map, nothing that leaves.
  *
- * Two ways in, because neither works on its own. An owner sitting IN the
- * restaurant gets the pin exactly right with one tap; an owner setting up a
- * second outlet from head office has to type the address. Both end at the same
- * pair of numbers on the restaurant row.
+ * The owner can (a) type an address and find it, (b) paste a Google Maps
+ * link, or (c) tap the map to drop the pin and drag it to the exact door.
+ * All three end in the same place: a pin the diner's menu shows, and a link
+ * the diner taps to be driven there.
  *
- * THE MAP IS OPTIONAL AND THE PAGE SAYS SO. Google Maps needs a key, and the
- * key arrives from Google Cloud on its own schedule. Without it this renders
- * a plain card that states the saved coordinates rather than a grey box with
- * a JavaScript error behind it -- setting the location must work whether or
- * not the map can be drawn, because the location is what the diner needs and
- * the map is only how it is confirmed.
+ * WHAT CHANGED, from the tester's report ("tapping the map redirected out,
+ * glitchy"): the map is now ALWAYS drawn (centred on India until there is a
+ * pin), the marker is draggable, a tap on the map moves it, and the map's own
+ * links out -- points of interest, the info windows -- are switched off.
+ * Nothing on this card opens Google Maps; the phone matches (its map is the
+ * same page in a WebView).
  *
- * Available on EVERY tier, by decision: knowing where a restaurant is is not
- * a premium feature.
+ * SHORT LINKS. maps.app.goo.gl and goo.gl/maps links carry no coordinates;
+ * the browser cannot follow their redirect from here (CORS), so on this
+ * surface the link is saved for diners and the pin is set by the address or
+ * the map. The phone CAN follow them, and does. A full Google Maps URL is
+ * parsed on both.
  */
 import React, { useEffect, useRef, useState } from 'react';
 
-/** Build-time, and public by design: a Maps browser key is visible in any
- *  page that uses one. It is protected by an HTTP-referrer restriction in
- *  Google Cloud, not by secrecy. Set as an Actions VARIABLE, not a Secret --
- *  a Secret is masked at build and would inline as an empty string. */
 const MAPS_KEY = (import.meta as any).env?.VITE_GOOGLE_MAPS_API_KEY as string | undefined;
 
 export interface LatLng { lat: number; lng: number }
 
-/** Loads the Maps script once per page, no matter how many maps ask. */
+/** Somewhere to look before there is a pin: India, zoomed out. */
+const INDIA: LatLng = { lat: 20.5937, lng: 78.9629 };
+
+/** Coordinates out of a Google Maps URL, in every shape Maps hands out. */
+export function coordsFromMapsUrl(u: string): LatLng | null {
+  const s = u.trim();
+  if (!s) return null;
+  const pats = [
+    /@(-?\d{1,3}\.\d+),(-?\d{1,3}\.\d+)/,
+    /[?&](?:q|ll|query|destination|center)=(-?\d{1,3}\.\d+),(-?\d{1,3}\.\d+)/,
+    /!3d(-?\d{1,3}\.\d+)!4d(-?\d{1,3}\.\d+)/,
+    /\/(-?\d{1,3}\.\d+),(-?\d{1,3}\.\d+)(?:[/?,]|$)/,
+  ];
+  for (const p of pats) {
+    const m = s.match(p);
+    if (!m) continue;
+    const lat = Number(m[1]), lng = Number(m[2]);
+    if (Math.abs(lat) <= 90 && Math.abs(lng) <= 180) {
+      return { lat: Number(lat.toFixed(6)), lng: Number(lng.toFixed(6)) };
+    }
+  }
+  return null;
+}
+
+export const isShortMapsLink = (u: string) =>
+  /(^|\/\/)(maps\.app\.goo\.gl|goo\.gl\/maps|g\.co\/kgs)/i.test(u.trim());
+
 let mapsPromise: Promise<void> | null = null;
 function loadMaps(): Promise<void> {
   if (!MAPS_KEY) return Promise.reject(new Error('no key'));
@@ -43,54 +68,87 @@ function loadMaps(): Promise<void> {
   return mapsPromise;
 }
 
-/** The pin, drawn when a key exists and the coordinates are real. */
-function MapPin({ at, label }: { at: LatLng; label: string }) {
+/**
+ * THE LIVE MAP. One instance for the life of the card; the pin moves on it
+ * rather than the map being rebuilt. Tap to place, drag to adjust; both
+ * report back through onChange.
+ */
+function LiveMap({ at, label, onChange }: { at: LatLng | null; label: string; onChange: (v: LatLng) => void }) {
   const box = useRef<HTMLDivElement>(null);
+  const mapRef = useRef<any>(null);
+  const markerRef = useRef<any>(null);
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
   const [failed, setFailed] = useState(false);
 
   useEffect(() => {
     let dead = false;
     loadMaps()
       .then(() => {
-        if (dead || !box.current) return;
+        if (dead || !box.current || mapRef.current) return;
         const g = (window as any).google.maps;
         const map = new g.Map(box.current, {
-          center: at, zoom: 16, mapTypeControl: false, streetViewControl: false,
+          center: at ?? INDIA, zoom: at ? 16 : 5,
+          disableDefaultUI: true, zoomControl: true,
+          // No POI clicks, no info windows: those are the links that opened
+          // Google Maps from inside the card.
+          clickableIcons: false, gestureHandling: 'greedy',
         });
-        new g.Marker({ position: at, map, title: label });
+        const marker = new g.Marker({ position: at ?? undefined, map: at ? map : null, title: label, draggable: true });
+        const report = (ll: any) => {
+          const v = { lat: Number(ll.lat().toFixed(6)), lng: Number(ll.lng().toFixed(6)) };
+          marker.setPosition(v); marker.setMap(map);
+          onChangeRef.current(v);
+        };
+        map.addListener('click', (e: any) => report(e.latLng));
+        marker.addListener('dragend', () => report(marker.getPosition()));
+        mapRef.current = map; markerRef.current = marker;
       })
       .catch(() => { if (!dead) setFailed(true); });
     return () => { dead = true; };
-  }, [at.lat, at.lng, label]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // A pin set from the address or the device: move the marker, don't rebuild.
+  useEffect(() => {
+    const map = mapRef.current, marker = markerRef.current;
+    if (!map || !marker) return;
+    if (at) {
+      marker.setPosition(at); marker.setMap(map); marker.setTitle(label);
+      map.panTo(at); if (map.getZoom() < 15) map.setZoom(16);
+    } else {
+      marker.setMap(null);
+    }
+  }, [at?.lat, at?.lng, label]);
 
   if (!MAPS_KEY || failed) {
     return (
       <div className="state-card" style={{ padding: 18 }}>
-        <strong>Location saved</strong>
+        <strong>{at ? 'Location saved' : 'No pin yet'}</strong>
         <p className="dim">
-          {at.lat.toFixed(6)}, {at.lng.toFixed(6)}
+          {at ? `${at.lat.toFixed(6)}, ${at.lng.toFixed(6)}` : 'Diners see this on the menu, so they know which outlet they are ordering from.'}
           <br />
           The map appears once the Google Maps key is set on this deployment.
         </p>
       </div>
     );
   }
-  return <div ref={box} style={{ height: 220, borderRadius: 12, overflow: 'hidden' }} />;
+  return <div ref={box} style={{ height: 260, borderRadius: 12, overflow: 'hidden' }} />;
 }
 
-export function LocationPicker({ value, label, onChange, onLabelChange }: {
+export function LocationPicker({ value, label, onChange, onLabelChange, mapsUrl, onMapsUrlChange }: {
   value: LatLng | null;
   label: string;
   onChange: (v: LatLng | null) => void;
   onLabelChange: (s: string) => void;
+  /** The link a diner taps. Optional: pages without the column omit it. */
+  mapsUrl?: string;
+  onMapsUrlChange?: (s: string) => void;
 }) {
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState('');
   const [error, setError] = useState('');
 
-  /** The device's own position. One tap, and the most accurate answer there
-   *  is -- but it needs permission, and a refusal is a normal outcome rather
-   *  than a fault, so it is said plainly. */
   const useMyLocation = () => {
     setError(''); setNote('');
     if (!('geolocation' in navigator)) { setError('This browser cannot report a location.'); return; }
@@ -99,13 +157,13 @@ export function LocationPicker({ value, label, onChange, onLabelChange }: {
       (pos) => {
         setBusy(false);
         onChange({ lat: Number(pos.coords.latitude.toFixed(6)), lng: Number(pos.coords.longitude.toFixed(6)) });
-        setNote('Pin set from this device.');
+        setNote('Pin set from this device. Drag it to the exact door if it is off.');
       },
       (err) => {
         setBusy(false);
         setError(err.code === err.PERMISSION_DENIED
-          ? 'Location permission was declined — type the address instead.'
-          : 'Could not read this device’s location — type the address instead.');
+          ? 'Location permission was declined — type the address or tap the map instead.'
+          : 'Could not read this device’s location — type the address or tap the map instead.');
       },
       { enableHighAccuracy: true, timeout: 10_000 },
     );
@@ -126,12 +184,25 @@ export function LocationPicker({ value, label, onChange, onLabelChange }: {
       });
       const loc = res.geometry.location;
       onChange({ lat: Number(loc.lat().toFixed(6)), lng: Number(loc.lng().toFixed(6)) });
-      setNote(`Found: ${res.formatted_address}`);
-    } catch (e: any) {
+      setNote(`Found: ${res.formatted_address}. Drag the pin if it is not quite right.`);
+    } catch {
       setError(MAPS_KEY
-        ? 'That address could not be found. Try adding the city, or use this device’s location.'
+        ? 'That address could not be found. Try adding the city, tap the map, or use this device’s location.'
         : 'Address lookup needs the Google Maps key. Use this device’s location, or set the key.');
     } finally { setBusy(false); }
+  };
+
+  /** A pasted Google Maps link: the pin from its coordinates, when it has them. */
+  const onLink = (s: string) => {
+    onMapsUrlChange?.(s);
+    setError('');
+    const c = coordsFromMapsUrl(s);
+    if (c) { onChange(c); setNote('Pin set from the link. Drag it if it is not quite right.'); return; }
+    if (isShortMapsLink(s)) {
+      setNote('Saved for diners. A short link carries no position — set the pin by address, by tapping the map, or paste the full link from the browser’s address bar.');
+    } else if (s.trim()) {
+      setNote('');
+    }
   };
 
   return (
@@ -145,33 +216,47 @@ export function LocationPicker({ value, label, onChange, onLabelChange }: {
         onKeyDown={(e) => e.key === 'Enter' && findAddress()}
       />
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 4 }}>
-        <button type="button" className={`btn btn-ghost${busy ? ' is-busy' : ''}`} disabled={busy} onClick={findAddress}>
+        <button type="button" className={`btn btn-ghost${busy ? ' is-busy' : ''}`} style={{ minHeight: 44 }} disabled={busy} onClick={findAddress}>
           Find on map
         </button>
-        <button type="button" className={`btn btn-ghost${busy ? ' is-busy' : ''}`} disabled={busy} onClick={useMyLocation}>
+        <button type="button" className={`btn btn-ghost${busy ? ' is-busy' : ''}`} style={{ minHeight: 44 }} disabled={busy} onClick={useMyLocation}>
           Use my current location
         </button>
         {value && (
-          <button type="button" className="btn btn-link" onClick={() => { onChange(null); setNote(''); }}>
+          <button type="button" className="btn btn-link" style={{ minHeight: 44 }} onClick={() => { onChange(null); setNote(''); }}>
             Clear pin
           </button>
         )}
       </div>
 
+      {onMapsUrlChange && (
+        <>
+          <label className="field-label" htmlFor="loc-link" style={{ marginTop: 12 }}>
+            Google Maps link <span className="dim">(optional)</span>
+          </label>
+          <input
+            id="loc-link" className="code-input" inputMode="url"
+            placeholder="https://maps.app.goo.gl/…"
+            value={mapsUrl ?? ''}
+            onChange={(e) => onLink(e.target.value)}
+          />
+          <p className="dim" style={{ fontSize: 12, margin: '4px 0 0' }}>
+            Open your restaurant in Google Maps, tap Share, paste it here. Diners tap it to navigate;
+            a full link also sets the pin.
+          </p>
+        </>
+      )}
+
       {note && <p className="dim" style={{ fontSize: 12.5, marginTop: 8 }}>{note}</p>}
       {error && <p className="field-error" style={{ marginTop: 8 }}>{error}</p>}
 
       <div style={{ marginTop: 12 }}>
-        {value
-          ? <MapPin at={value} label={label || 'Your restaurant'} />
-          : (
-            <div className="state-card" style={{ padding: 18 }}>
-              <strong>No pin yet</strong>
-              <p className="dim">
-                Diners see this on the menu, so they know which outlet they are ordering from.
-              </p>
-            </div>
-          )}
+        <LiveMap at={value} label={label || 'Your restaurant'} onChange={onChange} />
+        {MAPS_KEY && (
+          <p className="dim" style={{ fontSize: 12, margin: '6px 0 0' }}>
+            {value ? 'Drag the pin to the exact door, or tap the map to move it.' : 'Tap the map to drop the pin.'}
+          </p>
+        )}
       </div>
     </div>
   );

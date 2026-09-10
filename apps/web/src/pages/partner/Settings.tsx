@@ -196,17 +196,9 @@ export function Settings() {
             holding. See BillSettings. */}
         {/* WHERE THE OUTLET IS. Every tier -- knowing where a restaurant is is
             not a premium feature. Diners see this pin on the menu. */}
-        {/* THE LINK A DINER TAPS. The pin below answers "how far is it";
-            this answers "take me there", and the two are not the same job --
-            which is why both are here rather than one standing in for the
-            other. */}
-        <F label="Google Maps link">
-          <input className="code-input" inputMode="url" placeholder="https://maps.app.goo.gl/..."
-            value={form.maps_url} onChange={(e) => setForm({ ...form, maps_url: e.target.value })} />
-          <p className="dim" style={{ fontSize: 12, margin: '6px 0 0' }}>
-            Open your restaurant in Google Maps, tap Share, paste it here. Diners tap it to navigate.
-          </p>
-        </F>
+        {/* THE LINK A DINER TAPS lives inside the picker now: pasting a full
+            Google Maps link also sets the pin, so the two jobs -- "take me
+            there" and "how far is it" -- are one field away from each other. */}
 
         <F label="Location on the map">
           <LocationPicker
@@ -214,6 +206,8 @@ export function Settings() {
             label={form.map_label}
             onChange={setPin}
             onLabelChange={(v) => setForm((f) => ({ ...f, map_label: v }))}
+            mapsUrl={form.maps_url}
+            onMapsUrlChange={(v) => setForm((f) => ({ ...f, maps_url: v }))}
           />
         </F>
         {/* MORE THAN ONE ADDRESS. Enterprise, unlimited, one subscription --
