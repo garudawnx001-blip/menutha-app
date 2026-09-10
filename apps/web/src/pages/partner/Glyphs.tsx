@@ -92,6 +92,31 @@ export function PencilIcon({ size = 16, title }: IconProps) {
   );
 }
 
+/** Eye — reveal a password. The app draws the same pair (Phosphor Eye /
+ *  EyeSlash); an eye needs no reading where the word SHOW did. */
+export function EyeIcon({ size = 16, title }: IconProps) {
+  return (
+    <svg {...common} style={box(size)} role={title ? 'img' : 'presentation'} aria-label={title} aria-hidden={!title}>
+      {title && <title>{title}</title>}
+      <path d="M2.5 12s3.5-6.5 9.5-6.5S21.5 12 21.5 12s-3.5 6.5-9.5 6.5S2.5 12 2.5 12z" />
+      <circle cx="12" cy="12" r="3" />
+    </svg>
+  );
+}
+
+/** Eye, struck through — the password is showing; press to hide it. */
+export function EyeOffIcon({ size = 16, title }: IconProps) {
+  return (
+    <svg {...common} style={box(size)} role={title ? 'img' : 'presentation'} aria-label={title} aria-hidden={!title}>
+      {title && <title>{title}</title>}
+      <path d="M3 3l18 18" />
+      <path d="M10.6 5.9A10.4 10.4 0 0 1 12 5.5c6 0 9.5 6.5 9.5 6.5a17.6 17.6 0 0 1-3.2 4.1" />
+      <path d="M6.6 6.6C4 8.5 2.5 12 2.5 12s3.5 6.5 9.5 6.5c1.6 0 3-.4 4.2-1" />
+      <path d="M9.9 9.9a3 3 0 0 0 4.2 4.2" />
+    </svg>
+  );
+}
+
 /** Printer — for the Print action on the bill. */
 export function PrinterIcon({ size = 16, title }: IconProps) {
   return (

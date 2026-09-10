@@ -23,6 +23,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
+import { EyeIcon, EyeOffIcon } from './Glyphs';
 import { Wordmark } from '../../components';
 import {
   showAppleButton, APPLE_COMING_SOON, APPLE_PENDING_MESSAGE, providerError,
@@ -499,9 +500,10 @@ export function PartnerLogin() {
                   placeholder={mode === 'signup' ? '8+ characters, with a letter and a number' : '••••••••'}
                   ref={passwordRef} value={password} onChange={(e) => setPassword(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && (mode === 'signup' ? signUpEmail() : signInEmail())} />
+                {/* An eye, not the word SHOW -- the same pair the app draws. */}
                 <button type="button" className="btn btn-link field-reveal" onClick={() => setReveal((r) => !r)}
                   aria-label={reveal ? 'Hide password' : 'Show password'}>
-                  {reveal ? 'HIDE' : 'SHOW'}
+                  {reveal ? <EyeOffIcon size={20} /> : <EyeIcon size={20} />}
                 </button>
               </div>
 

@@ -1889,8 +1889,12 @@ select.code-input:focus { border-color: var(--primary); }
 .field-row { position: relative; }
 .field-row .code-input { padding-right: 64px; margin-bottom: 0; }
 .field-reveal {
-  position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
-  font-size: 10.5px; letter-spacing: 0.12em; font-weight: 800; min-height: 36px; padding: 0 10px;
+  /* An icon now, in a 44px box -- the touch minimum, and the same box the
+     app gives its eye. It was a 10.5px word in 36px. */
+  position: absolute; right: 4px; top: 50%; transform: translateY(-50%);
+  min-width: 44px; min-height: 44px; padding: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  color: var(--text-muted);
 }
 .field-error { color: var(--error); font-size: 13.5px; margin: -4px 0 12px; }
 .auth-primary { margin-top: 4px; min-height: 50px; font-size: 15px; }
