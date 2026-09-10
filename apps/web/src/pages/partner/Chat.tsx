@@ -184,7 +184,7 @@ export function ChatView(p: ChatViewProps) {
                 aria-label="Type a reply"
               />
               <button
-                className={`btn btn-glass${p.sending ? ' is-busy' : ''}`}
+                className={`btn btn-primary${p.sending ? ' is-busy' : ''}`}
                 disabled={p.sending || !p.text.trim()}
                 onClick={p.onSend}
               >

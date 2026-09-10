@@ -28,7 +28,7 @@ export function Reservations() {
       <p className="muted" style={{ fontSize: 13.5, marginTop: 4 }}>
         Reservation-only — no pre-orders, no refunds. Diners book from your page.
       </p>
-      {error && <p style={{ color: 'var(--error)', fontSize: 14, margin: '10px 0' }}>{error}</p>}
+      {error && <p className="inline-error" style={{ margin: '10px 0' }}>{error}</p>}
 
       <div className="glass" style={{ padding: '4px 16px', marginTop: 12 }}>
         {rows.length === 0 && <p className="muted" style={{ padding: '16px 0' }}>New booking requests will appear here.</p>}
