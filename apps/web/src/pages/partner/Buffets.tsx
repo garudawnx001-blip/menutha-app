@@ -163,7 +163,7 @@ export function Buffets() {
         A complimentary buffet is for in-hotel guests and never reaches a bill.
         A paid buffet charges a per-person amount, then shows the same list.
       </p>
-      {error && <p style={{ color: 'var(--error)', fontSize: 14, marginBottom: 10 }}>{error}</p>}
+      {error && <p className="inline-error">{error}</p>}
 
       {rows.map((b) => (
         <div key={b.id} className="row-item" style={{ alignItems: 'center', gap: 10 }}>
@@ -175,11 +175,11 @@ export function Buffets() {
               {!b.is_active && ' · off'}
             </span>
           </span>
-          <button className="chip" disabled={busy} onClick={() => startEdit(b)}>Edit</button>
-          <button className="chip" disabled={busy} onClick={() => setActive(b, !b.is_active)}>
+          <button className="btn btn-glass btn-sm" disabled={busy} onClick={() => startEdit(b)}>Edit</button>
+          <button className="btn btn-glass btn-sm" disabled={busy} onClick={() => setActive(b, !b.is_active)}>
             {b.is_active ? 'Turn off' : 'Turn on'}
           </button>
-          <button className="chip" disabled={busy} onClick={() => remove(b)}>Delete</button>
+          <button className="btn btn-glass btn-sm" style={{ color: 'var(--error)' }} disabled={busy} onClick={() => remove(b)}>Delete</button>
         </div>
       ))}
 
@@ -224,7 +224,7 @@ export function Buffets() {
             aria-label="Serving ends at"
             value={draft.to} onChange={(e) => setDraft({ ...draft, to: e.target.value })} />
           {(draft.from || draft.to) && (
-            <button className="chip" onClick={() => setDraft({ ...draft, from: '', to: '' })}>
+            <button className="btn btn-glass btn-sm" onClick={() => setDraft({ ...draft, from: '', to: '' })}>
               Clear
             </button>
           )}
@@ -249,7 +249,7 @@ export function Buffets() {
           <button className="btn btn-primary" disabled={busy} onClick={submit}>
             {editing ? 'Save buffet' : 'Create buffet'}
           </button>
-          {editing && <button className="chip" disabled={busy} onClick={cancel}>Cancel</button>}
+          {editing && <button className="btn btn-glass" disabled={busy} onClick={cancel}>Cancel</button>}
         </div>
       </div>
     </div>

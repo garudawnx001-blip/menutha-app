@@ -370,7 +370,7 @@ export function Growth({ restaurantId }: { restaurantId: string }) {
             // the whole Reports screen, and it sat below the size a thumb
             // reliably hits. Height rather than vertical padding so the box
             // cannot shrink back when the font metrics change.
-            style={{ padding: '0 10px', fontSize: 14, width: 'auto', minHeight: 44 }}
+            style={{ padding: '0 10px', fontSize: 14, width: 'auto' }}
             value={period}
             onChange={(e) => setPeriod(e.target.value as GrowthPeriod)}
             aria-label="Reporting period"
@@ -385,7 +385,6 @@ export function Growth({ restaurantId }: { restaurantId: string }) {
             className={`chip${exporting ? ' is-busy' : ''}`}
             onClick={downloadCsv}
             disabled={exporting || !points}
-            style={{ minHeight: 44 }}
             title="Download this report as a CSV for Excel"
           >
             {'⬇ CSV'}
@@ -397,7 +396,6 @@ export function Growth({ restaurantId }: { restaurantId: string }) {
             className={`chip${exporting ? ' is-busy' : ''}`}
             onClick={openPdf}
             disabled={exporting || !points}
-            style={{ minHeight: 44 }}
             title="Open this report as a PDF to print or save"
           >
             {'⬇ PDF'}
@@ -426,14 +424,14 @@ export function Growth({ restaurantId }: { restaurantId: string }) {
                   date-picker dependency in the bundle. */}
               <input type="date" className="code-input"
                 aria-label={single ? 'Date' : 'From date'}
-                style={{ padding: '7px 8px', fontSize: 12.5, width: 'auto' }}
+                style={{ padding: '0 8px', fontSize: 13, width: 'auto' }}
                 value={from} max={single ? iso(new Date()) : to}
                 onChange={(e) => { setFrom(e.target.value); if (single) setTo(e.target.value); }} />
               {!single && (
                 <>
                   <span className="dim" style={{ fontSize: 12 }}>to</span>
                   <input type="date" className="code-input" aria-label="To date"
-                    style={{ padding: '7px 8px', fontSize: 12.5, width: 'auto' }}
+                    style={{ padding: '0 8px', fontSize: 13, width: 'auto' }}
                     value={to} min={from} max={iso(new Date())} onChange={(e) => setTo(e.target.value)} />
                 </>
               )}
@@ -447,7 +445,7 @@ export function Growth({ restaurantId }: { restaurantId: string }) {
         <button className={metric === 'orders' ? 'seg-btn active' : 'seg-btn'} onClick={() => setMetric('orders')}>Orders</button>
       </div>
 
-      {error && <p style={{ color: 'var(--error)', fontSize: 13.5, marginTop: 10 }}>{error}</p>}
+      {error && <p className="inline-error" style={{ marginTop: 10 }}>{error}</p>}
       {points && !error && (
         points.some((p) => p.orders > 0) ? (
           <>
