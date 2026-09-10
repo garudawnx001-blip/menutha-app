@@ -201,10 +201,15 @@ function Bars({ points, metric }: { points: GrowthPoint[]; metric: 'revenue' | '
                   Printed on the same cadence as the tick labels: at 30 bars
                   every column would otherwise carry two numbers eleven pixels
                   apart, which is the mush the tick step already avoids. */}
-              <span className="growth-val" aria-hidden>
-                {label && v > 0 ? (<><b>{short(p.revenue)}</b><i>{p.orders}</i></>) : null}
-              </span>
               <span className="growth-bar-wrap">
+                {/* ON ITS OWN BAR. The label used to sit on a fixed line at the
+                    top of the column, so a short bar had its number floating
+                    high above it -- the tester's screenshot. Anchored to the
+                    bar's height now: its bottom is the bar's own percentage. */}
+                <span className="growth-val" aria-hidden
+                  style={{ bottom: v > 0 ? `calc(${Math.max(pct, 1.5)}% + 3px)` : '6px' }}>
+                  {label && v > 0 ? (<><b>{short(p.revenue)}</b><i>{p.orders}</i></>) : null}
+                </span>
                 {/* A DAY WITH NOTHING TAKEN IS A FACT, not an absence. It used
                     to render as a 1% sliver -- about a pixel and a half, which
                     reads as a glitch rather than a zero. It is now a flat
