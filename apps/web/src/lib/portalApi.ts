@@ -506,7 +506,13 @@ export async function deleteDish(id: string) {
   // No error and no rows: the row was filtered out rather than deleted. Never
   // report that as success.
   if (!data || data.length === 0) {
-    throw new Error('The dish was not deleted — you may not have permission to remove it.');
+    // TRUTHFUL, because zero rows has more than one cause and this used to
+    // assert the least likely one. PostgREST answers a delete that matched
+    // nothing with 204 either way: the row may already be gone (two tabs, or
+    // a second tap), or it may be invisible to this account. Naming a cause we
+    // have not established is how an owner ends up hunting a permission
+    // problem that was never there -- which is exactly what happened here.
+    throw new Error('That dish is no longer there — it may already have been removed. Refresh the menu to see what is current.');
   }
 }
 
