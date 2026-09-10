@@ -309,7 +309,7 @@ export function PlanScreen({ preview }: { preview?: boolean } = {}) {
       <div className="topbar">
         <Wordmark size={22} />
         <button
-          className="chip"
+          className="btn btn-glass btn-sm"
           onClick={async () => { await supabase.auth.signOut(); nav('/partner', { replace: true }); }}
         >
           Sign out
@@ -367,7 +367,7 @@ export function PlanScreen({ preview }: { preview?: boolean } = {}) {
           </span>
         </div>
       )}
-      {error && <p style={{ color: 'var(--error)', fontSize: 14, marginTop: 12 }}>{error}</p>}
+      {error && <p className="inline-error" style={{ marginTop: 12 }}>{error}</p>}
 
       <h2 className="cat-heading">Plans</h2>
       {/* HOW LONG YOU PAY FOR, and each one is a real plan at the gateway.

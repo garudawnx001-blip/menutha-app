@@ -97,11 +97,11 @@ export function Showcase() {
           <span className="dim" style={{ fontSize: 12.5, flex: 1, minWidth: 180, wordBreak: 'break-all' }}>
             {publicUrl}
           </span>
-          <a className="chip" href={publicUrl} target="_blank" rel="noreferrer">Open my page ↗</a>
-          <button className="chip" onClick={() => navigator.clipboard?.writeText(publicUrl)}>Copy link</button>
+          <a className="btn btn-glass btn-sm" href={publicUrl} target="_blank" rel="noreferrer">Open my page ↗</a>
+          <button className="btn btn-glass btn-sm" onClick={() => navigator.clipboard?.writeText(publicUrl)}>Copy link</button>
         </div>
       )}
-      {error && <p style={{ color: 'var(--error)', fontSize: 14, marginBottom: 10 }}>{error}</p>}
+      {error && <p className="inline-error">{error}</p>}
 
       {KINDS.map((k) => {
         const mine = rows.filter((r) => r.kind === k.key);
@@ -115,7 +115,7 @@ export function Showcase() {
                   <img src={m.url} alt={m.caption ?? k.label}
                     style={{ width: '100%', height: 132, objectFit: 'cover', borderRadius: 12, display: 'block' }} />
                   {m.caption && <div className="dim" style={{ fontSize: 12, marginTop: 4 }}>{m.caption}</div>}
-                  <button className="chip" style={{ marginTop: 4 }} disabled={busy}
+                  <button className="btn btn-glass btn-sm" style={{ marginTop: 4, color: 'var(--error)' }} disabled={busy}
                     onClick={() => remove(m)}>Remove</button>
                 </div>
               ))}
@@ -136,7 +136,7 @@ export function Showcase() {
             value={caption} onChange={(e) => setCaption(e.target.value)} />
           <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }}
             onChange={(e) => onPick(e.target.files?.[0])} />
-          <button className="chip" disabled={busy} onClick={() => fileRef.current?.click()}>
+          <button className="btn btn-primary btn-sm" disabled={busy} onClick={() => fileRef.current?.click()}>
             {busy ? 'Uploading…' : 'Choose image'}
           </button>
         </div>
