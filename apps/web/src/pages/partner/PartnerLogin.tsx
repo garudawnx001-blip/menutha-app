@@ -1,9 +1,9 @@
-/** Restaurant Portal sign-in. THE MODEL, as he finalised it: Google is the
- *  front door of sign-up (verified email, no inbox step; username + password
- *  are set on Register right after), email sign-up is the secondary door
- *  (username + password up front, confirmed by a SIX-DIGIT CODE). Log in is
- *  one field -- username OR email -- plus password, or the Google button; all
- *  of them open the same account.
+/** Restaurant Portal sign-in. THE MODEL, final: sign-up is GOOGLE ONLY. The
+ *  Google account is the front door; username, email and password are set on
+ *  Register (Step 2), then the restaurant (Step 3), and the 30-day trial
+ *  starts. Log in is one field -- username OR email -- plus password, or the
+ *  Google button; all of them open the same account. Forgot password sends a
+ *  six-digit code to the account email; no Google needed.
  *
  *  CODES, NOT LINKS, for confirming and for resetting. Custom SMTP is on the
  *  project, so the templates carry {{ .Token }} and the whole thing finishes
@@ -29,8 +29,7 @@ import {
   showAppleButton, APPLE_COMING_SOON, APPLE_PENDING_MESSAGE, providerError,
 } from '../../lib/authProviders';
 import {
-  loginWithIdentifier, resetByIdentifier, completeReset, otpErrorSentence, passwordProblem,
-  usernameAvailable, usernameProblem, cleanHandle,
+  loginWithIdentifier, resetByIdentifier, completeReset, passwordProblem,
 } from '../../lib/auth';
 import { GoogleMark } from './GoogleMark';
 
@@ -48,55 +47,6 @@ export function PartnerLogin() {
   const [reveal, setReveal] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  /** Sign-up succeeded but the address must be confirmed first. */
-  const [signupSent, setSignupSent] = useState(false);
-  /** The six-digit code from the confirmation mail. The link in the same mail
-   *  still works; this is the path that does not leave the screen. */
-  const [signupCode, setSignupCode] = useState('');
-
-  const confirmSignupCode = async () => {
-    if (!/^\d{6}$/.test(signupCode)) { setError('Enter the 6-digit code from the email.'); return; }
-    setBusy(true); setError('');
-    const { data, error: err } = await supabase.auth.verifyOtp({
-      email: email.trim(), token: signupCode, type: 'signup',
-    });
-    setBusy(false);
-    if (err) { setError(otpErrorSentence(err.message)); return; }
-    if (!data.session) { setError('That code did not match. Check it and try again.'); return; }
-    nav('/partner/register', { replace: true });
-  };
-  /**
-   * THE CODE THAT NEVER ARRIVED.
-   *
-   * Without this the screen was a dead end: the only way out was "Use a
-   * different email", and going back to change it and submitting the same
-   * address returns "already registered" -- so an owner whose mail was slow,
-   * filtered or mistyped had no way forward at all. The phone has offered a
-   * resend since this screen was built. Cooldown for the same reason it has
-   * one: Supabase rate-limits resends, and a disabled button that says when
-   * is kinder than an error that says no.
-   */
-  const [signupAgain, setSignupAgain] = useState(0);
-  const [signupNote, setSignupNote] = useState('');
-  const resendSignup = async () => {
-    setBusy(true); setError(''); setSignupNote('');
-    const { error: err } = await supabase.auth.resend({
-      type: 'signup',
-      email: email.trim(),
-      options: { emailRedirectTo: `${window.location.origin}/partner/register` },
-    });
-    setBusy(false);
-    if (err) { setError(err.message); return; }
-    setSignupCode('');
-    setSignupNote('Sent. It can take a minute to arrive.');
-    setSignupAgain(Date.now() + 24_000);
-  };
-
-  /** Instagram-style handle, sign-up only. Checked for format and
-
-   *  availability before the account is created; CLAIMED when the restaurant
-   *  is (Register), because that is the first call with a session. */
-  const [username, setUsername] = useState('');
 
   /**
    * THE RESET LINK LANDS HERE with a recovery token in the fragment. The hash
@@ -177,45 +127,6 @@ export function PartnerLogin() {
     }
   };
 
-  const signUpEmail = async () => {
-    const em = (emailRef.current?.value || email).trim();
-    const pw = passwordRef.current?.value || password;
-    if (!em || !pw) { setError('Enter your email and choose a password.'); return; }
-    // ONE PASSWORD RULE, WHEREVER A PASSWORD IS SET. This asked for eight
-    // characters and nothing else while Change password also required a
-    // letter and a digit, so an owner could sign up with "aaaaaaaa" and meet
-    // the real rule months later on a different screen.
-    const pwBad = passwordProblem(pw);
-    if (pwBad) { setError(pwBad); return; }
-    const handle = username.trim().toLowerCase();
-    const problem = usernameProblem(handle);
-    if (problem) { setError(problem); return; }
-    setBusy(true); setError('');
-    try {
-      if (!(await usernameAvailable(handle))) { setBusy(false); setError('That username is taken. Try another.'); return; }
-    } catch (e: any) {
-      setBusy(false); setError(e?.message ?? 'Could not check that username.'); return;
-    }
-    /* The handle rides in user metadata until the restaurant is created and
-       complete_restaurant_signup claims it. emailRedirectTo: the confirmation
-       link lands on Register, where the restaurant form is. */
-    const { data, error: err } = await supabase.auth.signUp({
-      email: em, password: pw,
-      options: {
-        emailRedirectTo: `${window.location.origin}/partner/register`,
-        data: { username: handle },
-      },
-    });
-    setBusy(false);
-    if (err) {
-      setError(/already registered|already been registered/i.test(err.message)
-        ? 'That email already has an account — log in instead.'
-        : err.message);
-      return;
-    }
-    if (!data.session) { setSignupSent(true); return; }
-    nav('/partner/register', { replace: true });
-  };
 
   /**
    * FORGOT PASSWORD, BY CODE.
@@ -244,11 +155,11 @@ export function PartnerLogin() {
    */
   const [now, setNow] = useState(Date.now());
   useEffect(() => {
-    const until = Math.max(resetAgain, signupAgain);
+    const until = resetAgain;
     if (until <= Date.now()) return;
     const id = setTimeout(() => setNow(Date.now()), until - Date.now() + 50);
     return () => clearTimeout(id);
-  }, [resetAgain, signupAgain]);
+  }, [resetAgain]);
 
   const forgotPassword = async () => {
     const id = (emailRef.current?.value || email).trim();
@@ -286,7 +197,7 @@ export function PartnerLogin() {
   };
 
   const switchMode = (m: 'login' | 'signup') => {
-    setMode(m); setError(""); setSignupSent(false); setSignupCode(""); setResetStep("off");
+    setMode(m); setError(''); setResetStep('off');
   };
 
   const Header = ({ eyebrow, title, sub }: { eyebrow: string; title: string; sub: string }) => (
@@ -423,84 +334,49 @@ export function PartnerLogin() {
           <Header
             eyebrow="Create account"
             title="Get your restaurant online."
-            sub="QR ordering, live kitchen board and billing. 30-day free trial, no card, zero commission."
+            sub="QR ordering, live kitchen board and billing. Free for 30 days — then choose a plan. No card, zero commission."
           />
         )}
 
         <div className="glass auth-card">
-          {mode === 'signup' && signupSent ? (
-            /* THE ACCOUNT EXISTS, THE EMAIL IS NOT YET CONFIRMED. Shown in place
-               of the form: nothing went wrong, and a red line saying "account
-               created" is a contradiction the reader has to resolve. */
-            <div className="auth-sent">
-              <div className="auth-sent-mark" aria-hidden>
-                <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                  <rect x="3" y="5" width="18" height="14" rx="2" />
-                  <path d="m3 7 9 6 9-6" />
-                </svg>
+          {mode === 'signup' ? (
+            /* GOOGLE-ONLY SIGN-UP. The final call, and it supersedes the email
+               form that used to sit here (email + username + password + a
+               6-digit confirmation). One primary action: Google confirms the
+               email, Register asks for username, email and password (Step 2),
+               then the restaurant (Step 3), and the 30-day trial starts. */
+            <>
+              <div className="auth-providers">
+                {googleButton}
+                {appleButton}
               </div>
-              <strong>Check your email</strong>
-              <p className="dim" style={{ fontSize: 13.5, margin: '6px 0 14px' }}>
-                We sent a 6-digit code to <b>{email.trim()}</b>. Type it here — or tap the link in the
-                same email. Until one of the two, the account cannot log in.
+              {error && <p className="field-error" style={{ marginTop: 10 }}>{error}</p>}
+              <p className="dim auth-note">
+                Google confirms your email. Next you choose a username and password, then add your
+                restaurant — <b>30 days free</b>, no card, zero commission.
               </p>
-              <div style={{ textAlign: 'left' }}>
-                <label className="field-label" htmlFor="signup-code">6-digit code</label>
-                <input
-                  id="signup-code" className="code-input code-otp" inputMode="numeric" autoComplete="one-time-code"
-                  placeholder="••••••" maxLength={6} autoFocus value={signupCode}
-                  onChange={(e) => setSignupCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                  onKeyDown={(e) => e.key === 'Enter' && confirmSignupCode()} />
-              </div>
-              {error && <p className="field-error">{error}</p>}
-              <button className={`btn btn-glass btn-block auth-primary${busy ? ' is-busy' : ''}`}
-                disabled={busy} onClick={confirmSignupCode}>
-                Confirm and continue
-              </button>
-              {signupNote && <p className="dim" style={{ fontSize: 12.5, margin: '8px 0 0' }}>{signupNote}</p>}
-              <div style={{ display: 'flex', gap: 12, justifyContent: 'center', marginTop: 8, flexWrap: 'wrap' }}>
-                <button className="btn btn-link" disabled={busy || now < signupAgain} onClick={resendSignup}>
-                  {now < signupAgain ? 'Send another code in a moment' : 'Send another code'}
-                </button>
-                <button className="btn btn-link" onClick={() => { setSignupSent(false); setError(''); setSignupCode(''); setSignupNote(''); }}>
-                  Use a different email
-                </button>
-              </div>
-            </div>
+            </>
           ) : (
             <>
-              <label className="field-label" htmlFor="auth-id">
-                {mode === 'signup' ? 'Email' : 'Username, email'}
-              </label>
+              {/* NO PLACEHOLDER in the box -- his ask. The label says what goes here. */}
+              <label className="field-label" htmlFor="auth-id">Username or email</label>
               <input
                 id="auth-id"
                 className="code-input"
-                type={mode === 'signup' ? 'email' : 'text'}
-                autoComplete={mode === 'signup' ? 'email' : 'username'}
-                placeholder={mode === 'signup' ? 'you@restaurant.com' : 'username or you@restaurant.com'}
+                type="text"
+                autoComplete="username"
                 ref={emailRef} value={email} onChange={(e) => setEmail(e.target.value)} />
-
-              {mode === 'signup' && (
-                <>
-                  <label className="field-label" htmlFor="auth-username">Username</label>
-                  <input
-                    id="auth-username"
-                    className="code-input" type="text" autoComplete="username"
-                    placeholder="your_restaurant" value={username}
-                    onChange={(e) => setUsername(cleanHandle(e.target.value))} />
-                </>
-              )}
 
               <label className="field-label" htmlFor="auth-password">Password</label>
               <div className="field-row">
                 <input
                   id="auth-password"
                   className="code-input" type={reveal ? 'text' : 'password'}
-                  autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
-                  placeholder={mode === 'signup' ? '8+ characters, with a letter and a number' : '••••••••'}
+                  autoComplete="current-password"
                   ref={passwordRef} value={password} onChange={(e) => setPassword(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && (mode === 'signup' ? signUpEmail() : signInEmail())} />
-                {/* An eye, not the word SHOW -- the same pair the app draws. */}
+                  onKeyDown={(e) => e.key === 'Enter' && signInEmail()} />
+                {/* An eye, not the word SHOW -- the same pair the app draws,
+                    centred in the field by .field-reveal (top 50%, translated). */}
                 <button type="button" className="btn btn-link field-reveal" onClick={() => setReveal((r) => !r)}
                   aria-label={reveal ? 'Hide password' : 'Show password'}>
                   {reveal ? <EyeOffIcon size={20} /> : <EyeIcon size={20} />}
@@ -509,35 +385,26 @@ export function PartnerLogin() {
 
               {error && <p className="field-error">{error}</p>}
 
-              {/* "Log in", in clear glass -- the client's call for this page,
-                  and the same word in the same material the app uses. */}
-              <button className={`btn btn-glass btn-block auth-primary${busy ? ' is-busy' : ''}`} disabled={busy}
-                onClick={mode === 'signup' ? signUpEmail : signInEmail}>
-                {mode === 'signup' ? 'Create account' : 'Log in'}
+              {/* A PRIMARY, not glass. "Log in" read as a washed-out grey pane
+                  beside the terracotta CTAs everywhere else, and it is the one
+                  thing this page is for. */}
+              <button className={`btn btn-primary btn-block auth-primary${busy ? ' is-busy' : ''}`} disabled={busy}
+                onClick={signInEmail}>
+                Log in
               </button>
 
-              {mode === 'login' && (
-                <button className="btn btn-link auth-forgot" disabled={busy} onClick={forgotPassword}>
-                  Forgot password?
-                </button>
-              )}
+              <button className="btn btn-link auth-forgot" disabled={busy} onClick={forgotPassword}>
+                Forgot password?
+              </button>
 
               <div className="auth-divider"><span>or</span></div>
 
-              {/* THE ALTERNATE ACTION, below the form, with the Google G --
-                  exactly where and how the app draws it. On sign-up it is
-                  still the front door in substance (Google confirms the
-                  email; Register asks for username + password next), it just
-                  sits where a second option sits. */}
+              {/* The same account, through Google: an existing owner lands on
+                  the board; a new one is sent to Step 2. */}
               <div className="auth-providers">
                 {googleButton}
                 {appleButton}
               </div>
-              {mode === 'signup' && (
-                <p className="dim auth-note">
-                  With Google there is nothing to confirm — you pick a username and password on the next screen.
-                </p>
-              )}
             </>
           )}
         </div>

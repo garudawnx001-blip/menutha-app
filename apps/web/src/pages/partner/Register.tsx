@@ -43,6 +43,9 @@ export function Register({ previewPhase }: { previewPhase?: Phase } = {}) {
    *  email path; either way it is what complete_restaurant_signup claims. */
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  /** Step 2's email field -- prefilled from Google, editable. See the note on
+   *  the input. */
+  const [newEmail, setNewEmail] = useState('');
 
   const [form, setForm] = useState({
     owner: '', name: '', city: '', address: '', gstin: '', phone: '', maps_url: '',
@@ -58,6 +61,7 @@ export function Register({ previewPhase }: { previewPhase?: Phase } = {}) {
     const member = await loadMembership();
     if (member) { nav('/partner/orders', { replace: true }); return; }
     setEmail(user.email ?? '');
+    setNewEmail((prev) => prev || (user.email ?? ''));
     const meta = (user.user_metadata as any) ?? {};
     if (typeof meta.username === 'string' && meta.username) {
       setUsername(meta.username);
@@ -106,6 +110,13 @@ export function Register({ previewPhase }: { previewPhase?: Phase } = {}) {
         return;
       }
       setUsername(handle);
+      // A changed email is confirmed from the new inbox; the account keeps
+      // working under the Google address until then. Never fatal here -- the
+      // owner is one step from their restaurant, and Account can retry it.
+      const mail = newEmail.trim();
+      if (mail && mail !== email) {
+        await supabase.auth.updateUser({ email: mail }).catch(() => {});
+      }
       setPhase('restaurant');
     } catch (e: any) {
       setError(e?.message ?? 'Could not finish setup.');
@@ -180,8 +191,8 @@ export function Register({ previewPhase }: { previewPhase?: Phase } = {}) {
             <h1 className="display auth-title">{title}</h1>
             <p className="muted auth-sub">
               {phase === 'finish'
-                ? 'Google confirmed your email. Choose a username and a password so you can also sign in without Google — on the portal and in the app.'
-                : 'A few details and your restaurant is live. Full Enterprise features for 30 days, no card needed.'}
+                ? 'Google confirmed your email. Set your username, email and password — they log you in without Google, on the portal and in the app.'
+                : 'A few details and your restaurant is live. Free for 30 days, then choose a plan — no card needed.'}
             </p>
           </div>
         )}
@@ -190,8 +201,19 @@ export function Register({ previewPhase }: { previewPhase?: Phase } = {}) {
           <div className="state-card" role="status"><div className="spinner" /><p className="dim">Opening your account…</p></div>
         ) : phase === 'finish' ? (
           <div className="glass auth-card">
+            {/* EDITABLE. Google supplied it and confirmed it; an owner whose
+                Google is a personal address can still log in as the
+                restaurant's. A changed address is confirmed from that inbox
+                (Supabase sends the link), so the step says so rather than
+                pretending it changed on the spot. */}
             <label className="field-label" htmlFor="setup-email">Email</label>
-            <input id="setup-email" className="code-input is-readonly" value={email} readOnly aria-readonly />
+            <input id="setup-email" className="code-input" type="email" autoComplete="email"
+              value={newEmail} onChange={(e) => setNewEmail(e.target.value)} />
+            {newEmail.trim() && newEmail.trim() !== email && (
+              <p className="dim" style={{ fontSize: 12, margin: '-6px 0 10px' }}>
+                We'll send a confirmation link to {newEmail.trim()}; the new address works once you open it.
+              </p>
+            )}
             <label className="field-label" htmlFor="setup-username">Username</label>
             {/* Lower-cased as typed, so what the owner sees is what is stored.
                 Instagram's alphabet: letters, numbers, dot, underscore. */}
@@ -256,7 +278,7 @@ export function Register({ previewPhase }: { previewPhase?: Phase } = {}) {
           </p>
           {error && <p style={{ color: 'var(--error)', fontSize: 13.5, marginTop: 10 }}>{error}</p>}
           <button className={`btn btn-primary btn-block${busy ? ' is-busy' : ''}`} style={{ marginTop: 16 }} disabled={busy} onClick={submit}>
-            {'Start free trial'}
+            Start 30-day free trial
           </button>
           <p className="dim" style={{ fontSize: 12, marginTop: 10 }}>
             Full Enterprise features for 30 days · no card needed · zero commission always.
