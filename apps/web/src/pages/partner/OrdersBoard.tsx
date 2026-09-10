@@ -8,7 +8,8 @@ import { subscribeOrders } from '../../lib/realtimeWeb';
 import {
   fetchLiveOrders, advanceOrder, NEXT_STATUS,
   createBill, payBill, confirmPayment, staffUpdateOrderItem, staffCancelOrder,
-  type PortalOrder,
+  fetchServedSales,
+  type PortalOrder, type GrowthPeriod,
 } from '../../lib/portalApi';
 import { inr } from '../../lib/types';
 import { usePartner } from './PartnerShell';
@@ -90,6 +91,16 @@ export function OrdersBoard() {
     all.some((x) => (!!focusOrder && x.id === focusOrder) || (!!focusTable && x.table_id === focusTable));
   const [orders, setOrders] = useState<PortalOrder[] | null>(null);
   const [servedToday, setServedToday] = useState<PortalOrder[]>([]);
+  /** THE SAME PERIOD CONTROL REPORTS HAS, on the board's header -- the phone
+   *  got it first (his ask: "the SAME date drop-down on Orders as Reports"),
+   *  and the portal matches. The board itself is always live; only the sales
+   *  number answers for the chosen period. */
+  const iso = (d: Date) => d.toISOString().slice(0, 10);
+  const [period, setPeriod] = useState<GrowthPeriod>('day');
+  const [single, setSingle] = useState(false);
+  const [from, setFrom] = useState(() => { const d = new Date(); d.setDate(d.getDate() - 6); return iso(d); });
+  const [to, setTo] = useState(() => iso(new Date()));
+  const [periodKpi, setPeriodKpi] = useState<{ sales: number; count: number } | null>(null);
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
   const [sound, setSound] = useState(() => localStorage.getItem(SOUND_KEY) !== 'off');
@@ -249,6 +260,32 @@ export function OrdersBoard() {
   // Today's-sales header (Swiggy/Zomato-partner style) — realized sales are the
   // orders served today; live + unpaid give the floor its at-a-glance state.
   const salesToday = servedToday.reduce((a, o) => a + Number(o.total || 0), 0);
+
+  // The chosen period's bounds. Local midnight; custom is inclusive of both
+  // days. Today needs no query of its own -- it is what the live fetch already
+  // sums -- so periodKpi is only consulted for the other periods.
+  useEffect(() => {
+    if (period === 'day') { setPeriodKpi(null); return; }
+    let alive = true;
+    let sinceISO: string, untilISO: string;
+    if (period === 'custom') {
+      sinceISO = new Date(from + 'T00:00:00').toISOString();
+      untilISO = new Date(to + 'T23:59:59.999').toISOString();
+    } else {
+      const days = period === 'week' ? 7 : period === 'month' ? 30 : 365;
+      const since = new Date(); since.setHours(0, 0, 0, 0); since.setDate(since.getDate() - days);
+      sinceISO = since.toISOString(); untilISO = new Date(Date.now() + 60_000).toISOString();
+    }
+    fetchServedSales(restaurant.id, sinceISO, untilISO)
+      .then((k) => alive && setPeriodKpi(k))
+      .catch(() => alive && setPeriodKpi(null));
+    return () => { alive = false; };
+  }, [restaurant.id, period, from, to]);
+  const periodLabel = period === 'day' ? "Today's sales"
+    : period === 'week' ? 'Sales · this week' : period === 'month' ? 'Sales · 30 days'
+    : period === 'year' ? 'Sales · 12 months' : single ? `Sales · ${from}` : `Sales · ${from} to ${to}`;
+  const shownSales = period === 'day' ? salesToday : (periodKpi?.sales ?? 0);
+  const shownCount = period === 'day' ? servedToday.length : (periodKpi?.count ?? 0);
   const unpaidLive = orders.filter((o) => !o.paid).length;
   const newCount = orders.filter((o) => o.status === 'placed').length;
 
@@ -301,11 +338,54 @@ export function OrdersBoard() {
       </div>
       {error && <p style={{ color: 'var(--error)', fontSize: 14, marginBottom: 10 }}>{error}</p>}
 
+      {/* The period, above the number it governs. Same control, same options
+          and the same one-day/range toggle as Reports (Growth.tsx). */}
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 10 }}>
+        <select
+          className="code-input"
+          style={{ padding: '0 10px', fontSize: 14, width: 'auto', minHeight: 44 }}
+          value={period}
+          onChange={(e) => setPeriod(e.target.value as GrowthPeriod)}
+          aria-label="Period"
+        >
+          <option value="day">Today</option>
+          <option value="week">This week</option>
+          <option value="month">30 days</option>
+          <option value="year">12 months</option>
+          <option value="custom">Custom range</option>
+        </select>
+        {period === 'custom' && (
+          <>
+            <button
+              className={single ? 'chip active' : 'chip'}
+              style={{ minHeight: 44 }}
+              onClick={() => { const next = !single; setSingle(next); if (next) setTo(from); }}
+              title={single ? 'Switch back to a date range' : 'One day'}
+            >
+              {single ? 'One day' : 'Range'}
+            </button>
+            <input type="date" className="code-input"
+              aria-label={single ? 'Date' : 'From date'}
+              style={{ padding: '7px 8px', fontSize: 12.5, width: 'auto', minHeight: 44 }}
+              value={from} max={single ? iso(new Date()) : to}
+              onChange={(e) => { setFrom(e.target.value); if (single) setTo(e.target.value); }} />
+            {!single && (
+              <>
+                <span className="dim" style={{ fontSize: 12 }}>to</span>
+                <input type="date" className="code-input" aria-label="To date"
+                  style={{ padding: '7px 8px', fontSize: 12.5, width: 'auto', minHeight: 44 }}
+                  value={to} min={from} max={iso(new Date())} onChange={(e) => setTo(e.target.value)} />
+              </>
+            )}
+          </>
+        )}
+      </div>
+
       <div className="kpi-strip">
         <div className="kpi glass">
-          <span className="kpi-label">Today's sales</span>
-          <span className="kpi-value">{inr(salesToday)}</span>
-          <span className="kpi-sub">{servedToday.length} served</span>
+          <span className="kpi-label">{periodLabel}</span>
+          <span className="kpi-value">{inr(shownSales)}</span>
+          <span className="kpi-sub">{shownCount} served</span>
         </div>
         <div className="kpi glass">
           <span className="kpi-label">Live now</span>

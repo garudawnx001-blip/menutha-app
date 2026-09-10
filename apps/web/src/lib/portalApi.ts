@@ -870,6 +870,25 @@ export async function bulkUploadDishImages(
 }
 
 /** Persist a new dish order within a category. */
+/**
+ * Served sales over a range, for the Orders board's header. The board used to
+ * sum "served today" client-side from the live fetch; the phone's board now
+ * answers for a chosen period (Today / week / 30 days / 12 months / dates),
+ * and the portal matches it. Served only -- the same rule the header always
+ * had: realised sales, not orders in flight.
+ */
+export async function fetchServedSales(
+  restaurantId: string, sinceISO: string, untilISO: string,
+): Promise<{ sales: number; count: number }> {
+  const { data, error } = await supabase
+    .from('food_order').select('total')
+    .eq('restaurant_id', restaurantId).eq('status', 'served')
+    .gte('placed_at', sinceISO).lte('placed_at', untilISO);
+  if (error) throw error;
+  const rows = data ?? [];
+  return { sales: rows.reduce((a, o: any) => a + Number(o.total || 0), 0), count: rows.length };
+}
+
 export async function reorderDishes(ids: string[]) {
   await Promise.all(
     ids.map((id, i) => supabase.from('menu_item').update({ sort_order: i }).eq('id', id)),
