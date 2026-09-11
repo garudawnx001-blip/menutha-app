@@ -2054,3 +2054,27 @@ select.code-input:focus { border-color: var(--primary); }
   margin: 8px 0 0;
 }
 .plan-verify strong { color: var(--ink); }
+
+/* ── The refund promise ───────────────────────────────────────────────────
+   Promoted from a grey footnote. The ₹5 is the only number in the whole flow
+   that LOOKS like a charge and is not, and an owner who meets it unexplained
+   on the payment sheet either stops or pays twice working out what happened.
+   Both cost more than the space this takes. */
+.plan-refund {
+  margin: 10px 0 0; padding: 12px 14px; border-radius: 12px;
+  background: rgba(217, 119, 87, 0.07);
+  border: 1px solid rgba(217, 119, 87, 0.28);
+}
+.plan-refund-lead { margin: 0; font-size: 15px; color: var(--ink); }
+.plan-refund-line { margin: 6px 0 0; font-size: 14px; line-height: 1.55; color: var(--ink); }
+/* The half of the sentence that does the reassuring, on its own visual
+   footing. Bold alone was not enough when the rest of the line is also bold. */
+.plan-refund-key { display: block; margin-top: 2px; color: var(--primary); }
+.plan-refund-foot { margin: 6px 0 0; font-size: 13px; color: var(--text-muted); }
+
+/* The same promise in six words, under the button that opens Razorpay --
+   the last thing read before the sheet appears. */
+.plan-refund-cta {
+  margin: 6px 0 0; text-align: center;
+  font-size: 12px; color: var(--text-muted);
+}

@@ -503,15 +503,24 @@ export function PlanScreen({ preview }: { preview?: boolean } = {}) {
               So the only honest fix is to say what it is here, before the
               checkout sheet shows it and somebody reads "₹5" as the start of
               being billed. */}
-          <p className="plan-verify">
-            <span aria-hidden>ℹ️</span>
-            <span>
-              The payment page will show a few rupees. That is a{' '}
-              <strong>refundable verification</strong> your bank needs to set up autopay —
-              it is returned to you automatically, and nothing is charged during your
-              free 30 days.
-            </span>
-          </p>
+          {/* PROMOTED FROM A FOOTNOTE. This was one grey line under the offer,
+              which is the wrong weight for the only number on the whole flow
+              that LOOKS like a charge and is not. An owner who meets an
+              unexplained ₹5 on the payment sheet does not read the small print
+              above it -- they stop, or they pay twice trying to work out what
+              happened. Both of those cost more than the space this takes. */}
+          <div className="plan-refund">
+            <p className="plan-refund-lead">
+              <strong>₹0 today</strong> for your 30-day free trial.
+            </p>
+            <p className="plan-refund-line">
+              To set up autopay, <strong>₹5 is temporarily debited</strong> to verify your
+              UPI or card — <strong className="plan-refund-key">and it is refunded automatically.</strong>
+            </p>
+            <p className="plan-refund-foot">
+              You are only charged your plan price after the 30 days. Cancel any time.
+            </p>
+          </div>
         </div>
       )}
 
@@ -690,6 +699,14 @@ export function PlanScreen({ preview }: { preview?: boolean } = {}) {
                     : !p.razorpay_plan_id ? 'Online payment opens soon'
                     : (ent?.state === 'active' ? 'Switch to this plan' : `Choose ${tierLabel(p)}`)}
                 </button>
+              )}
+              {/* AND AGAIN, DIRECTLY UNDER THE BUTTON THAT OPENS RAZORPAY.
+                  The banner explains it once at the top; this is the last
+                  thing read before the sheet appears, which is the moment the
+                  ₹5 is actually met. Six words, so it can be taken in at a
+                  glance rather than read. */}
+              {!isCurrent && p.razorpay_plan_id && (
+                <p className="plan-refund-cta">₹5 verification hold, fully refunded.</p>
               )}
               {/* THE WHOLE PROMISE, ON THE CARD IT APPLIES TO. The note used to
                   say only that nothing is charged today; naming THIS plan's own
