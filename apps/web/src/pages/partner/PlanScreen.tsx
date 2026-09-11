@@ -364,14 +364,52 @@ export function PlanScreen({ preview }: { preview?: boolean } = {}) {
         config: {
           display: {
             blocks: {
-              upi: { name: 'Pay using UPI', instruments: [{ method: 'upi' }] },
+              /**
+               * UPI WITHOUT THE QR TAB, and `flows` is what makes that
+               * possible: the instrument takes ["collect"] | ["intent"] |
+               * ["qr"], so the sub-tabs are ours to choose rather than
+               * Razorpay's to decide.
+               *
+               * The QR is removed because it does not work here. A subscription
+               * mandate cannot be registered by scanning -- the code renders,
+               * the diner's app opens it, and it fails. An option that is
+               * present and broken is worse than one that is absent: the owner
+               * has no way to know which of the three tabs is the real one, so
+               * they try the most familiar and conclude the product is broken.
+               *
+               * Intent is dropped too, for a duller reason: it hands off to a
+               * UPI app installed on the SAME device, and this checkout is
+               * being opened on a laptop at the till. There is no app there to
+               * hand off to.
+               *
+               * Which leaves collect -- type the UPI id, approve the request
+               * in the phone already in their pocket. See the note in the
+               * report about NPCI's deprecation of this flow: it is the right
+               * choice today and it is on a clock.
+               */
+              upi: {
+                name: 'Pay using UPI',
+                instruments: [{ method: 'upi', flows: ['collect'] }],
+              },
               card: { name: 'Pay using a card', instruments: [{ method: 'card' }] },
             },
             sequence: ['block.upi', 'block.card'],
-            // 'hide' would remove everything else. 'rest' keeps whatever the
-            // account also supports (emandate/netbanking) below these two,
-            // so enabling a method in the Dashboard never needs a code change.
-            preferences: { show_default_blocks: true },
+            /**
+             * FALSE, and this is the change that makes it look like Netflix.
+             *
+             * It was true, which appends Razorpay's default list underneath --
+             * so the two blocks above were a preference, not a restriction,
+             * and every other method reappeared below them including a second
+             * UPI section with the QR tab we just removed. Hiding the QR in
+             * one block while the default block re-added it is precisely the
+             * confusion this is meant to end.
+             *
+             * The cost, stated plainly: enabling a new method in the Razorpay
+             * Dashboard will NOT show up here any more. It needs a line in
+             * `blocks` as well. That is the trade for a checkout that shows
+             * exactly two ways to pay and no dead ends.
+             */
+            preferences: { show_default_blocks: false },
           },
         },
         /**
