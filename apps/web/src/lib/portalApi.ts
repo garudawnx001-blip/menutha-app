@@ -719,7 +719,56 @@ export async function createBill(restaurantId: string, orderIds: string[], disco
     p_restaurant_id: restaurantId, p_order_ids: orderIds, p_discount: discount,
   });
   if (error) throw error;
-  return data as { id: string; bill_no: number; subtotal: number; discount: number; gst_amount: number; total: number };
+  const bill = data as { id: string; bill_no: number; subtotal: number; discount: number; gst_amount: number; total: number };
+
+  /**
+   * THE AC CHARGE, ADDED AFTER THE BILL EXISTS.
+   *
+   * A second call rather than part of create_table_bill, because the deployed
+   * version of that function matches no version in this repo and is not to be
+   * rewritten from guesswork -- it is the one path that moves money.
+   *
+   * NON-FATAL, and deliberately so. This does nothing at all unless the table
+   * carries an AC charge, so the overwhelmingly common outcome is a no-op. If
+   * the migration has not been run, or the table has none, or the RPC simply
+   * fails, the bill already EXISTS and is correct without it. Letting that
+   * throw would turn "no AC charge to add" into "the bill would not raise",
+   * with a diner waiting at the counter.
+   *
+   * The function is idempotent, so a retry of this whole call cannot
+   * double-charge.
+   */
+  await supabase.rpc('apply_table_ac_charge', { p_bill_id: bill.id }).then(
+    () => {}, () => {},
+  );
+
+  return bill;
+}
+
+/**
+ * PACKING FOR LEFTOVERS ON A DINE-IN BILL.
+ *
+ * Never automatic. A packing fee reached every dine-in bill for weeks because
+ * a charge applied itself with no scope and nobody chose it per meal -- so
+ * this runs only when a human has named a number of boxes.
+ *
+ * REPLACES rather than adds: staff guess the box count before the food is
+ * packed and are wrong about as often as right, so calling with 3 then 2
+ * leaves a bill charged for 2. `boxes = 0` removes the line entirely.
+ *
+ * Errors DO surface here, unlike the AC charge above. This is a deliberate
+ * act with a number typed into it, and silently doing nothing after somebody
+ * asked for three boxes is worse than telling them it failed.
+ */
+export async function setParcelPacking(billId: string, boxes: number) {
+  const { data, error } = await supabase.rpc('apply_parcel_charge', {
+    p_bill_id: billId, p_boxes: Math.max(0, Math.round(boxes || 0)),
+  });
+  if (error) throw error;
+  return data as {
+    applied: boolean; reason?: string;
+    parcel_charge: number; parcel_boxes: number; fee_per_box?: number;
+  };
 }
 
 export async function payBill(billId: string, mode: 'cash' | 'upi_qr') {

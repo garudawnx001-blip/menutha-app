@@ -2092,3 +2092,16 @@ select.code-input:focus { border-color: var(--primary); }
   border-radius: 0 8px 8px 0;
   word-break: break-word;
 }
+
+/* ── Packing for leftovers, on an open dine-in bill ───────────────────────
+   A stepper, not a checkbox: the question is how many boxes, and staff are
+   wrong about the count often enough that editing has to be as easy as
+   adding. Never automatic -- a packing fee that applied itself to every
+   dine-in bill is the bug this came from. */
+.parcel-pack {
+  display: flex; align-items: center; gap: 8px;
+  margin-top: 10px; padding: 8px 10px; border-radius: 10px;
+  background: rgba(217, 119, 87, 0.06);
+  border: 1px solid rgba(217, 119, 87, 0.22);
+  font-size: 13.5px;
+}

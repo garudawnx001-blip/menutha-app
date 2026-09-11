@@ -4,7 +4,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import QRCode from 'qrcode';
-import { fetchLiveOrders, createBill, payBill, fetchBillLayout, setOrdersAc, waiveService, type PortalOrder } from '../../lib/portalApi';
+import { fetchLiveOrders, createBill, payBill, fetchBillLayout, setOrdersAc, waiveService, setParcelPacking, type PortalOrder } from '../../lib/portalApi';
+import { supabase } from '../../lib/supabase';
 import { WalkIn } from './WalkIn';
 import { renderBillHtml, type BillData } from '../../lib/billTemplate';
 import { printBillHtml } from '../../lib/printBill';
@@ -32,7 +33,54 @@ export function Billing() {
   const [discount, setDiscount] = useState('');
   const [bill, setBill] = useState<BillDraft | null>(null);
   const [waiving, setWaiving] = useState(false);
-  const [billQr, setBillQr] = useState('');
+  /** Boxes currently charged on the open bill. Mirrors bill.parcel_boxes, and
+   *  reset whenever a different bill is raised. */
+  const [parcelBoxes, setParcelBoxes] = useState(0);
+  const [parcelBusy, setParcelBusy] = useState(false);
+  const [parcelNote, setParcelNote] = useState('');
+
+  /**
+   * Optimistic on the count, truthful on the money.
+   *
+   * The number moves immediately -- a stepper that waits for a round trip
+   * gets pressed twice. The TOTAL only changes when the server says what it
+   * actually charged, because that is the figure somebody is about to be
+   * asked to pay.
+   */
+  const changeBoxes = async (next: number) => {
+    const n = Math.max(0, next);
+    if (!bill || parcelBusy) return;
+    const prev = parcelBoxes;
+    setParcelBoxes(n);
+    setParcelBusy(true);
+    setParcelNote('');
+    try {
+      const r = await setParcelPacking(bill.id, n);
+      if (!r.applied && r.reason) {
+        setParcelBoxes(Number(r.parcel_boxes ?? prev));
+        setParcelNote(r.reason);
+      } else {
+        setParcelBoxes(Number(r.parcel_boxes ?? n));
+        /* Re-read the row rather than adding the delta locally. The server
+           owns the total -- it also backs out whatever this function charged
+           before -- and a number the counter is about to collect should come
+           from the same place the printed sheet reads. */
+        const { data: fresh } = await supabase
+          .from('bill').select('total, parcel_charge, parcel_boxes')
+          .eq('id', bill.id).maybeSingle();
+        if (fresh) {
+          setBill((b) => (b ? { ...b, total: Number((fresh as any).total) } : b));
+          setParcelBoxes(Number((fresh as any).parcel_boxes ?? n));
+        }
+      }
+    } catch (e: any) {
+      setParcelBoxes(prev);
+      setParcelNote(e?.message ?? 'Could not change the packing charge.');
+    } finally { setParcelBusy(false); }
+  };
+
+  const [billQr, setBillQr] = useState
+('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   // The owner's bill layout. Null until it loads and null forever if the
@@ -157,7 +205,7 @@ export function Billing() {
       const b = await createBill(restaurant.id, list.map((o) => o.id), 0);
       setSelected(new Set(list.map((o) => o.id)));
       setDiscount('');
-      setBill({ ...b, orders: list });
+      setBill({ ...b, orders: list }); setParcelBoxes(0); setParcelNote('');
       const uri = billUpiUri(b.total, b.bill_no);
       setBillQr(uri
         ? await QRCode.toDataURL(uri, { margin: 1, width: 380, color: { dark: '#1C1A15', light: '#FFFDF8' } }).catch(() => '')
@@ -184,7 +232,7 @@ export function Billing() {
     setBusy(true); setError('');
     try {
       const b = await createBill(restaurant.id, chosen.map((o) => o.id), disc);
-      setBill({ ...b, orders: chosen });
+      setBill({ ...b, orders: chosen }); setParcelBoxes(0); setParcelNote('');
       // Scan-to-pay QR for the exact bill total (blank if no VPA configured).
       const uri = billUpiUri(b.total, b.bill_no);
       setBillQr(uri
@@ -199,7 +247,7 @@ export function Billing() {
     setBusy(true); setError('');
     try {
       await payBill(bill.id, mode);
-      setBill(null); setBillQr(''); setSelected(new Set()); setDiscount('');
+      setBill(null); setBillQr(''); setSelected(new Set()); setDiscount(''); setParcelBoxes(0); setParcelNote('');
       await load();
     } catch (e: any) { setError(e?.message ?? 'Could not mark the bill paid.'); }
     finally { setBusy(false); }
@@ -497,6 +545,41 @@ export function Billing() {
             </span>
           </div>
           <div className="bill-row total"><span>To collect</span><span>{inr(bill.total)}</span></div>
+
+          {/**
+            * PACKING FOR LEFTOVERS, on a dine-in bill, chosen by a person.
+            *
+            * The diner ate in and wants the rest boxed. Nothing about that is
+            * knowable in advance, which is exactly why it must never be
+            * automatic -- a packing fee that applied itself to every dine-in
+            * bill is the bug this whole line of work came from.
+            *
+            * The stepper EDITS rather than accumulates: staff guess the box
+            * count before the food is packed and are wrong about as often as
+            * right, so 3 then 2 leaves the bill charged for 2, and 0 removes
+            * the line. Nothing here can double-charge.
+            *
+            * A takeaway bill is refused by the function itself, because those
+            * orders already carry packing from order time.
+            */}
+          <div className="parcel-pack">
+            <span style={{ flex: 1, minWidth: 0 }}>
+              Packing for leftovers
+              {parcelBoxes > 0 && <b>{` — ${parcelBoxes} box${parcelBoxes === 1 ? '' : 'es'}`}</b>}
+            </span>
+            <button
+              className="chip" disabled={parcelBusy || parcelBoxes <= 0}
+              aria-label="One box fewer"
+              onClick={() => changeBoxes(parcelBoxes - 1)}
+            >−</button>
+            <b style={{ minWidth: 18, textAlign: 'center' }}>{parcelBoxes}</b>
+            <button
+              className="chip" disabled={parcelBusy}
+              aria-label="One box more"
+              onClick={() => changeBoxes(parcelBoxes + 1)}
+            >+</button>
+          </div>
+          {parcelNote && <p className="dim" style={{ fontSize: 12, margin: '4px 0 0' }}>{parcelNote}</p>}
 
           {/* Scan-to-pay: UPI QR for the exact bill total */}
           {billQr ? (
