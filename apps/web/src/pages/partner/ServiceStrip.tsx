@@ -17,6 +17,7 @@
  */
 import React, { useEffect, useState } from 'react';
 import {
+import { startPoll } from '../../lib/poll';
   fetchOpenServiceRequests, resolveServiceRequest, SERVICE_LABEL,
   type ServiceRequestRow,
 } from '../../lib/portalApi';
@@ -40,8 +41,8 @@ export function ServiceStrip({ restaurantId }: { restaurantId: string }) {
     load();
     // Same cadence as the board's own refresh. A request that appears eight
     // seconds late is fine; one that needs a page reload to appear is not.
-    const t = setInterval(load, 8000);
-    return () => clearInterval(t);
+    const t = startPoll(load, 8000);
+    return () => t.stop();
   }, [restaurantId]);
 
   const done = async (id: string) => {

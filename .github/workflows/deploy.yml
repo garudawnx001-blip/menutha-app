@@ -50,12 +50,18 @@ jobs:
       # esbuild happily compiled and which blanked the whole order-tracking
       # screen in production. esbuild strips types; it never resolves names.
       #
-      # So the check runs, but does not gate the deploy: shipping a fix must not
-      # be blocked by an unrelated type error, which was the original and still
-      # valid concern. It fails loudly in the run summary instead. Once the
-      # report is clean, drop continue-on-error and make it a real gate.
-      - name: Type-check (reports; does not block)
-        continue-on-error: true
+      # That condition is now met. The five long-standing errors this note was
+      # written around (api.ts x2, Bill.tsx, Track.tsx x2) are gone -- the step
+      # reports success on the current tree -- so the reason for the exemption
+      # has expired and the exemption goes with it.
+      #
+      # Worth being blunt about what it was costing: this repo's `main`
+      # auto-deploys to menutha.com with no staging step, and vite happily
+      # builds code that tsc rejects. A type error could go straight to the
+      # restaurant's live ordering page and the only trace would be a step
+      # somebody had to scroll the run summary to notice. A crash on the diner
+      # menu is not the kind of thing that should need somebody to look.
+      - name: Type-check
         run: npx tsc --noEmit
 
       - name: Build (vite)

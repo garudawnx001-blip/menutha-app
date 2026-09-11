@@ -16,6 +16,7 @@ import { useT, useLang, translateCategory, translateTableLabel } from '../lib/i1
 import { dishName } from '../lib/translit';
 import { TableSoFar } from './TableSoFar';
 import { CallService, canCallService } from './CallService';
+import { startPoll } from '../lib/poll';
 
 export function Menu() {
   const nav = useNavigate();
@@ -81,8 +82,8 @@ export function Menu() {
 
   useEffect(() => {
     refreshOpen();
-    const id = setInterval(refreshOpen, 6000);
-    return () => clearInterval(id);
+    const id = startPoll(refreshOpen, 6000);
+    return () => id.stop();
   }, [refreshOpen]);
 
   /** menu_item_id → the still-editable order line for it. Later orders win, so
@@ -207,8 +208,8 @@ export function Menu() {
         // the seating simply stays open until a poll succeeds.
         .catch(() => {});
     check();
-    const t = setInterval(check, 8000);
-    return () => { alive = false; clearInterval(t); };
+    const t = startPoll(check, 8000);
+    return () => { alive = false; t.stop(); };
     // endSeating is deliberately NOT a dependency. The store object is
     // useMemo'd on [session, cart], so it is a new reference on every cart
     // keystroke -- listing it here would tear down and rebuild this interval

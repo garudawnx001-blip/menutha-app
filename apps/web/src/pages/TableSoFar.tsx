@@ -12,6 +12,7 @@ import { fetchMyBill, fetchMyOpenOrders, cancelMyOrder, type OpenOrder } from '.
 import type { Session } from '../lib/types';
 import { inr } from '../lib/types';
 import { useT } from '../lib/i18n';
+import { startPoll } from '../lib/poll';
 
 interface Row { total: number; items: string }
 
@@ -48,8 +49,8 @@ export function TableSoFar({ session }: { session: Session }) {
     let alive = true;
     const load = () => fetchMyOpenOrders(session).then((o) => alive && setMine(o)).catch(() => {});
     load();
-    const id = setInterval(load, 6000);
-    return () => { alive = false; clearInterval(id); };
+    const id = startPoll(load, 6000);
+    return () => { alive = false; id.stop(); };
   }, [session.table.id, session.guest?.phone]);
 
   const editable = mine.filter((o) => o.editable);
@@ -85,8 +86,8 @@ export function TableSoFar({ session }: { session: Session }) {
         })
         .catch(() => {});
     load();
-    const t = setInterval(load, 8000);
-    return () => { alive = false; clearInterval(t); };
+    const t = startPoll(load, 8000);
+    return () => { alive = false; t.stop(); };
   }, [session.table.id, session.guest?.phone]);
 
   if (!rows.length && !editable.length) return null;

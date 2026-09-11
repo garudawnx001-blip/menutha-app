@@ -79,11 +79,30 @@ export function Buffets() {
    *  through the whole menu looking for the six paneer dishes. */
   const [dishQuery, setDishQuery] = useState('');
 
+  /**
+   * SELECTED FIRST, AND CAPPED WHEN UNSEARCHED -- the same rule the phone
+   * follows.
+   *
+   * On the phone the reason is performance: every chip there is a real blur
+   * surface and 164 of them janks. Here the DOM does not care, and the cap is
+   * kept anyway, because a picker that orders and counts differently on the
+   * two surfaces is its own bug -- the owner moves between a laptop and a
+   * phone all day and the same menu must look like the same menu.
+   *
+   * The ordering earns its place on both: unsorted, a dish already on the
+   * buffet could be anywhere among 164, so there was no way to see what had
+   * been picked without reading the whole list.
+   */
+  const DISH_CAP = 60;
   const visibleDishes = (() => {
     const q = dishQuery.trim().toLowerCase();
-    if (!q) return dishes;
-    return dishes.filter((d) => d.name.toLowerCase().includes(q));
+    if (q) return dishes.filter((d) => d.name.toLowerCase().includes(q));
+    const on = (d: { id: string }) => draft.items.includes(d.id);
+    const chosen = dishes.filter(on);
+    const rest = dishes.filter((d) => !on(d));
+    return [...chosen, ...rest].slice(0, Math.max(DISH_CAP, chosen.length));
   })();
+  const hiddenDishes = dishes.length - visibleDishes.length;
 
   const load = async () => {
 
@@ -272,11 +291,13 @@ export function Buffets() {
         {/* Searching hides chips, including selected ones. The count above
             still speaks for those, but say plainly that the wall is filtered
             so an empty-looking picker never reads as a lost buffet. */}
-        {dishQuery.trim() !== '' && (
+        {(dishQuery.trim() !== '' || hiddenDishes > 0) && (
           <p className="dim" style={{ marginTop: 6, fontSize: 13 }}>
-            {visibleDishes.length === 0
+            {dishQuery.trim() !== '' && visibleDishes.length === 0
               ? `No dish matches “${dishQuery.trim()}”. Clear the search to see all ${dishes.length}.`
-              : `Showing ${visibleDishes.length} of ${dishes.length} dishes. Anything already selected stays on the buffet.`}
+              : dishQuery.trim() !== ''
+                ? `Showing ${visibleDishes.length} of ${dishes.length} dishes. Anything already selected stays on the buffet.`
+                : `Showing the first ${visibleDishes.length} of ${dishes.length} dishes, with everything you have picked at the top. Search to find any of the other ${hiddenDishes}.`}
           </p>
         )}
 

@@ -9,6 +9,9 @@ export function Reservations() {
   const { restaurant, can } = usePartner();
   const [rows, setRows] = useState<Reservation[] | null>(null);
   const [error, setError] = useState('');
+  /** Which booking is mid-write. A ref would not do: the three chips on that
+   *  row have to grey out, so this has to re-render. */
+  const [busyId, setBusyId] = useState<string | null>(null);
 
   const load = () => fetchReservations(restaurant.id).then(setRows).catch((e) => { setError(e.message); setRows([]); });
   useEffect(() => { load(); }, [restaurant.id]);
@@ -62,9 +65,25 @@ export function Reservations() {
               )}
             </span>
             <span style={{ display: 'flex', gap: 6 }}>
+              {/* A FAILED CHANGE USED TO SAY NOTHING AT ALL.
+                  `await setReservationStatus(...)` with no catch and no busy
+                  flag: if the write failed, load() repainted the row with its
+                  OLD status and the staff member saw a chip that simply did
+                  not take. Same gesture as a slow network, so the natural
+                  response is to tap it again -- and a no-show marked on a
+                  table that is actually seated is a table given away. */}
               {(['confirmed', 'seated', 'no_show'] as const).map((s) => (
                 <button key={s} className={r.status === s ? 'chip active' : 'chip'}
-                  onClick={async () => { await setReservationStatus(r.id, s); load(); }}>
+                  disabled={busyId === r.id}
+                  onClick={async () => {
+                    if (busyId) return;
+                    setBusyId(r.id);
+                    setError('');
+                    try { await setReservationStatus(r.id, s); }
+                    catch (e: any) { setError(e?.message ?? `Could not mark ${r.guest_name ?? 'this booking'} as ${s === 'no_show' ? 'a no-show' : s}.`); }
+                    finally { setBusyId(null); }
+                    load();
+                  }}>
                   {s === 'no_show' ? 'No-show' : s[0].toUpperCase() + s.slice(1)}
                 </button>
               ))}

@@ -249,7 +249,7 @@ export function Register({ previewPhase }: { previewPhase?: Phase } = {}) {
             <p className="muted auth-sub">
               {phase === 'finish'
                 ? 'Google confirmed your email. Set your username, email and password — they log you in without Google, on the portal and in the app.'
-                : 'A few details and your restaurant is live. Free for 30 days, then choose a plan — no card needed.'}
+                : 'A few details and your restaurant is live. Free for 30 days, then choose a plan — nothing is charged today.'}
             </p>
           </div>
         )}
@@ -288,7 +288,7 @@ export function Register({ previewPhase }: { previewPhase?: Phase } = {}) {
             <button className={`btn btn-primary btn-block auth-primary${busy ? ' is-busy' : ''}`} disabled={busy} onClick={finishSetup}>
               Continue
             </button>
-            <p className="dim auth-note">Your restaurant details are next. No card, nothing is charged.</p>
+            <p className="dim auth-note">Your restaurant details are next. Nothing is charged today.</p>
           </div>
         ) : (
         <div className="glass auth-card">
@@ -297,7 +297,7 @@ export function Register({ previewPhase }: { previewPhase?: Phase } = {}) {
               it used auth-card and field-label. One form system across the three
               steps now, and the same one the phone draws. */}
           <p className="dim auth-signed">
-            ✓ Signed in as {email}{username ? ` · @${username}` : ''}
+            ✓ Signed in as {email}{username ? ` � @${username}` : ''}
           </p>
           <label className="field-label" htmlFor="reg-owner">Your name</label>
           <input id="reg-owner" className="code-input" autoComplete="name" value={form.owner} onChange={(e) => setForm({ ...form, owner: e.target.value })} />
@@ -340,13 +340,13 @@ export function Register({ previewPhase }: { previewPhase?: Phase } = {}) {
           <button className={`btn btn-primary btn-block auth-primary${busy ? ' is-busy' : ''}`} disabled={busy} onClick={submit}>
             Start 30-day free trial
           </button>
-          {/* Was "Full Enterprise features for 30 days · no card needed".
+          {/* Was "Full Enterprise features for 30 days � no card needed".
               Both halves had stopped being true: the trial runs at the tier
               they choose, and the gate on the next screen asks for an autopay
               mandate before anything opens. Promising the opposite here only
               moves the surprise thirty seconds later, where it costs more. */}
           <p className="dim auth-note">
-            Every plan free for 30 days · zero commission always · cancel any time.
+            Every plan free for 30 days � zero commission always � cancel any time.
           </p>
         </div>
         )}

@@ -18,6 +18,7 @@ import { inr } from '../lib/types';
 import { useStore } from '../store';
 import { Spinner, Wordmark } from '../components';
 import { useT } from '../lib/i18n';
+import { startPoll, type Poll } from '../lib/poll';
 
 /** UPI apps cap one-tap (intent) payments to PERSONAL VPAs — commonly at
  *  ₹2,000 for PhonePe. It is the app's risk policy for person-to-person
@@ -70,7 +71,7 @@ export function Bill() {
   const [acctType, setAcctType] = useState<'personal' | 'merchant' | string>('personal');
   const [payQr, setPayQr] = useState('');
   const [copied, setCopied] = useState<'vpa' | 'amt' | ''>('');
-  const timer = useRef<ReturnType<typeof setInterval>>();
+  const timer = useRef<Poll>();
 
   /**
    * SETTLED WHILE THEY WERE LOOKING AT THE BILL.
@@ -98,8 +99,8 @@ export function Bill() {
         })
         .catch(() => {});
     check();
-    const t = setInterval(check, 8000);
-    return () => { alive = false; clearInterval(t); };
+    const t = startPoll(check, 8000);
+    return () => { alive = false; t.stop(); };
     // endSeating omitted for the same reason as on the menu: the store object
     // is memoised on [session, cart], so listing it would rebuild this
     // interval on every cart keystroke.
@@ -140,10 +141,10 @@ export function Bill() {
         .then((b) => alive && (setBill(b), setFailed(false)))
         .catch(() => alive && setFailed(true));
     load();
-    timer.current = setInterval(load, 6000);
+    timer.current = startPoll(load, 6000);
     return () => {
       alive = false;
-      clearInterval(timer.current);
+      timer.current?.stop();
     };
   }, [session?.table.id]);
 

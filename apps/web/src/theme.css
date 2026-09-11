@@ -615,7 +615,51 @@ input.code-input::placeholder { color: var(--text-dim); }
   transition: background 0.12s ease, color 0.12s ease;
 }
 .portal-link:hover { background: var(--sand); }
-.portal-link.active { background: var(--primary); color: #fffdf8; }
+
+/**
+ * WHICH PAGE AM I ON — raised glass with a terracotta ring, the same sentence
+ * the phone's tab bar says.
+ *
+ * This was `background: var(--primary); color: #fffdf8` — a flat orange slab.
+ * The app had exactly that and moved off it deliberately: the note on
+ * GlassTabBar's pillTint reads "the old pill was this colour and nothing else,
+ * so the active tab was a flat orange slab. The material carries the state and
+ * the colour only warms it." The phone made that change and the portal did
+ * not, so the single most-looked-at control in the product said the brand
+ * differently on the two surfaces — which is the drift worth fixing first,
+ * because the owner sees this bar on every screen of every session.
+ *
+ * The ring is an INSET SHADOW rather than a border. A 1.5px border on an
+ * element that had none reflows the whole nav by 3px the moment a page
+ * becomes active, and the item would shift under the cursor that just clicked
+ * it. The phone avoids the same problem by absolutely positioning its ring
+ * over the pill; this is the web spelling of that trick.
+ *
+ * The outer glow is tinted with the accent rather than black, so the item
+ * reads as lit from its own edge instead of dropped onto the bar. Same
+ * reasoning, same 0.35 alpha as the phone's shadowOpacity.
+ */
+.portal-link.active {
+  background: var(--glass-bg-strong);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  color: var(--primary);
+  box-shadow:
+    inset 0 0 0 1.5px var(--primary),
+    0 2px 8px rgba(217, 119, 87, 0.35);
+}
+/* A whisper of accent over the glass, not a fill. The label and icon are
+   already terracotta; a third source of the same orange in one item is what
+   made the old treatment look painted on. */
+.portal-link.active::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: rgba(217, 119, 87, 0.10);
+  pointer-events: none;
+}
+.portal-link { position: relative; }
 .portal-main { flex: 1; min-width: 0; padding: 0 18px calc(90px + env(safe-area-inset-bottom)); max-width: 980px; }
 
 @media (max-width: 799px) {

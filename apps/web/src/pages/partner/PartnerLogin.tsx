@@ -334,7 +334,7 @@ export function PartnerLogin() {
           <Header
             eyebrow="Create account"
             title="Get your restaurant online."
-            sub="QR ordering, live kitchen board and billing. Free for 30 days — then choose a plan. No card, zero commission."
+            sub="QR ordering, live kitchen board and billing. Free for 30 days — then choose a plan. Nothing is charged today, zero commission ever."
           />
         )}
 
@@ -353,7 +353,7 @@ export function PartnerLogin() {
               {error && <p className="field-error" style={{ marginTop: 10 }}>{error}</p>}
               <p className="dim auth-note">
                 Google confirms your email. Next you choose a username and password, then add your
-                restaurant — <b>30 days free</b>, no card, zero commission.
+                restaurant — <b>30 days free</b>, ₹0 today, zero commission.
               </p>
             </>
           ) : (
@@ -420,7 +420,7 @@ export function PartnerLogin() {
           <button className="btn btn-glass btn-glass-accent auth-anchor-btn" onClick={() => switchMode(mode === 'login' ? 'signup' : 'login')}>
             {mode === 'login' ? 'Create new account' : 'Log in'}
           </button>
-          <p className="dim auth-fine">30 days free · 0% commission · no card to start</p>
+          <p className="dim auth-fine">30 days free · 0% commission · cancel any time</p>
         </div>
       </div>
     </div>

@@ -16,6 +16,7 @@ import { usePartner } from './PartnerShell';
 import { ServiceStrip, ago } from './ServiceStrip';
 import { fetchTableSignals, type TableSignal } from '../../lib/portalApi';
 import { Spinner, VegMark } from '../../components';
+import { startPoll } from '../../lib/poll';
 
 const LIVE = ['placed', 'accepted', 'preparing', 'ready'];
 
@@ -158,8 +159,8 @@ export function OrdersBoard() {
     // 10s, not 30: an order becomes visible when its grace window elapses, and
     // that moment produces no realtime event to ride on — the row was inserted
     // a minute earlier. Polling is what makes a released order appear.
-    const t = setInterval(load, 10000);
-    return () => { channel.unsubscribe(); clearInterval(t); };
+    const t = startPoll(load, 10000);
+    return () => { channel.unsubscribe(); t.stop(); };
   }, [restaurant.id]);
 
   const advance = async (o: PortalOrder) => {
@@ -222,8 +223,8 @@ export function OrdersBoard() {
       } catch { /* the board keeps working */ }
     };
     pull();
-    const t = setInterval(pull, 8000);
-    return () => { alive = false; clearInterval(t); };
+    const t = startPoll(pull, 8000);
+    return () => { alive = false; t.stop(); };
   }, [restaurant.id, sound]);
 
   /** Signals grouped by the table they came from. The board's tickets carry a

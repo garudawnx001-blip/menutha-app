@@ -11,6 +11,7 @@ import { inr } from '../lib/types';
 import { useStore } from '../store';
 import { Spinner, Wordmark } from '../components';
 import { useT, translateTableLabel } from '../lib/i18n';
+import { startPoll, type Poll } from '../lib/poll';
 
 
 /** Pay the restaurant directly: dynamic UPI QR from THEIR VPA, optional card
@@ -112,7 +113,7 @@ export function Track() {
   const { session } = useStore();
   const [order, setOrder] = useState<OrderView | null>(null);
   const [failed, setFailed] = useState(false);
-  const timer = useRef<ReturnType<typeof setInterval>>();
+  const timer = useRef<Poll>();
 
   useEffect(() => {
     let alive = true;
@@ -121,10 +122,10 @@ export function Track() {
         .then((o) => alive && (setOrder(o), setFailed(false)))
         .catch(() => alive && setFailed(true));
     load();
-    timer.current = setInterval(load, 5000);
+    timer.current = startPoll(load, 5000);
     return () => {
       alive = false;
-      clearInterval(timer.current);
+      timer.current?.stop();
     };
   }, [id]);
 

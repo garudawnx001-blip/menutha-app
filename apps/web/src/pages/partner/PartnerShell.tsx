@@ -8,6 +8,7 @@ import {
 } from '../../lib/portalApi';
 import { entitlementsFor, hasFeature, needsBilling, type Entitlements } from '../../lib/entitlements';
 import { Spinner, Wordmark } from '../../components';
+import { startPoll } from '../../lib/poll';
 
 interface PartnerCtx {
   role: PortalRole;
@@ -247,8 +248,8 @@ export function PartnerShell() {
 
   useEffect(() => {
     if (!barred) return;
-    const t = setInterval(() => { reload(); }, 5000);
-    return () => clearInterval(t);
+    const t = startPoll(() => { reload(); }, 5000);
+    return () => t.stop();
   }, [barred]);
 
   if (loading) return <Spinner label="Opening your restaurant…" />;
