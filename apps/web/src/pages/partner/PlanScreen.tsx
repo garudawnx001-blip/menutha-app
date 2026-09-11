@@ -406,9 +406,35 @@ export function PlanScreen({ preview }: { preview?: boolean } = {}) {
                * report about NPCI's deprecation of this flow: it is the right
                * choice today and it is on a clock.
                */
+              /**
+               * NO `flows` FILTER ANY MORE, and removing it is the fix.
+               *
+               * This asked for flows: ["collect"] and the desktop checkout came
+               * back showing Cards only -- UPI gone entirely, not just its QR
+               * tab. The mechanism: a block whose instruments match NOTHING
+               * renders empty, and Razorpay drops an empty block. Asking for
+               * exactly one UPI flow and getting zero of it turned the whole
+               * UPI section into nothing.
+               *
+               * Why zero: NPCI deprecated UPI Collect on 28 February 2026 and
+               * Razorpay's own docs name Intent and QR as the replacements. On
+               * a DESKTOP there is no app for Intent to hand off to, so if
+               * collect really is switched off for this account, the only UPI
+               * flow a laptop can offer is the very QR we were excluding.
+               *
+               * Which makes the previous config self-defeating: it asked for
+               * the one flow that may no longer exist and hid the only one
+               * that does.
+               *
+               * So: no flows filter. Razorpay renders whichever UPI flows it
+               * can actually serve on the device in front of it. The QR tab
+               * may come back on desktop -- and a confusing extra tab is a far
+               * smaller problem than a checkout with no UPI at all, which is
+               * blocking a real signup right now.
+               */
               upi: {
                 name: 'Pay using UPI',
-                instruments: [{ method: 'upi', flows: ['collect'] }],
+                instruments: [{ method: 'upi' }],
               },
               card: { name: 'Pay using a card', instruments: [{ method: 'card' }] },
             },
@@ -428,7 +454,21 @@ export function PlanScreen({ preview }: { preview?: boolean } = {}) {
              * `blocks` as well. That is the trade for a checkout that shows
              * exactly two ways to pay and no dead ends.
              */
-            preferences: { show_default_blocks: false },
+            /**
+             * TRUE AGAIN, as a safety net rather than a preference.
+             *
+             * At false, our two blocks are the WHOLE checkout -- so when the
+             * UPI block came back empty there was nothing behind it and the
+             * sheet showed Cards alone. At true, Razorpay's own method list
+             * renders underneath ours, which means a block of ours failing to
+             * match can no longer remove a payment method from the page.
+             *
+             * The cost is the one noted before: the default list can
+             * reintroduce methods we did not order, the QR tab among them.
+             * That was an acceptable price for a tidy sheet when the sheet
+             * worked. It is not a price worth paying to keep UPI off it.
+             */
+            preferences: { show_default_blocks: true },
           },
         },
         /**
