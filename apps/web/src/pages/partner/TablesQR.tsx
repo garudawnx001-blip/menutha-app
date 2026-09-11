@@ -1,9 +1,10 @@
 /** Tables & QR: sections (multi-section = Growth), create/remove tables,
  *  per-table QR preview, printable branded QR cards (browser print → PDF). */
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import QRCode from 'qrcode';
-import { fetchTables, createTable, removeTable, setTableCapacity, setTableAc, updateTableSetup, type PortalTable } from '../../lib/portalApi';
+import { fetchTables, createTables, removeTable, setTableCapacity, setTableAc, updateTableSetup, type PortalTable } from '../../lib/portalApi';
+import { planTableLabels, MAX_BULK_TABLES } from '../../lib/tableNames';
 import { renderQrSheetHtml, accentFor } from '../../lib/billTemplate';
 import { printBillHtml } from '../../lib/printBill';
 import { usePartner } from './PartnerShell';
@@ -94,6 +95,17 @@ export function TablesQR() {
    *  forms is a page nobody finishes. */
   const [editing, setEditing] = useState<string | null>(null);
   const [error, setError] = useState('');
+  /**
+   * HOW MANY. A string so the box can be genuinely empty rather than starting
+   * at a number the owner did not choose -- same reason as Seats.
+   *
+   * "1" is not a special case anywhere below: adding one table is adding a run
+   * of one, so there is a single path to test and a single set of rules about
+   * what things get called.
+   */
+  const [count, setCount] = useState('');
+  const [adding, setAdding] = useState(false);
+  const addingRef = useRef(false);
 
   const load = () => fetchTables(restaurant.id).then(setTables).catch((e) => setError(e.message));
   useEffect(() => { load(); }, [restaurant.id]);
@@ -108,39 +120,71 @@ export function TablesQR() {
     return [...g.entries()];
   }, [tables]);
 
+  /**
+   * WHAT THIS RUN WILL BE CALLED, worked out as they type so the names are on
+   * screen BEFORE the button is pressed.
+   *
+   * Naming a floor is the one part of setup that is tedious to undo -- ten
+   * wrong tables is ten deletes and ten reprinted QR codes -- so the answer is
+   * shown rather than promised. See lib/tableNames for the rule.
+   */
+  const plan = useMemo(
+    () => planTableLabels(label, Number(count) || 1, (tables ?? []).map((t) => t.label)),
+    [label, count, tables],
+  );
+
   const add = async () => {
-    if (!label.trim()) return;
+    if (addingRef.current) return;
     if (section.trim() && !can('multi_qr') && sections.some(([s]) => s !== 'Main' && s !== 'Parcel / Takeaway' && s !== section.trim())) {
       setError('Multiple QR sections (bar / dining / rooftop) need the Growth plan.');
       return;
     }
+    const n = seats.trim() === '' ? null : Number(seats.trim());
+    if (n !== null && !Number.isFinite(n)) { setError('Seats must be a number.'); return; }
+    if (!plan.labels.length) { setError('Nothing to add — those names are all taken already.'); return; }
+
+    addingRef.current = true;
+    setAdding(true);
+    setError('');
     try {
-      const n = seats.trim() === '' ? null : Number(seats.trim());
-      if (n !== null && !Number.isFinite(n)) { setError('Seats must be a number.'); return; }
-      await createTable(restaurant.id, label.trim(), section.trim() || null, n);
+      // ONE insert for the whole run. A loop would be N round trips and N
+      // chances to stop halfway -- ask for ten, get six, and no way to tell
+      // which six without counting.
+      await createTables(restaurant.id, plan.labels, section.trim() || null, n);
+
       /**
-       * The kind and the AC charge are written in a SECOND call, not passed
-       * to createTable.
+       * The kind and the AC charge are written in a SECOND pass, not passed
+       * to the insert.
        *
-       * createTable already carries its own fallback ladder for a database
+       * createTables already carries its own fallback ladder for a database
        * without seating_capacity, and threading four more optional columns
-       * through it would mean a fallback for every combination. updateTableSetup
-       * degrades on its own, so the table is created either way and the extra
-       * fields land when the migration has run.
+       * through it would mean a fallback for every combination.
+       * updateTableSetup degrades on its own, so the tables are created either
+       * way and the extra fields land when the migration has run.
+       *
+       * NOT FATAL, per table. The tables exist and every one of these fields
+       * is editable on the row; failing the whole add because a type could not
+       * be set would throw away the part that worked.
        */
-      const made = (await fetchTables(restaurant.id)).find((t) => t.label === label.trim());
-      if (made) {
-        await updateTableSetup(made.id, {
-          table_kind: kind,
-          ac_charge_value: kind === 'ac' ? Number(acAmt || 0) : 0,
-          ac_charge_kind: acKind,
-        }).catch(() => { /* the table exists; the extras can be edited */ });
-      }
+      const after = await fetchTables(restaurant.id);
+      const made = after.filter((t) => plan.labels.includes(t.label));
+      await Promise.all(made.map((t) => updateTableSetup(t.id, {
+        table_kind: kind,
+        ac_charge_value: kind === 'ac' ? Number(acAmt || 0) : 0,
+        ac_charge_kind: acKind,
+      }).catch(() => { /* the table exists; the extras can be edited */ })));
+
       setLabel('');
       setSeats('');
       setAcAmt('');
+      setCount('');
       load();
-    } catch (e: any) { setError(e?.message ?? 'Could not add the table.'); }
+    } catch (e: any) {
+      setError(e?.message ?? 'Could not add the tables.');
+    } finally {
+      setAdding(false);
+      addingRef.current = false;
+    }
   };
 
 
@@ -199,6 +243,12 @@ export function TablesQR() {
       <div className="glass" style={{ padding: 14, marginBottom: 14, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         <input className="code-input" style={{ flex: 2, minWidth: 140 }} placeholder="Table label — e.g. Table 7"
           value={label} onChange={(e) => setLabel(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && add()} />
+        {/* HOW MANY, right next to what they are called, because the two
+            questions are one thought: "ten more tables". Blank means one. */}
+        <input className="code-input" style={{ width: 84 }} inputMode="numeric"
+          placeholder="How many" value={count} aria-label="How many tables to add"
+          onChange={(e) => setCount(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && add()} />
         <input className="code-input" style={{ flex: 1, minWidth: 120 }}
           placeholder={can('multi_qr') ? 'Section (Bar / Rooftop…)' : 'Section — Growth plan'}
           value={section} onChange={(e) => setSection(e.target.value)} disabled={!can('multi_qr')} />
@@ -241,8 +291,33 @@ export function TablesQR() {
             </select>
           </>
         )}
-        <button className="btn btn-primary" style={{ padding: '12px 18px' }} disabled={!label.trim()} onClick={add}>Add table</button>
+        <button
+          className={`btn btn-primary${adding ? ' is-busy' : ''}`}
+          style={{ padding: '12px 18px' }}
+          disabled={adding || !plan.labels.length}
+          onClick={add}
+        >
+          {plan.labels.length > 1 ? `Add ${plan.labels.length} tables` : 'Add table'}
+        </button>
       </div>
+
+      {/* THE NAMES, BEFORE THE BUTTON. Ten wrong tables is ten deletes and ten
+          reprinted QR codes, so what is about to be created is shown rather
+          than promised. Long runs are elided in the middle -- the first few and
+          the last are what somebody checks. */}
+      {!!plan.labels.length && (plan.labels.length > 1 || plan.skipped.length > 0) && (
+        <p className="dim" style={{ fontSize: 12.5, margin: '0 0 10px' }}>
+          Will create{' '}
+          <strong>
+            {plan.labels.length <= 6
+              ? plan.labels.join(', ')
+              : `${plan.labels.slice(0, 3).join(', ')} … ${plan.labels[plan.labels.length - 1]}`}
+          </strong>
+          {plan.labels.length > 6 && ` (${plan.labels.length} tables)`}
+          {plan.skipped.length > 0 && ` · skipping ${plan.skipped.join(', ')}, already on your floor`}
+          . Up to {MAX_BULK_TABLES} at a time.
+        </p>
+      )}
       {!can('multi_qr') && (
         <p className="dim" style={{ fontSize: 12.5, marginBottom: 12 }}>
           Want separate QR sets for bar / dining / rooftop? <NavLink to="/partner/plan" style={{ fontWeight: 700 }}>Upgrade to Growth →</NavLink>

@@ -687,6 +687,49 @@ export async function fetchTables(restaurantId: string): Promise<PortalTable[]> 
  *  create a table is a great deal worse than creating one without a seat
  *  count. It falls back once, then remembers.
  */
+/**
+ * SEVERAL TABLES, ONE INSERT.
+ *
+ * A loop of createTable calls would be N round trips over a restaurant's wifi
+ * and, worse, N chances to stop halfway: ask for ten and get six, with no way
+ * to tell which six without counting. One insert either lands or does not.
+ *
+ * Each row needs its own qr_token, so the tokens are minted here rather than
+ * defaulted in the database -- the same 12-character shape createTable uses,
+ * because the printed QR and the /scan/<token> route both depend on it.
+ *
+ * The same seating_capacity fallback ladder as createTable: that column
+ * arrives with a migration the owner runs by hand, and a batch that 42703s is
+ * a batch that adds nothing at all.
+ */
+export async function createTables(
+  restaurantId: string,
+  labels: string[],
+  room: string | null,
+  seats?: number | null,
+): Promise<number> {
+  if (!labels.length) return 0;
+  const capped = seats == null ? null : Math.min(40, Math.max(1, Math.round(seats)));
+  const base = labels.map((label) => ({
+    restaurant_id: restaurantId,
+    label,
+    room,
+    qr_token: 'qr_' + crypto.randomUUID().replace(/-/g, '').slice(0, 12),
+  }));
+
+  if (capped != null && !seatsColumnMissing) {
+    const { error } = await supabase
+      .from('dining_table')
+      .insert(base.map((r) => ({ ...r, seating_capacity: capped })));
+    if (!error) return base.length;
+    if (error.code !== '42703') throw error;
+    seatsColumnMissing = true;
+  }
+  const { error } = await supabase.from('dining_table').insert(base);
+  if (error) throw error;
+  return base.length;
+}
+
 export async function createTable(
   restaurantId: string,
   label: string,
