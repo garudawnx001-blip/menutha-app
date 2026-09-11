@@ -385,20 +385,10 @@ export function PartnerLogin() {
 
               {error && <p className="field-error">{error}</p>}
 
-              {/* GLASS, NOT TERRACOTTA -- and this reverses an earlier call
-                  recorded right here, which is worth saying rather than
-                  quietly overwriting. The argument for primary was that glass
-                  "read as a washed-out grey pane beside the terracotta CTAs
-                  everywhere else". That was true of the glass we had.
-
-                  The answer is to make the glass good enough to carry the one
-                  action this page exists for, not to paint it orange. A log-in
-                  screen wants to feel like a door, not a promotion -- the
-                  brand stays on the CTAs that are actually selling something.
-
-                  Deliberately the ONLY colourless button: everything else in
-                  the product keeps its accent. */}
-              <button className={`btn btn-glass btn-block auth-primary${busy ? ' is-busy' : ''}`} disabled={busy}
+              {/* A PRIMARY, not glass. "Log in" read as a washed-out grey pane
+                  beside the terracotta CTAs everywhere else, and it is the one
+                  thing this page is for. */}
+              <button className={`btn btn-primary btn-block auth-primary${busy ? ' is-busy' : ''}`} disabled={busy}
                 onClick={signInEmail}>
                 Log in
               </button>
