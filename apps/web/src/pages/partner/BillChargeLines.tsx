@@ -85,7 +85,6 @@ function preview(lines: ChargeLine[]): { rows: { label: string; amount: number }
 
 export function BillChargeLines({ restaurantId }: { restaurantId: string }) {
   const [lines, setLines] = useState<ChargeLine[]>([]);
-  const [legacy, setLegacy] = useState<{ label: string; kind: string; value: number }[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState('');
@@ -94,11 +93,26 @@ export function BillChargeLines({ restaurantId }: { restaurantId: string }) {
 
   useEffect(() => {
     (async () => {
-      const [{ data: r }, { data: old }] = await Promise.all([
-        supabase.from('restaurant').select('bill_charges').eq('id', restaurantId).maybeSingle(),
-        supabase.from('restaurant_charge')
-          .select('label, kind, value').eq('restaurant_id', restaurantId).eq('is_active', true),
-      ]);
+      /**
+       * THE LEGACY `restaurant_charge` READ IS GONE, and removing it is the
+       * fix for a real double charge.
+       *
+       * It offered to adopt charges saved in an older screen. Adopting one
+       * wrote a plain bill_charges line -- no scope, because bill_charges
+       * lines have none -- so a "Parcel Charges ₹10" adopted from that list
+       * then applied to EVERY bill.
+       *
+       * Which double-charged parcels and, worse, put a packing fee on dine-in.
+       * Parcel already has a working home: restaurant.parcel_charge, applied
+       * by create_order ONLY when the table is_parcel. Two paths to one fee
+       * is one path too many, and the old screen's own warning ("adding this
+       * would charge it twice") was a sign the design was wrong rather than
+       * something to word more carefully.
+       *
+       * One place parcel is set now: Restaurant profile -> parcel charge.
+       */
+      const { data: r } = await supabase
+        .from('restaurant').select('bill_charges').eq('id', restaurantId).maybeSingle();
       const raw = Array.isArray((r as any)?.bill_charges) ? (r as any).bill_charges : [];
       setLines(raw.map((l: any) => ({
         id: String(l.id ?? uid()),
@@ -108,7 +122,6 @@ export function BillChargeLines({ restaurantId }: { restaurantId: string }) {
         base: l.base === 'gross' ? 'gross' : 'food',
         enabled: l.enabled !== false,
       })));
-      setLegacy((old ?? []) as any[]);
       setLoaded(true);
     })().catch((e: any) => { setError(e?.message ?? 'Could not load your charges.'); setLoaded(true); });
   }, [restaurantId]);
@@ -140,12 +153,6 @@ export function BillChargeLines({ restaurantId }: { restaurantId: string }) {
   const addCustom = () =>
     setLines((ls) => [...ls, { id: uid(), label: '', kind: 'percent', value: 0, base: 'food', enabled: true }]);
 
-  const adoptLegacy = (l: { label: string; kind: string; value: number }) =>
-    setLines((ls) => [...ls, {
-      id: uid(), label: l.label, kind: l.kind === 'percent' ? 'percent' : 'flat',
-      value: Number(l.value) || 0, base: 'food', enabled: true,
-    }]);
-
   const save = async () => {
     for (const l of lines) {
       if (!l.label.trim()) { setError('Every line needs a name — it prints on the bill.'); return; }
@@ -174,31 +181,23 @@ export function BillChargeLines({ restaurantId }: { restaurantId: string }) {
         line changes the total.
       </p>
 
-      {/* LEGACY, SURFACED AND NEVER SILENTLY ADOPTED. These rows have never been
-          charged to anybody, so taking one on is a price change the diner will
-          feel -- the owner's call, made knowingly. */}
-      {legacy.length > 0 && (
-        <div className="glass" style={{ padding: 12, marginBottom: 14, borderColor: 'var(--gold)' }}>
-          <strong style={{ fontSize: 13.5 }}>Found {legacy.length} old charge{legacy.length === 1 ? '' : 's'} that was never being collected</strong>
-          <p className="dim" style={{ fontSize: 12.5, margin: '4px 0 8px' }}>
-            These were saved in an older screen that never reached the bill — no diner has
-            ever paid them. Adding one now starts charging it, so check the amount first.
-          </p>
-          {legacy.map((l, i) => (
-            <div key={i} className="row-item">
-              <span>
-                <b>{l.label}</b>{' '}
-                <span className="dim">{l.kind === 'percent' ? `${l.value}%` : inr(l.value)}</span>
-              </span>
-              <button className="btn btn-glass btn-sm" onClick={() => adoptLegacy(l)}>Add it</button>
-            </div>
-          ))}
-          <p className="dim" style={{ fontSize: 11.5, margin: '8px 0 0' }}>
-            If this is a takeaway packing fee, check <b>Restaurant profile → parcel charge</b>
-            first — that one <i>is</i> already collected, and adding this would charge it twice.
-          </p>
-        </div>
-      )}
+      {/* THE "old charge / Add it" PANEL LIVED HERE, and its removal is the
+          fix for the client's double-charged parcel.
+
+          It listed charges from an older screen and offered to adopt them.
+          Adopting wrote a plain bill_charges line, which has no scope -- so
+          a "Parcel Charges ₹10" taken on from that list applied to EVERY
+          bill: twice on a parcel (once from restaurant.parcel_charge at
+          order time, once here) and, worse, once on every dine-in table
+          that never asked for packing.
+
+          The panel even warned that adopting a packing fee "would charge it
+          twice". A warning that has to be read to avoid a billing error is
+          a design fault, not a documentation one.
+
+          Parcel has one home now: Restaurant profile -> parcel charge,
+          applied by create_order only when the table is_parcel. This screen
+          is for taxes and service charges. */}
 
       {lines.length === 0 && (
         <p className="dim" style={{ fontSize: 13, marginBottom: 10 }}>
