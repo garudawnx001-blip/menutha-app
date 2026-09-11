@@ -169,6 +169,88 @@ export function PartnerShell() {
     nav(gateRoute, { replace: true });
   }, [barred, hasMandate, ent, loc.pathname]);
 
+  /**
+   * THE WAY OUT OF THE GATE, and its absence is the bug the client hit.
+   *
+   * They paid on their phone, which advanced correctly. The same account on a
+   * PC sat on the plan page and stayed there through every refresh -- only
+   * logging out and back in released it.
+   *
+   * It was never a caching problem. loadMembership fetches restaurant(*) from
+   * the server on every call, so the PC WAS re-reading the truth each refresh.
+   * The gate above simply had one direction: it pushes somebody TO the plan
+   * page when barred and never pulls them OFF it once they are not, because
+   * that page is exempt from its own redirect -- correctly, or the redirect
+   * would loop. So a PC with perfectly fresh, perfectly unbarred state stayed
+   * exactly where it was. Logging in worked only because login lands on
+   * /partner/orders rather than /partner/plan.
+   *
+   * This is the other direction. Stranding somebody on a billing screen they
+   * have already satisfied is the same class of fault as letting an unpaid
+   * one through.
+   *
+   * Only from `plan`. Account and register are places an owner goes
+   * deliberately, and yanking them to the board mid-edit because a webhook
+   * landed would be its own bug.
+   */
+  /**
+   * ONLY ON THE TRANSITION, never on arrival -- and this ref is the whole
+   * difference between a fix and a new bug.
+   *
+   * Leaving without it: any unbarred owner who taps "Plan" in the nav to look
+   * at their subscription or switch tier gets thrown straight back to Orders,
+   * because they are unbarred and standing on /partner/plan. The billing page
+   * would be unreachable for exactly the people who pay us.
+   *
+   * So the exit fires only for somebody this shell has actually SEEN barred
+   * and then seen released -- which is the second device watching a payment
+   * land, and nobody else.
+   */
+  const wasBarred = React.useRef(false);
+  useEffect(() => {
+    if (hasMandate === null || !ent) return;
+    if (barred) { wasBarred.current = true; return; }
+    if (!wasBarred.current) return;              // arrived already paid: leave them be
+    if (!loc.pathname.startsWith('/partner/plan')) return;
+    wasBarred.current = false;
+    nav('/partner/orders', { replace: true });
+  }, [barred, hasMandate, ent, loc.pathname]);
+
+  /**
+   * A SECOND DEVICE HAS TO NOTICE, and nothing was telling it to look.
+   *
+   * PlanScreen polls after checkout, but that poll lives in the Razorpay
+   * success handler -- it only ever runs on the device that opened Razorpay.
+   * Every other screen the owner has open learns nothing until it remounts.
+   *
+   * So: re-read on focus, and poll while the gate is actually holding
+   * somebody. Both are cheap and both stop only when they should.
+   *
+   * FOCUS is the one that matters in practice. The owner pays on the phone,
+   * turns to the PC and clicks the window -- that click is the signal, and it
+   * arrives before they have thought to refresh.
+   *
+   * The interval runs ONLY while barred. Once through the gate it stops,
+   * because polling a subscription every five seconds for the rest of the
+   * session is a request every restaurant would pay for in battery and
+   * nobody would benefit from.
+   */
+  useEffect(() => {
+    const onFocus = () => { reload(); };
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onFocus);
+    return () => {
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onFocus);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!barred) return;
+    const t = setInterval(() => { reload(); }, 5000);
+    return () => clearInterval(t);
+  }, [barred]);
+
   if (loading) return <Spinner label="Opening your restaurant…" />;
   if (!member || !ent) {
     return (
