@@ -51,10 +51,42 @@ export function Register({ previewPhase }: { previewPhase?: Phase } = {}) {
     owner: '', name: '', city: '', address: '', gstin: '', phone: '', maps_url: '',
   });
 
+  /**
+   * IS SUPABASE STILL MID-HANDSHAKE?
+   *
+   * Google comes back to /partner/register#access_token=... and supabase-js
+   * reads that fragment asynchronously. Until it has, getUser() answers null
+   * quite legitimately -- the session is seconds away, not absent.
+   *
+   * Only the artifacts that mean "a session is coming" count. An error in the
+   * hash is not one of them: that handshake has already failed, and waiting on
+   * it would strand somebody on a spinner.
+   */
+  const oauthLanding = () =>
+    /[#&](access_token|refresh_token)=/.test(window.location.hash)
+    || /[?&]code=/.test(window.location.search);
+
   const readState = async () => {
     const { data } = await supabase.auth.getUser();
     const user = data.user;
-    if (!user) { nav('/partner', { replace: true }); return; }
+    if (!user) {
+      /**
+       * THE BUG THIS PAGE WAS REPORTED FOR, and it is one line.
+       *
+       * This bounced on the first null user. /partner IS the log-in page, so
+       * signing up with Google landed on the log-in form -- holding a valid
+       * Google session, one beat before it arrived. onAuthStateChange below
+       * would have re-run this with the real user, but the navigation had
+       * already fired and taken this component's subscription with it.
+       *
+       * So when the URL says a session is on its way, do nothing and let the
+       * auth listener make the call. The screen is already showing its
+       * "Opening your account" state, which is the truth while we wait.
+       */
+      if (oauthLanding()) return;
+      nav('/partner', { replace: true });
+      return;
+    }
     // Already a member somewhere: this page has nothing to add. Google on the
     // log-in side redirects here too, so this is the bounce that makes one
     // redirect target safe for both new and returning owners.
@@ -75,7 +107,18 @@ export function Register({ previewPhase }: { previewPhase?: Phase } = {}) {
     if (previewPhase) { setEmail('owner@your-restaurant.in'); return; }
     readState();
     const { data: sub } = supabase.auth.onAuthStateChange(() => { readState(); });
-    return () => sub.subscription.unsubscribe();
+    /**
+     * A FLOOR UNDER THE WAIT. Waiting on the auth listener is right, but only
+     * while it can still arrive. If the handshake never completes -- a token
+     * rejected, the network gone -- the honest destination is the log-in page,
+     * not a spinner nobody can leave. Ten seconds is far longer than the
+     * exchange takes and short enough not to read as a hang.
+     */
+    const bail = window.setTimeout(async () => {
+      const { data } = await supabase.auth.getSession();
+      if (!data.session) nav('/partner', { replace: true });
+    }, 10_000);
+    return () => { window.clearTimeout(bail); sub.subscription.unsubscribe(); };
   }, []);
 
   /**
