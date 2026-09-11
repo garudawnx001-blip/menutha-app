@@ -1521,3 +1521,93 @@ export async function fetchNotifications(restaurantId: string): Promise<Notifica
 function inrPlain(n: number) {
   return '₹' + Math.round(Number(n ?? 0)).toLocaleString('en-IN');
 }
+
+/**
+ * WHAT A TABLE IS ASKING FOR, requests and messages in one list.
+ *
+ * The board used to learn about these in two places and show them in neither:
+ * open service requests went to a banner ABOVE the orders, and a diner's
+ * message went to the Chat page entirely. So "table 4 ordered a thali and also
+ * asked for water" was two facts on two screens, and the floor staff had to
+ * join them up while walking.
+ *
+ * This returns both, in one shape, keyed by the table LABEL rather than the
+ * id -- the orders board groups its tickets by label (it has no table_id on a
+ * ticket), so the label is the only join that works without reshaping the
+ * board's own data.
+ *
+ * Messages are limited to a diner's UNREAD ones. A read message is a
+ * conversation already handled; putting it back on the order card would make
+ * the card louder every time somebody replied.
+ */
+export interface TableSignal {
+  id: string;
+  kind: 'request' | 'message';
+  tableLabel: string;
+  /** "Water", or the message body. Already display-ready. */
+  text: string;
+  guestName: string | null;
+  createdAt: string;
+}
+
+export async function fetchTableSignals(restaurantId: string): Promise<TableSignal[]> {
+  const [reqs, msgs] = await Promise.all([
+    supabase
+      .from('service_request')
+      .select('id, kind, note, guest_name, created_at, dining_table(label)')
+      .eq('restaurant_id', restaurantId)
+      .eq('status', 'open')
+      .order('created_at', { ascending: true }),
+    supabase
+      .from('message')
+      .select('id, body, guest_name, created_at, dining_table(label)')
+      .eq('restaurant_id', restaurantId)
+      .eq('from_role', 'diner')
+      .is('read_at', null)
+      .not('table_id', 'is', null)
+      .order('created_at', { ascending: true })
+      .limit(200),
+  ]);
+
+  const labelOf = (row: any) =>
+    (Array.isArray(row.dining_table) ? row.dining_table[0] : row.dining_table)?.label ?? 'Table';
+
+  const out: TableSignal[] = [];
+
+  for (const r of (reqs.data ?? []) as any[]) {
+    out.push({
+      id: r.id,
+      kind: 'request',
+      tableLabel: labelOf(r),
+      // The note is the diner's own words and beats our label for the kind.
+      text: (r.note && String(r.note).trim()) || SERVICE_KIND_LABEL[r.kind] || r.kind,
+      guestName: r.guest_name ?? null,
+      createdAt: r.created_at,
+    });
+  }
+  for (const m of (msgs.data ?? []) as any[]) {
+    out.push({
+      id: m.id,
+      kind: 'message',
+      tableLabel: labelOf(m),
+      text: m.body,
+      guestName: m.guest_name ?? null,
+      createdAt: m.created_at,
+    });
+  }
+
+  out.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  return out;
+}
+
+/** Kind -> the word staff use for it. Kept here so the board and the strip
+ *  cannot drift into calling the same request two different things. */
+export const SERVICE_KIND_LABEL: Record<string, string> = {
+  water: 'Water',
+  waiter: 'Waiter',
+  bill: 'The bill',
+  cutlery: 'Cutlery',
+  napkins: 'Napkins',
+  clean: 'Clean the table',
+  help: 'Help',
+};

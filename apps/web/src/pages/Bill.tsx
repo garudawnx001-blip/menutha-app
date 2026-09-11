@@ -61,7 +61,7 @@ function TotalsBlock({ b, sgstPct, cgstPct }: {
 
 export function Bill() {
   const nav = useNavigate();
-  const { session } = useStore();
+  const { session, endSeating } = useStore();
   const t = useT();
   const [bill, setBill] = useState<SessionBill | null>(null);
   const [failed, setFailed] = useState(false);
@@ -71,6 +71,39 @@ export function Bill() {
   const [payQr, setPayQr] = useState('');
   const [copied, setCopied] = useState<'vpa' | 'amt' | ''>('');
   const timer = useRef<ReturnType<typeof setInterval>>();
+
+  /**
+   * SETTLED WHILE THEY WERE LOOKING AT THE BILL.
+   *
+   * Menu.tsx has polled for this since #Q and ends the seating correctly --
+   * but only while the diner is ON the menu. The bill is precisely where
+   * somebody sits at the end of a meal, watching for the total, which makes it
+   * the likeliest screen to be open at the moment the counter marks it paid.
+   * They stayed logged in and could keep ordering on a settled table.
+   *
+   * Same rule as the menu's, deliberately: guarded on orderedAt so a fresh
+   * scan is never logged out, and a failed poll never ends a seating -- if the
+   * network is down the safe answer is to leave them where they are.
+   */
+  useEffect(() => {
+    if (!session?.orderedAt || session.demo || !session.table?.id) return;
+    let alive = true;
+    const check = () =>
+      fetchTableBill(session)
+        .then((b) => {
+          if (!alive) return;
+          const stillOpen =
+            (b.per_person ?? []).length > 0 || Number(b.combined?.total ?? 0) > 0;
+          if (!stillOpen) endSeating();
+        })
+        .catch(() => {});
+    check();
+    const t = setInterval(check, 8000);
+    return () => { alive = false; clearInterval(t); };
+    // endSeating omitted for the same reason as on the menu: the store object
+    // is memoised on [session, cart], so listing it would rebuild this
+    // interval on every cart keystroke.
+  }, [session?.table?.id, session?.orderedAt]);
 
   // The restaurant's UPI ID isn't part of the cached scan session, so read it
   // directly (public-readable) — this is what makes the pay QR appear here.

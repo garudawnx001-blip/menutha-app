@@ -2078,3 +2078,17 @@ select.code-input:focus { border-color: var(--primary); }
   margin: 6px 0 0; text-align: center;
   font-size: 12px; color: var(--text-muted);
 }
+
+/* ── A table's request or message, on its own order card ─────────────────
+   These used to live in a banner above the board and on the Chat page. On the
+   card, "this table ordered X and also asked for Y" is one glance instead of
+   two screens. Accent-left so it reads as attached to the ticket rather than
+   as another item on it. */
+.ticket-signal {
+  margin: 6px 0 0; padding: 5px 8px;
+  font-size: 12.5px; line-height: 1.45;
+  border-left: 3px solid var(--primary);
+  background: rgba(217, 119, 87, 0.07);
+  border-radius: 0 8px 8px 0;
+  word-break: break-word;
+}

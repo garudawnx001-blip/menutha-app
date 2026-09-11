@@ -13,7 +13,8 @@ import {
 } from '../../lib/portalApi';
 import { inr } from '../../lib/types';
 import { usePartner } from './PartnerShell';
-import { ServiceStrip } from './ServiceStrip';
+import { ServiceStrip, ago } from './ServiceStrip';
+import { fetchTableSignals, type TableSignal } from '../../lib/portalApi';
 import { Spinner, VegMark } from '../../components';
 
 const LIVE = ['placed', 'accepted', 'preparing', 'ready'];
@@ -176,6 +177,66 @@ export function OrdersBoard() {
   // but the real check is in the database — a hidden button is not a
   // permission, and both RPCs refuse anyone below manager.
   const canEdit = role === 'owner' || role === 'manager';
+
+  /**
+   * WHAT EACH TABLE IS ASKING FOR, alongside what it ordered.
+   *
+   * "Table 4 ordered a thali and also asked for water" used to be two facts on
+   * two screens -- the request in a banner above the board, the message on the
+   * Chat page -- and the floor staff joined them up while walking. They belong
+   * on the table's own card, which is the thing being looked at.
+   */
+  const [signals, setSignals] = useState<TableSignal[]>([]);
+  /** Ids already announced, so a poll does not chime for the same request
+   *  every eight seconds. Seeded on the first load: opening the board should
+   *  not fire a burst for everything already waiting. */
+  const seenSignals = React.useRef<Set<string> | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    const pull = async () => {
+      try {
+        const rows = await fetchTableSignals(restaurant.id);
+        if (!alive) return;
+        if (seenSignals.current === null) {
+          seenSignals.current = new Set(rows.map((r) => r.id));
+        } else {
+          const fresh = rows.filter((r) => !seenSignals.current!.has(r.id));
+          if (fresh.length) {
+            // The SAME alert path a new order takes. The client had sound and
+            // notifications switched on and still heard nothing for a request,
+            // because requests never reached this code at all.
+            if (sound) chime();
+            for (const r of fresh) {
+              if (canNotify() && Notification.permission === 'granted') {
+                new Notification(
+                  r.kind === 'request' ? `${r.tableLabel} asked for ${r.text}` : `${r.tableLabel} sent a message`,
+                  { body: r.kind === 'message' ? r.text : (r.guestName ?? ''), tag: r.id },
+                );
+              }
+            }
+          }
+          rows.forEach((r) => seenSignals.current!.add(r.id));
+        }
+        setSignals(rows);
+      } catch { /* the board keeps working */ }
+    };
+    pull();
+    const t = setInterval(pull, 8000);
+    return () => { alive = false; clearInterval(t); };
+  }, [restaurant.id, sound]);
+
+  /** Signals grouped by the table they came from. The board's tickets carry a
+   *  label and no table_id, so the label is the only join available. */
+  const signalsByTable = React.useMemo(() => {
+    const m = new Map<string, TableSignal[]>();
+    for (const sig of signals) {
+      const k = sig.tableLabel;
+      if (!m.has(k)) m.set(k, []);
+      m.get(k)!.push(sig);
+    }
+    return m;
+  }, [signals]);
   const [editing, setEditing] = useState<PortalOrder[] | null>(null);
 
   /** Collapse each table+diner's burst of orders into one ticket. */
@@ -311,6 +372,42 @@ export function OrdersBoard() {
           moment -- an order has a kitchen working on it, a diner waiting for a
           napkin is waiting on nobody. */}
       <ServiceStrip restaurantId={restaurant.id} />
+
+      {/* A TABLE THAT ASKED BUT HAS NOT ORDERED has no ticket to hang from,
+          and is exactly the one that must not be missed -- somebody sitting
+          with an empty table wanting attention. It gets a card of its own.
+          Tables that DO have a ticket are excluded here: their signals are
+          already on it, and showing both would double every request. */}
+      {(() => {
+        const withTickets = new Set(
+          tickets.filter((t) => !t.o.is_parcel).map((t) => t.o.table_label ?? ''),
+        );
+        const orphans = [...signalsByTable.entries()].filter(([label]) => !withTickets.has(label));
+        if (!orphans.length) return null;
+        return (
+          <div className="ticket-grid" style={{ marginBottom: 14 }}>
+            {orphans.map(([label, sigs]) => (
+              <div key={label} className="ticket" style={{ borderColor: 'var(--primary)' }}>
+                <div className="ticket-head">
+                  <strong>{label}</strong>
+                  <span className="new-badge">NEEDS ATTENTION</span>
+                </div>
+                <p className="dim" style={{ fontSize: 12.5, marginTop: 2 }}>No order yet</p>
+                {sigs.map((sig) => (
+                  <p key={sig.id} className="ticket-signal">
+                    <span aria-hidden>{sig.kind === 'request' ? '🔔' : '💬'}</span>{' '}
+                    {sig.kind === 'request'
+                      ? <>Asked for <b>{sig.text}</b></>
+                      : <>“{sig.text}”</>}
+                    <span className="dim">{' · '}{ago(sig.createdAt)}</span>
+                  </p>
+                ))}
+              </div>
+            ))}
+          </div>
+        );
+      })()}
+
       <div className="topbar" style={{ alignItems: 'flex-end' }}>
         <div>
           <p className="overline">Live orders</p>
@@ -468,6 +565,20 @@ export function OrdersBoard() {
             {(o.guest_name || '').trim() && (
               <p className="dim" style={{ fontSize: 12.5, marginTop: 2 }}>{o.guest_name}</p>
             )}
+            {/* WHAT THIS TABLE ALSO ASKED FOR. The whole point of the change:
+                the request and the order are one situation, and the staff
+                walking over should not have to have read two screens to know
+                about both. Parcels are excluded -- there is no table to ask
+                from. */}
+            {!o.is_parcel && (signalsByTable.get(o.table_label ?? '') ?? []).map((sig) => (
+              <p key={sig.id} className="ticket-signal">
+                <span aria-hidden>{sig.kind === 'request' ? '🔔' : '💬'}</span>{' '}
+                {sig.kind === 'request'
+                  ? <>Asked for <b>{sig.text}</b></>
+                  : <>“{sig.text}”</>}
+                <span className="dim">{' · '}{ago(sig.createdAt)}</span>
+              </p>
+            ))}
             <div className="ticket-items">
               {merged.map((it, i) => (
                 <div key={i} style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
