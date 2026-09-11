@@ -155,11 +155,19 @@ export function MenuManager() {
     finally { setBulkBusy(0); if (photoRef.current) photoRef.current.value = ''; }
   };
 
+  /** `busy` is state and a render behind the second click. On an EXISTING dish
+   *  a repeat save is harmless; on a new one it is a second dish on the menu
+   *  with the same name, which the owner then has to find and delete. */
+  const savingRef = useRef(false);
+
   const save = async () => {
-    if (!draft || busy) return;
+    if (!draft || savingRef.current) return;
+    savingRef.current = true;
     const price = Number(draft.price);
-    if (!draft.name.trim()) { setError('Give the dish a name.'); return; }
-    if (!Number.isFinite(price) || price <= 0) { setError('Price must be a positive number.'); return; }
+    // Both of these return before any write, so the ref has to be released or
+    // the Save button stays dead until the sheet is closed and reopened.
+    if (!draft.name.trim()) { savingRef.current = false; setError('Give the dish a name.'); return; }
+    if (!Number.isFinite(price) || price <= 0) { savingRef.current = false; setError('Price must be a positive number.'); return; }
     setBusy(true); setError('');
     try {
       await saveDish(restaurant.id, {
@@ -174,7 +182,7 @@ export function MenuManager() {
       setDraft(null);
       await load();
     } catch (e: any) { setError(e?.message ?? 'Save failed.'); }
-    finally { setBusy(false); }
+    finally { setBusy(false); savingRef.current = false; }
   };
 
   const toggleAvailable = async (d: PortalDish) => {

@@ -19,7 +19,7 @@
  * waiver and discount work on it -- none of them knowing or caring that nobody
  * scanned a QR.
  */
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { fetchMenuAdmin, fetchTables, placeStaffOrder, type PortalTable } from '../../lib/portalApi';
 import { inr } from '../../lib/types';
 
@@ -82,9 +82,20 @@ export function WalkIn({ restaurantId, onCreated }: {
       return next;
     });
 
+  /**
+   * NO GUARD AT ALL BEFORE THIS. `disabled={busy || !lines.length}` was the
+   * only thing standing between a double click and two staff orders -- and
+   * `disabled` is bound to state, which lands a render later than the second
+   * click does. Two orders is two kitchen tickets and two lines on the bill
+   * for one walk-in, which somebody then has to explain to the customer.
+   */
+  const creatingRef = useRef(false);
+
   const create = async () => {
+    if (creatingRef.current) return;
     if (!lines.length) { setError('Add at least one dish.'); return; }
     if (!tableId) { setError('Pick where this order is for.'); return; }
+    creatingRef.current = true;
     setBusy(true); setError('');
     try {
       const id = await placeStaffOrder(restaurantId, tableId, lines);
@@ -92,7 +103,7 @@ export function WalkIn({ restaurantId, onCreated }: {
       onCreated(id);
     } catch (e: any) {
       setError(e?.message ?? 'Could not create that order.');
-    } finally { setBusy(false); }
+    } finally { setBusy(false); creatingRef.current = false; }
   };
 
   if (!open) {

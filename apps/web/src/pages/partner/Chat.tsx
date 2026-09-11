@@ -265,14 +265,18 @@ export function Chat() {
   /** ONE SEND PATH, two ways in: the box, or a quick-reply chip. Extracted
    *  so a tapped reply cannot drift from a typed one -- same table, same
    *  error sentence, same busy state. */
+  const sendingRef = useRef(false);
   const deliver = async (body: string, clearBox: boolean) => {
-    if (!body || !openTable || busy) return;
+    // `busy` is state; a quick-reply chip tapped twice, or Enter held for a
+    // beat, both get past it and send the diner the same line twice.
+    if (!body || !openTable || sendingRef.current) return;
+    sendingRef.current = true;
     setBusy(true); setMsgsError('');
     try {
       await sendRestaurantMessage(restaurant.id, openTable, body);
       if (clearBox) setText('');
     } catch { setMsgsError('Could not send that. Please try again.'); }
-    finally { setBusy(false); }
+    finally { setBusy(false); sendingRef.current = false; }
   };
   const send = () => deliver(text.trim(), true);
 
