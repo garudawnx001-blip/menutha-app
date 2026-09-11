@@ -300,6 +300,25 @@ export function PlanScreen({ preview }: { preview?: boolean } = {}) {
       if (fnErr) throw new Error((await fnErr?.context?.text?.()) || fnErr.message);
       if (action === 'cancel') { await load(); return; }
 
+      /**
+       * ALREADY PAID -- do not open a second checkout.
+       *
+       * The function now refuses to mint a second mandate for a restaurant
+       * that has one, and says so with this flag instead of a subscription id.
+       * Opening Razorpay anyway would show an empty sheet; worse, it would
+       * invite a second ₹5 authorisation for a mandate they already hold.
+       *
+       * This is reachable by ordinary means, not just by double-tapping: an
+       * owner whose payment succeeded while the webhook was still in flight
+       * sits on this screen looking at plan cards, and pressing one is the
+       * obvious thing to do.
+       */
+      if ((data as any)?.already_subscribed) {
+        await load();
+        nav('/partner/orders', { replace: true });
+        return;
+      }
+
       await loadCheckout();
       const rzp = new window.Razorpay({
         key: data.razorpay_key_id,
