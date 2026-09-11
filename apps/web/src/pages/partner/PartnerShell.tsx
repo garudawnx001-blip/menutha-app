@@ -6,7 +6,7 @@ import { supabase } from '../../lib/supabase';
 import {
   loadMembership, loadOutlets, rememberOutlet, type Membership, type PortalRole,
 } from '../../lib/portalApi';
-import { entitlementsFor, hasFeature, type Entitlements } from '../../lib/entitlements';
+import { entitlementsFor, hasFeature, needsBilling, type Entitlements } from '../../lib/entitlements';
 import { Spinner, Wordmark } from '../../components';
 
 interface PartnerCtx {
@@ -73,6 +73,21 @@ export function PartnerShell() {
   /** Every outlet this account can open. One entry is the ordinary case; the
    *  picker only appears when there are more. */
   const [outlets, setOutlets] = useState<Membership['restaurant'][]>([]);
+  /**
+   * IS AUTOPAY ARMED? A live subscription row is what separates "a trial that
+   * will renew" from "a thirty-day countdown to a silent lockout with nothing
+   * on file" -- and the second was what every new sign-up got.
+   *
+   * `authenticated` counts as much as `active`. The mandate is signed at the
+   * zero-rupee authentication transaction; `active` only arrives after the
+   * first real charge on day 30, so waiting for it would gate every restaurant
+   * for the whole of its trial.
+   *
+   * Starts null, meaning NOT YET KNOWN, which is deliberately different from
+   * false. The redirect below waits for it rather than bouncing an owner to
+   * the plan screen during the half-second before the answer arrives.
+   */
+  const [hasMandate, setHasMandate] = useState<boolean | null>(null);
 
   const switchOutlet = async (id: string) => {
     rememberOutlet(id);
@@ -94,6 +109,20 @@ export function PartnerShell() {
       }
       setMember(m);
       setOutlets(await loadOutlets().catch(() => []));
+
+      if (m?.restaurant?.id) {
+        // RLS ("subscriptions: owner read" / is_manager_of) already limits this
+        // to the caller's own restaurants, so no server round-trip of our own.
+        const { data: subs } = await supabase
+          .from('subscriptions')
+          .select('id')
+          .eq('restaurant_id', m.restaurant.id)
+          .in('status', ['authenticated', 'active'])
+          .limit(1);
+        setHasMandate((subs?.length ?? 0) > 0);
+      } else {
+        setHasMandate(false);
+      }
     } catch (e: any) {
       setError(e?.message ?? 'Could not load your restaurant.');
     } finally {
@@ -104,9 +133,41 @@ export function PartnerShell() {
   useEffect(() => { reload(); }, []);
 
   const ent = useMemo(
-    () => (member ? entitlementsFor(member.restaurant as any) : null),
-    [member],
+    () => (member
+      ? entitlementsFor({ ...(member.restaurant as any), has_mandate: hasMandate === true })
+      : null),
+    [member, hasMandate],
   );
+
+  /**
+   * THE HARD GATE.
+   *
+   * Until now this shell showed a BANNER for a locked restaurant and let it
+   * walk into every screen anyway -- individual features were gated, routes
+   * were not. So "your subscription has ended" sat above a working orders
+   * board. Under the new rule there is no working anything without a plan or
+   * an armed trial.
+   *
+   * THREE ROUTES STAY OPEN, and each for a reason rather than as a courtesy:
+   * `plan` because it is where we are sending them and a redirect loop is not
+   * a gate; `account` so nobody is locked out of their own password or email;
+   * and `register`, which belongs to an account with no restaurant yet and
+   * must not be dragged into a billing screen for a restaurant that does not
+   * exist.
+   *
+   * `replace` so the back button cannot walk backwards into the app -- it
+   * would be a gate with a documented bypass.
+   */
+  const gateRoute = '/partner/plan';
+  const GATE_EXEMPT = ['/partner/plan', '/partner/account', '/partner/register'];
+  const barred = ent ? needsBilling(ent) : false;
+  useEffect(() => {
+    // hasMandate === null means the answer is still in flight. Redirecting on
+    // an unknown would bounce every owner to billing on each page load.
+    if (hasMandate === null || !ent || !barred) return;
+    if (GATE_EXEMPT.some((p) => loc.pathname.startsWith(p))) return;
+    nav(gateRoute, { replace: true });
+  }, [barred, hasMandate, ent, loc.pathname]);
 
   if (loading) return <Spinner label="Opening your restaurant…" />;
   if (!member || !ent) {
@@ -242,6 +303,10 @@ export function PartnerPreviewProvider({ children }: { children: React.ReactNode
     open_time: '11:00', close_time: '23:00', cuisine_tags: 'North Indian · South Indian · Chinese',
     plan_tier: 'trial', plan_status: 'trialing', is_open: true,
     trial_ends_at: new Date(Date.now() + 25 * 864e5).toISOString(),
+    // The fixture is a HEALTHY restaurant mid-trial, so it must carry the
+    // mandate -- without it the entitlement is `setup` and the preview would
+    // render the whole portal locked.
+    has_mandate: true,
   } as any;
   const ent = entitlementsFor(restaurant);
   const value: PartnerCtx = {
