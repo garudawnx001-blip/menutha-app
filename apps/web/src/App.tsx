@@ -1,6 +1,7 @@
 import React from 'react';
 import { BrowserRouter, HashRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { StoreProvider } from './store';
+import { RouteErrorBoundary } from './components/RouteErrorBoundary';
 import { Restaurants } from './pages/Restaurants';
 import { Scan } from './pages/Scan';
 import { TableGate } from './pages/TableGate';
@@ -40,6 +41,7 @@ export function App() {
     <StoreProvider>
       <div className="ambient" aria-hidden />
       <Router>
+        <RouteErrorBoundary>
         <Routes>
           {/* '/' is the static marketing page, copied over index.html at deploy
               (see .github/workflows/deploy.yml). Inside the SPA -- hash-router
@@ -93,6 +95,7 @@ export function App() {
               because that is a real file served by Pages. */}
           <Route path="*" element={<Navigate to="/table" replace />} />
         </Routes>
+        </RouteErrorBoundary>
       </Router>
     </StoreProvider>
   );
