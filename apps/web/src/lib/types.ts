@@ -83,6 +83,10 @@ export interface OrderView {
   ready_at?: string | null;
   served_at?: string | null;
   restaurant_name?: string;
+  /** What the diner typed with the order — "no onions", "less spicy". Track
+   *  renders it and the type never carried it, so the line was dead: `o.notes`
+   *  was always undefined and the block never drew. */
+  notes?: string | null;
   items: { name: string; qty: number; unit_price: number; options?: unknown; is_veg?: boolean }[];
 }
 

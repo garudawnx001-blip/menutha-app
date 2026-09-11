@@ -52,11 +52,25 @@ const ALIGNS: { key: Align; label: string; Icon: (p: { size?: number }) => JSX.E
   { key: 'right',  label: 'Right',  Icon: AlignRightIcon },
 ];
 
-/** A deep-enough clone. The layout is two levels of plain data, so this is
- *  exact — and it means an edit never mutates the object the preview is
- *  memoised on, which would leave the preview one keystroke behind. */
+/**
+ * A deep-enough clone. The layout is two levels of plain data, so this is
+ * exact — and it means an edit never mutates the object the preview is
+ * memoised on, which would leave the preview one keystroke behind.
+ *
+ * IT WAS NOT EXACT. `fill` and `payQr` arrived with the scan-to-pay work and
+ * this clone never learned about them, so every trip through the editor
+ * returned a layout with both missing — an owner who changed the font size of
+ * one line lost their QR size, its placement, and whether it printed at all.
+ * Silently, and on save.
+ *
+ * Spreading `l` first is what stops it happening again: a field added to
+ * BillLayout tomorrow survives by default, and the explicit lines below are
+ * only the ones that need a deeper copy than a spread gives.
+ */
 const clone = (l: BillLayout): BillLayout => ({
+  ...l,
   logo: { ...l.logo },
+  payQr: { ...l.payQr },
   sections: Object.fromEntries(
     Object.entries(l.sections).map(([k, v]) => [k, { ...v }]),
   ) as BillLayout['sections'],

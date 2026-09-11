@@ -111,7 +111,11 @@ export async function fetchMenu(session: Session): Promise<MenuItem[]> {
   // from PostgREST, which would empty the menu for every diner — so the deploy
   // must not depend on the migration having landed first. Once the columns
   // exist everywhere this can collapse back to a single select.
-  let { data, error } = await supabase
+  // `data` is typed from the FIRST select and then reassigned from the
+  // fallback one, whose narrower column list gives PostgREST's error shape.
+  // Widened here rather than cast at the use site, so the fallback stays a
+  // one-line change if the column list moves again.
+  let { data, error }: { data: any[] | null; error: any } = await supabase
     .from('menu_item')
     .select(MENU_COLS_I18N)
     .eq('restaurant_id', session.restaurant.id)

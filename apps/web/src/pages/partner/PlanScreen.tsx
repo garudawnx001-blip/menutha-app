@@ -33,6 +33,9 @@ interface PlanState {
   plan_tier: string;
   plan_status: string;
   trial_ends_at: string | null;
+  /** Read by entitlementsFor and set by the preview fixture. It was passed
+   *  and never declared, so the fixture was a type error the exemption hid. */
+  has_mandate?: boolean;
   grace_until: string | null;
   addons: string[];
 }

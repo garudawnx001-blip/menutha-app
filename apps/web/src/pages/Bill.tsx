@@ -12,7 +12,17 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import QRCode from 'qrcode';
-import { fetchSessionBill, type SessionBill } from '../lib/api';
+// fetchTableBill IS USED AND WAS NEVER IMPORTED. The seating check below
+// called it by name with nothing bound, so the effect threw a
+// ReferenceError the moment it ran -- on the bill page of every diner who
+// had ordered, which is every diner who opens it. tsc had been reporting
+// this for as long as the exemption had been hiding it.
+//
+// The whole-table read is the right one here: this decides whether the
+// SEATING is over, and a settled table ends it for everybody at it.
+// fetchSessionBill answers a different question -- what this one person
+// owes -- and is used below for exactly that.
+import { fetchSessionBill, fetchTableBill, type SessionBill } from '../lib/api';
 import { supabase } from '../lib/supabase';
 import { inr } from '../lib/types';
 import { useStore } from '../store';
@@ -110,9 +120,16 @@ export function Bill() {
   // directly (public-readable) — this is what makes the pay QR appear here.
   useEffect(() => {
     if (!session?.restaurant.id) return;
+    // TWO ARGUMENTS TO `then`, NOT A TRAILING `catch`. A PostgREST builder is
+    // a thenable, not a Promise -- it has no `.catch`, so the failure handler
+    // that looks like it is here was never attached. A read that failed would
+    // have gone to the console as an unhandled rejection instead of leaving
+    // the QR quietly absent, which is what the line intended.
     supabase.from('restaurant').select('upi_vpa, upi_account_type').eq('id', session.restaurant.id).single()
-      .then(({ data }) => { setVpa((data?.upi_vpa as string) ?? null); setAcctType(((data as any)?.upi_account_type as string) ?? 'personal'); })
-      .catch(() => {});
+      .then(
+        ({ data }) => { setVpa((data?.upi_vpa as string) ?? null); setAcctType(((data as any)?.upi_account_type as string) ?? 'personal'); },
+        () => { /* no VPA: the page simply shows no pay QR */ },
+      );
   }, [session?.restaurant.id]);
 
   /** upi://pay for the amount currently shown, regenerated when it changes. */
