@@ -322,8 +322,24 @@ img { max-width: 100%; display: block; }
   box-shadow: var(--shadow-sm);
   margin: 14px 0 10px;
 }
+/**
+ * THE INPUT FILLS THE BOX IT LOOKS LIKE IT FILLS.
+ *
+ * The wrapper is a 50px search field with 12px of vertical padding. The input
+ * inside it was 23px tall -- its own line box and nothing more -- so the top
+ * and bottom 13px of what reads as one control belonged to the div, and a tap
+ * there focused nothing. On a phone that is most of the field: somebody aims
+ * at the middle of a search box, misses low, and the keyboard does not come
+ * up. Measured on the live site at 375, 414 and 768 -- the same 23px at every
+ * width, so it was never a responsive problem, just an unfinished one.
+ *
+ * `align-self: stretch` hands the input the flex line's full height and the
+ * padding stays on the wrapper, so nothing moves visually: the box is the same
+ * 50px it always was, and now all 50px of it are the control.
+ */
 .search input {
   flex: 1; background: none; border: none; outline: none; font-size: 15px;
+  align-self: stretch;
 }
 .search input::placeholder { color: var(--text-dim); }
 
