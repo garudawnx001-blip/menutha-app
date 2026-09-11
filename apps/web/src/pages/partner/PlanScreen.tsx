@@ -344,7 +344,25 @@ export function PlanScreen({ preview }: { preview?: boolean } = {}) {
               .eq('restaurant_id', restaurant!.id)
               .in('status', ['authenticated', 'active']).limit(1);
             if ((fresh?.length ?? 0) > 0) { nav('/partner/orders', { replace: true }); return; }
-            if (tries < 6) setTimeout(poll, 2500);
+            if (tries < 6) { setTimeout(poll, 2500); return; }
+            /**
+             * THE MANDATE WENT THROUGH AND OUR CONFIRMATION DID NOT ARRIVE.
+             *
+             * Only Razorpay's webhook flips subscriptions.status, so if it is
+             * slow, misconfigured, or its secret is wrong, this owner has just
+             * authorised autopay and is still looking at the screen that asked
+             * them to. Silence here is the worst possible answer: the obvious
+             * thing to try is paying again, and a second mandate on the same
+             * restaurant is a real mess to unpick.
+             *
+             * So say plainly that the payment side is done, that the wait is
+             * ours, and that refreshing is the whole remedy.
+             */
+            setError(
+              'Autopay was set up successfully — we just have not had confirmation back yet. '
+              + 'This usually clears within a minute: refresh this page and it should show as active. '
+              + 'Please do NOT set up a second plan. If it is still not showing in a few minutes, contact support.',
+            );
           };
           setTimeout(poll, 2000);
         },
