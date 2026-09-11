@@ -2,7 +2,7 @@
  *  with filters, table reservation. No cart, no ordering — ordering requires
  *  a real table QR and is enforced server-side in place_order. Injects
  *  schema.org Restaurant JSON-LD + per-page meta for SEO. */
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { inr } from '../lib/types';
@@ -94,10 +94,16 @@ export function PublicRestaurant() {
     (diet === 'all' || (diet === 'veg' ? d.is_veg : !d.is_veg)) &&
     (cat === 'All' || d.category === cat));
 
+  const bookingRef = useRef(false);
+
   const book = async () => {
     if (!reserve.date || !reserve.name.trim() || reserve.phone.replace(/\D/g, '').length < 10) {
       setError('Date, your name, and a 10-digit phone are needed.'); return;
     }
+    // create_reservation has no idempotency, and `busy` is state -- a render
+    // behind the second click. Two clicks is two tables held for one party.
+    if (bookingRef.current) return;
+    bookingRef.current = true;
     setBusy(true); setError('');
     try {
       // The SHARED helper, not a second copy of the same rpc() call. This page
@@ -117,6 +123,7 @@ export function PublicRestaurant() {
       setError(e?.message ?? 'Could not send the booking. Please try again.');
     } finally {
       setBusy(false);
+      bookingRef.current = false;
     }
   };
 

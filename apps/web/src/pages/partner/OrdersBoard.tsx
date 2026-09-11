@@ -299,7 +299,21 @@ export function OrdersBoard() {
   /** Settle everything on this ticket as one bill. Taking payment for the
    *  first of three orders placed seconds apart and leaving the rest open is a
    *  short till at the end of the shift. */
+  /**
+   * A REF, because this one RAISES A BILL. `busy` holds an order id and is
+   * state: two taps on the same card inside a frame both read the old value,
+   * and create_table_bill runs twice for the same orders -- a second bill row,
+   * a second bill number, and the day's takings counted twice.
+   *
+   * Not per-card. One at a time across the whole board, because the second tap
+   * is as likely to land on the next card as the same one, and two bills being
+   * raised concurrently for one table is the same mess by a different route.
+   */
+  const payingRef = useRef(false);
+
   const quickPaid = async (all: PortalOrder[], mode: 'cash' | 'upi_qr') => {
+    if (payingRef.current) return;
+    payingRef.current = true;
     setBusy(all[0].id);
     setJustIn((prev) => { const n = new Set(prev); all.forEach((x) => n.delete(x.id)); return n; });
     try {
@@ -314,7 +328,7 @@ export function OrdersBoard() {
       }
       await load();
     } catch (e: any) { setError(e?.message ?? 'Payment update failed.'); }
-    finally { setBusy(''); }
+    finally { setBusy(''); payingRef.current = false; }
   };
 
   /**

@@ -55,9 +55,14 @@ export function TableChat({ session }: { session: Session }) {
   // Follow the conversation down as it grows, the way every chat does.
   useEffect(() => { endRef.current?.scrollIntoView({ block: 'end' }); }, [msgs.length]);
 
+  /** `busy` is state and a render behind, so Enter held for a beat sends the
+   *  counter the same line twice. */
+  const sendingRef = useRef(false);
+
   const send = async () => {
     const body = text.trim();
-    if (!body || busy) return;
+    if (!body || sendingRef.current) return;
+    sendingRef.current = true;
     setBusy(true); setFailed('');
     try {
       await sendTableMessage(session, body);
@@ -68,6 +73,7 @@ export function TableChat({ session }: { session: Session }) {
       setFailed(t('chat.sendFail'));
     } finally {
       setBusy(false);
+      sendingRef.current = false;
     }
   };
 

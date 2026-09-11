@@ -20,7 +20,7 @@
  * Every read is re-run on auth changes because both doors arrive by redirect:
  * Supabase installs the session from the URL a moment after first paint.
  */
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { Wordmark } from '../../components';
@@ -168,8 +168,18 @@ export function Register({ previewPhase }: { previewPhase?: Phase } = {}) {
     }
   };
 
+  /** complete_restaurant_signup creates the restaurant AND the owner
+   *  membership. `busy` is state, so two clicks inside one frame both get
+   *  through and the account ends up owning two restaurants with the same
+   *  name -- on the one screen where somebody is most likely to click twice,
+   *  because it is the slowest call in the product and they have just typed
+   *  everything they know about their business into it. */
+  const submittingRef = useRef(false);
+
   const submit = async () => {
+    if (submittingRef.current) return;
     if (!form.owner.trim() || !form.name.trim()) { setError('Your name and the restaurant name are required.'); return; }
+    submittingRef.current = true;
     setBusy(true); setError('');
     const { error: err } = await supabase.rpc('complete_restaurant_signup', {
       p_manager_name: form.owner.trim(),
@@ -181,6 +191,9 @@ export function Register({ previewPhase }: { previewPhase?: Phase } = {}) {
     });
     if (err) {
       setBusy(false);
+      // Released on the failure path too, or a rejected sign-up would leave
+      // the button dead and the owner with no way to correct and retry.
+      submittingRef.current = false;
       setError(err.message.includes('not authenticated')
         ? 'Please sign in first.' : err.message);
       return;
@@ -297,7 +310,7 @@ export function Register({ previewPhase }: { previewPhase?: Phase } = {}) {
               it used auth-card and field-label. One form system across the three
               steps now, and the same one the phone draws. */}
           <p className="dim auth-signed">
-            âœ“ Signed in as {email}{username ? ` · @${username}` : ''}
+            âœ“ Signed in as {email}{username ? ` ï¿½ @${username}` : ''}
           </p>
           <label className="field-label" htmlFor="reg-owner">Your name</label>
           <input id="reg-owner" className="code-input" autoComplete="name" value={form.owner} onChange={(e) => setForm({ ...form, owner: e.target.value })} />
@@ -340,13 +353,13 @@ export function Register({ previewPhase }: { previewPhase?: Phase } = {}) {
           <button className={`btn btn-primary btn-block auth-primary${busy ? ' is-busy' : ''}`} disabled={busy} onClick={submit}>
             Start 30-day free trial
           </button>
-          {/* Was "Full Enterprise features for 30 days · no card needed".
+          {/* Was "Full Enterprise features for 30 days ï¿½ no card needed".
               Both halves had stopped being true: the trial runs at the tier
               they choose, and the gate on the next screen asks for an autopay
               mandate before anything opens. Promising the opposite here only
               moves the surprise thirty seconds later, where it costs more. */}
           <p className="dim auth-note">
-            Every plan free for 30 days · zero commission always · cancel any time.
+            Every plan free for 30 days ï¿½ zero commission always ï¿½ cancel any time.
           </p>
         </div>
         )}
