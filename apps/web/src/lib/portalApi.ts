@@ -231,13 +231,39 @@ export async function fetchLiveOrders(restaurantId: string, statuses: string[]):
     ({ data, error } = await run(false));
   }
   if (error) throw error;
-  return (data ?? []).map((row: any) => ({
+  return (data ?? []).map(toPortalOrder);
+}
+
+/**
+ * A FOOD_ORDER ROW AS THE BOARD EXPECTS IT, and the only place that
+ * translation happens.
+ *
+ * PostgREST returns the embedded relations under their TABLE names --
+ * order_item, dining_table, payment -- while PortalOrder reads items,
+ * table_label and paid. Those are different shapes, and nothing but this
+ * function bridges them.
+ *
+ * It used to live inline in fetchLiveOrders, which meant fetchDoneOrders
+ * (written later, for the same rows) skipped it entirely and returned
+ * `data as unknown as PortalOrder[]`. That double cast is the whole bug: it
+ * tells the compiler to stop checking, so a row with no `items` field
+ * typechecked perfectly and reached the board, where `o.items.reduce(...)`
+ * threw "Cannot read properties of undefined" and -- with no error boundary
+ * above it -- unmounted the entire React root. Ashwamedha's dashboard went
+ * blank the moment the account went active, because `active` is what makes
+ * the board fetch done orders at all.
+ *
+ * One exported mapper, used by every loader, so a third one cannot quietly
+ * reintroduce this.
+ */
+export function toPortalOrder(row: any): PortalOrder {
+  return {
     ...row,
     table_label: (Array.isArray(row.dining_table) ? row.dining_table[0] : row.dining_table)?.label,
     items: row.order_item ?? [],
     paid: (row.payment ?? []).some((p: any) => p.status === 'paid'),
     pendingPayment: (row.payment ?? []).find((p: any) => p.status === 'created') ?? null,
-  }));
+  };
 }
 
 /**
@@ -277,11 +303,11 @@ export async function fetchDoneOrders(
         .gte('placed_at', sinceISO).lte('placed_at', untilISO)
         .order('placed_at', { ascending: true });
       if (e2) throw e2;
-      return (d2 ?? []) as unknown as PortalOrder[];
+      return (d2 ?? []).map(toPortalOrder);
     }
     throw error;
   }
-  return (data ?? []) as unknown as PortalOrder[];
+  return (data ?? []).map(toPortalOrder);
 }
 
 export const NEXT_STATUS: Record<string, string> = {

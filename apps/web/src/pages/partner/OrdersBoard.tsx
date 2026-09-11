@@ -572,7 +572,7 @@ export function OrdersBoard() {
                       <span aria-hidden style={{ display: 'inline-block', width: 14 }}>{open ? '▾' : '▸'}</span>
                       #{o.order_no} · {o.is_parcel ? 'Parcel' : o.table_label}
                       {(o.guest_name || '').trim() ? ` · ${o.guest_name}` : ''}
-                      {' · '}{o.items.reduce((a, i) => a + i.qty, 0)} items
+                      {' · '}{(o.items ?? []).reduce((a, i) => a + i.qty, 0)} items
                     </span>
                     <span style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
                       <span style={{ fontWeight: 700 }}>{inr(o.total)}</span>
@@ -581,7 +581,7 @@ export function OrdersBoard() {
                   </button>
                   {open && (
                     <div className="row-detail">
-                      {o.items.map((it, i) => (
+                      {(o.items ?? []).map((it, i) => (
                         <div key={i} className="bill-row" style={{ fontSize: 13.5 }}>
                           <span style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                             <VegMark veg={!!it.is_veg} />
@@ -637,7 +637,7 @@ export function OrdersBoard() {
                 line is what the kitchen and the diner argue about; which of
                 three rows two seconds apart it belongs to is bookkeeping. */}
             <div style={{ marginTop: 14 }}>
-              {editing.flatMap((ord) => ord.items.map((it) => (
+              {editing.flatMap((ord) => (ord.items ?? []).map((it) => (
                 <div key={it.id} className="row-item">
                   <span style={{ display: 'flex', gap: 8, alignItems: 'center', minWidth: 0 }}>
                     <VegMark veg={!!it.is_veg} />
