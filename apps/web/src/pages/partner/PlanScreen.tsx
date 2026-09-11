@@ -338,6 +338,42 @@ export function PlanScreen({ preview }: { preview?: boolean } = {}) {
         // The forest green here matched nothing -- it was the only place in
         // the payment flow wearing a second brand colour.
         theme: { color: '#D97757' },
+
+        /**
+         * WHICH METHOD THE OWNER SEES FIRST.
+         *
+         * This is an ORDERING HINT, not a switch. Razorpay decides what a
+         * subscription mandate can actually be registered with -- Cards,
+         * UPI AutoPay and Emandate -- and which of those your account may
+         * offer is set in the Razorpay Dashboard, not here. Passing a block
+         * for a method the account has disabled shows nothing; it does not
+         * enable it.
+         *
+         * UPI first because that is what a restaurant owner in Hospet has on
+         * their phone. Choosing UPI sends an approval request INTO their UPI
+         * app, which they accept once -- that is the collect flow, and it is
+         * what makes autopay feel like a normal UPI payment rather than a
+         * form. Card second, for anyone who would rather use one.
+         *
+         * DELIBERATELY NOT CLAIMING A QR. UPI AutoPay mandates are not
+         * registered by scanning a QR -- Razorpay does not list it as a
+         * subscription authorisation method -- so a "scan to pay" block here
+         * would render an empty section and teach the owner the page is
+         * broken.
+         */
+        config: {
+          display: {
+            blocks: {
+              upi: { name: 'Pay using UPI', instruments: [{ method: 'upi' }] },
+              card: { name: 'Pay using a card', instruments: [{ method: 'card' }] },
+            },
+            sequence: ['block.upi', 'block.card'],
+            // 'hide' would remove everything else. 'rest' keeps whatever the
+            // account also supports (emandate/netbanking) below these two,
+            // so enabling a method in the Dashboard never needs a code change.
+            preferences: { show_default_blocks: true },
+          },
+        },
         /**
          * THE LAST JUNCTION: mandate signed, now let them in.
          *
@@ -453,6 +489,24 @@ export function PlanScreen({ preview }: { preview?: boolean } = {}) {
             taken only when they end. Cancel any time before then and you pay
             nothing at all.
           </p>
+          {/* THE ONE NUMBER THAT LOOKS LIKE A CHARGE AND IS NOT.
+              Razorpay registers a UPI AutoPay mandate THROUGH a small debit --
+              a few rupees, refunded automatically, which their own docs tell
+              merchants not to capture. We cannot set or waive that amount:
+              there is no API field for it and the minimum mandate value is ₹1,
+              because a mandate cannot be registered on nothing.
+              So the only honest fix is to say what it is here, before the
+              checkout sheet shows it and somebody reads "₹5" as the start of
+              being billed. */}
+          <p className="plan-verify">
+            <span aria-hidden>ℹ️</span>
+            <span>
+              The payment page will show a few rupees. That is a{' '}
+              <strong>refundable verification</strong> your bank needs to set up autopay —
+              it is returned to you automatically, and nothing is charged during your
+              free 30 days.
+            </span>
+          </p>
         </div>
       )}
 
@@ -539,7 +593,18 @@ export function PlanScreen({ preview }: { preview?: boolean } = {}) {
           return (
             <div key={p.id} className="glass" style={{ padding: 18, display: 'flex', flexDirection: 'column', gap: 10, borderColor: isCurrent ? 'var(--primary)' : undefined }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
-                <h3 className="display" style={{ fontSize: 21 }}>{tierLabel(p)}</h3>
+                <h3 className="display" style={{ fontSize: 21 }}>
+                  {tierLabel(p)}
+                  {/* ONE RECOMMENDATION, and Growth because it is the tier
+                      that actually fits a single restaurant taking orders all
+                      day -- Basic has no analytics and no Excel import, which
+                      is the first thing an owner with 164 dishes asks for.
+                      A page where every card shouts is a page with no
+                      recommendation at all, so only this one is marked. */}
+                  {p.tier === 'growth' && (
+                    <span className="badge plan-pick">Most restaurants pick this</span>
+                  )}
+                </h3>
                 <span style={{ textAlign: 'right' }}>
                   {/* THE BASE LEADS, and the total is directly under it. The
                       base is the price this product quotes everywhere -- the
@@ -563,6 +628,29 @@ export function PlanScreen({ preview }: { preview?: boolean } = {}) {
                   )}
                 </span>
               </div>
+              {/* WHAT TODAY COSTS -- the only number most people are actually
+                  asking, and it was nowhere on this card. Everything above is
+                  what happens in a month's time; this is the answer to "what
+                  do I pay to start", said once, in the largest type on the
+                  card, with the price it replaces struck through beside it.
+
+                  The struck figure is the GST-INCLUSIVE total, not the base:
+                  it has to be the number they would otherwise have been
+                  charged today, or the comparison is a smaller saving than it
+                  looks and the card is quietly overselling. */}
+              <div className="plan-today">
+                <s className="plan-today-was">{inr(g.total)}</s>
+                <strong className="plan-today-now">₹0 today</strong>
+                <span className="plan-today-free">free for 30 days</span>
+              </div>
+              {/* The whole offer in one sentence a tired person can read at
+                  the end of service. Deliberately above the feature list: the
+                  decision is made on this line, not on the features. */}
+              <p className="plan-plain">
+                Free for 30 days. Then <strong>{inr(g.total)}</strong>
+                {p.duration_months === 1 ? ' a month' : ` every ${p.duration_months} months`}.
+                Cancel any time before then and you pay nothing.
+              </p>
               {saved > 0 && (
                 <span className="badge gold" style={{ alignSelf: 'flex-start' }}>Saves {inr(saved)} vs monthly</span>
               )}

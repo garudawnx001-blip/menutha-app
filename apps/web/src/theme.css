@@ -2015,3 +2015,42 @@ select.code-input:focus { border-color: var(--primary); }
 .inline-error { color: var(--error); font-size: 13.5px; line-height: 1.4; margin: 0 0 10px; }
 /* Every input holds the touch floor, whatever padding a page gives it. */
 .code-input { min-height: 48px; }
+/* ── The plan card's offer line ───────────────────────────────────────────
+   Everything else on a plan card describes a month from now. This describes
+   today, which is the question actually being asked, so it gets the largest
+   type on the card and sits above the feature list -- the decision is made
+   here, not on the features. */
+.plan-today {
+  display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px;
+  padding: 10px 12px; border-radius: 12px;
+  background: var(--gold-soft, rgba(201, 160, 78, 0.10));
+  border: 1px solid rgba(201, 160, 78, 0.34);
+}
+/* The price they are NOT paying. Muted and struck: it has to be legible
+   enough to be believed and quiet enough not to compete with the ₹0. */
+.plan-today-was { color: var(--text-muted); font-size: 14px; text-decoration-thickness: 1.5px; }
+.plan-today-now { font-size: 21px; line-height: 1.1; color: var(--ink); }
+.plan-today-free { font-size: 12.5px; color: #8a6a25; font-weight: 700; letter-spacing: 0.02em; }
+
+/* The offer in one sentence, for somebody reading at the end of service. */
+.plan-plain { font-size: 13.5px; line-height: 1.5; margin: 0; color: var(--text-muted); }
+.plan-plain strong { color: var(--ink); }
+
+/* ONE recommendation. A page where every card shouts has no recommendation. */
+.badge.plan-pick {
+  margin-left: 8px; vertical-align: middle;
+  background: rgba(217, 119, 87, 0.12); color: var(--primary);
+  border: 1px solid rgba(217, 119, 87, 0.34);
+  font-size: 10.5px; letter-spacing: 0.04em; text-transform: uppercase; font-weight: 800;
+}
+
+/* The refundable verification note. Razorpay runs a small token debit to
+   register the mandate and refunds it automatically -- we cannot set that
+   amount, so the only honest fix is to say what it is BEFORE the owner sees
+   it on the checkout sheet and reads it as a charge. */
+.plan-verify {
+  display: flex; gap: 8px; align-items: flex-start;
+  font-size: 12.5px; line-height: 1.5; color: var(--text-muted);
+  margin: 8px 0 0;
+}
+.plan-verify strong { color: var(--ink); }
