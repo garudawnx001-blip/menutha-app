@@ -359,118 +359,26 @@ export function PlanScreen({ preview }: { preview?: boolean } = {}) {
         theme: { color: '#D97757' },
 
         /**
-         * WHICH METHOD THE OWNER SEES FIRST.
+         * NO METHOD CONFIG. Razorpay's default checkout, on purpose.
          *
-         * This is an ORDERING HINT, not a switch. Razorpay decides what a
-         * subscription mandate can actually be registered with -- Cards,
-         * UPI AutoPay and Emandate -- and which of those your account may
-         * offer is set in the Razorpay Dashboard, not here. Passing a block
-         * for a method the account has disabled shows nothing; it does not
-         * enable it.
+         * A config.display block lived here that ordered UPI before Card and
+         * excluded the scan-QR tab, because a QR cannot register a subscription
+         * mandate and the one shown errored when scanned.
          *
-         * UPI first because that is what a restaurant owner in Hospet has on
-         * their phone. Choosing UPI sends an approval request INTO their UPI
-         * app, which they accept once -- that is the collect flow, and it is
-         * what makes autopay feel like a normal UPI payment rather than a
-         * form. Card second, for anyone who would rather use one.
+         * It cost far more than it bought. A block whose instruments match
+         * nothing renders EMPTY and Razorpay drops it, so asking for one UPI
+         * flow and getting none of it removed the whole UPI section -- and with
+         * show_default_blocks false there was nothing behind it. Desktop checkout
+         * went to Cards only: no UPI, no EMandate, nothing. Trading every payment
+         * method for the absence of one confusing tab.
          *
-         * DELIBERATELY NOT CLAIMING A QR. UPI AutoPay mandates are not
-         * registered by scanning a QR -- Razorpay does not list it as a
-         * subscription authorisation method -- so a "scan to pay" block here
-         * would render an empty section and teach the owner the page is
-         * broken.
+         * So the default list stands, QR included. Its mandate error is a
+         * Razorpay quirk on one sub-tab; the owner can still pay by any of the
+         * other methods on the sheet. Do not narrow this again without being
+         * able to SEE the rendered sheet afterwards -- what a block resolves to
+         * depends on the account, the device and NPCI's rules on the day, and
+         * none of those are visible from here.
          */
-        config: {
-          display: {
-            blocks: {
-              /**
-               * UPI WITHOUT THE QR TAB, and `flows` is what makes that
-               * possible: the instrument takes ["collect"] | ["intent"] |
-               * ["qr"], so the sub-tabs are ours to choose rather than
-               * Razorpay's to decide.
-               *
-               * The QR is removed because it does not work here. A subscription
-               * mandate cannot be registered by scanning -- the code renders,
-               * the diner's app opens it, and it fails. An option that is
-               * present and broken is worse than one that is absent: the owner
-               * has no way to know which of the three tabs is the real one, so
-               * they try the most familiar and conclude the product is broken.
-               *
-               * Intent is dropped too, for a duller reason: it hands off to a
-               * UPI app installed on the SAME device, and this checkout is
-               * being opened on a laptop at the till. There is no app there to
-               * hand off to.
-               *
-               * Which leaves collect -- type the UPI id, approve the request
-               * in the phone already in their pocket. See the note in the
-               * report about NPCI's deprecation of this flow: it is the right
-               * choice today and it is on a clock.
-               */
-              /**
-               * NO `flows` FILTER ANY MORE, and removing it is the fix.
-               *
-               * This asked for flows: ["collect"] and the desktop checkout came
-               * back showing Cards only -- UPI gone entirely, not just its QR
-               * tab. The mechanism: a block whose instruments match NOTHING
-               * renders empty, and Razorpay drops an empty block. Asking for
-               * exactly one UPI flow and getting zero of it turned the whole
-               * UPI section into nothing.
-               *
-               * Why zero: NPCI deprecated UPI Collect on 28 February 2026 and
-               * Razorpay's own docs name Intent and QR as the replacements. On
-               * a DESKTOP there is no app for Intent to hand off to, so if
-               * collect really is switched off for this account, the only UPI
-               * flow a laptop can offer is the very QR we were excluding.
-               *
-               * Which makes the previous config self-defeating: it asked for
-               * the one flow that may no longer exist and hid the only one
-               * that does.
-               *
-               * So: no flows filter. Razorpay renders whichever UPI flows it
-               * can actually serve on the device in front of it. The QR tab
-               * may come back on desktop -- and a confusing extra tab is a far
-               * smaller problem than a checkout with no UPI at all, which is
-               * blocking a real signup right now.
-               */
-              upi: {
-                name: 'Pay using UPI',
-                instruments: [{ method: 'upi' }],
-              },
-              card: { name: 'Pay using a card', instruments: [{ method: 'card' }] },
-            },
-            sequence: ['block.upi', 'block.card'],
-            /**
-             * FALSE, and this is the change that makes it look like Netflix.
-             *
-             * It was true, which appends Razorpay's default list underneath --
-             * so the two blocks above were a preference, not a restriction,
-             * and every other method reappeared below them including a second
-             * UPI section with the QR tab we just removed. Hiding the QR in
-             * one block while the default block re-added it is precisely the
-             * confusion this is meant to end.
-             *
-             * The cost, stated plainly: enabling a new method in the Razorpay
-             * Dashboard will NOT show up here any more. It needs a line in
-             * `blocks` as well. That is the trade for a checkout that shows
-             * exactly two ways to pay and no dead ends.
-             */
-            /**
-             * TRUE AGAIN, as a safety net rather than a preference.
-             *
-             * At false, our two blocks are the WHOLE checkout -- so when the
-             * UPI block came back empty there was nothing behind it and the
-             * sheet showed Cards alone. At true, Razorpay's own method list
-             * renders underneath ours, which means a block of ours failing to
-             * match can no longer remove a payment method from the page.
-             *
-             * The cost is the one noted before: the default list can
-             * reintroduce methods we did not order, the QR tab among them.
-             * That was an acceptable price for a tidy sheet when the sheet
-             * worked. It is not a price worth paying to keep UPI off it.
-             */
-            preferences: { show_default_blocks: true },
-          },
-        },
         /**
          * THE LAST JUNCTION: mandate signed, now let them in.
          *
