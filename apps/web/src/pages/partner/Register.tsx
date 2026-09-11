@@ -340,8 +340,13 @@ export function Register({ previewPhase }: { previewPhase?: Phase } = {}) {
           <button className={`btn btn-primary btn-block auth-primary${busy ? ' is-busy' : ''}`} disabled={busy} onClick={submit}>
             Start 30-day free trial
           </button>
+          {/* Was "Full Enterprise features for 30 days · no card needed".
+              Both halves had stopped being true: the trial runs at the tier
+              they choose, and the gate on the next screen asks for an autopay
+              mandate before anything opens. Promising the opposite here only
+              moves the surprise thirty seconds later, where it costs more. */}
           <p className="dim auth-note">
-            Full Enterprise features for 30 days · no card needed · zero commission always.
+            Every plan free for 30 days · zero commission always · cancel any time.
           </p>
         </div>
         )}

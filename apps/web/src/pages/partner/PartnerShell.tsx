@@ -383,7 +383,13 @@ export function PartnerPreviewProvider({ children }: { children: React.ReactNode
     id: 'preview', name: 'The Green Fork', city: 'Bengaluru', address: '12 Residency Road',
     phone: '98765 43210', gstin: '29ABCDE1234F1Z5', upi_vpa: 'greenfork@okhdfcbank', upi_account_type: 'merchant',
     open_time: '11:00', close_time: '23:00', cuisine_tags: 'North Indian · South Indian · Chinese',
-    plan_tier: 'trial', plan_status: 'trialing', is_open: true,
+    // ENTERPRISE ON PURPOSE, and it must stay named. A trial now runs at the
+    // tier the owner chose rather than at a blanket Enterprise, and the string
+    // 'trial' this fixture used to carry is not a tier at all -- it falls back
+    // to Basic, which would silently drop Analytics, Excel upload and outlets
+    // out of every preview screenshot. The preview's job is to draw the whole
+    // product, so it says which tier that is.
+    plan_tier: 'enterprise', plan_status: 'trialing', is_open: true,
     trial_ends_at: new Date(Date.now() + 25 * 864e5).toISOString(),
     // The fixture is a HEALTHY restaurant mid-trial, so it must carry the
     // mandate -- without it the entitlement is `setup` and the preview would

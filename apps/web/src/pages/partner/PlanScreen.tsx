@@ -120,6 +120,9 @@ export function PlanScreen({ preview }: { preview?: boolean } = {}) {
   const [plans, setPlans] = useState<Plan[]>([]);
   const [state, setState] = useState<PlanState | null>(null);
   const [history, setHistory] = useState<{ event_type: string; processed_at: string }[]>([]);
+  /** Set when the history read fails, so an empty panel is never mistaken
+   *  for "nothing has ever been charged". */
+  const [historyError, setHistoryError] = useState('');
   const [busyPlan, setBusyPlan] = useState('');
   const [months, setMonths] = useState<number>(1);
   const [error, setError] = useState('');
@@ -161,7 +164,9 @@ export function PlanScreen({ preview }: { preview?: boolean } = {}) {
       setRestaurant({ id: 'preview', name: 'The Green Fork' } as any);
       setPlans(PREVIEW_PLANS as any);
       setState({
-        plan_tier: 'trial', plan_status: 'trialing', grace_until: null, addons: [],
+        // Enterprise, not 'trial' -- see PartnerShell's fixture. A trial runs
+        // at the chosen tier now, and 'trial' is not one of them.
+        plan_tier: 'enterprise', plan_status: 'trialing', grace_until: null, addons: [],
         trial_ends_at: new Date(Date.now() + 25 * 864e5).toISOString(),
         // A healthy mid-trial fixture: autopay already armed, or the preview
         // would show its own subject as locked.
@@ -216,12 +221,43 @@ export function PlanScreen({ preview }: { preview?: boolean } = {}) {
     const liveMonths = (planRows ?? []).find((pr: any) => pr.id === live?.plan_id)?.duration_months;
     if (liveMonths) setMonths(liveMonths as number);
 
-    const { data: events } = await supabase
-      .from('subscription_events')
-      .select('event_type, processed_at')
-      .order('processed_at', { ascending: false })
-      .limit(10);
-    setHistory(events ?? []);
+    /**
+     * THIS PANEL COULD NEVER HAVE SHOWN ANYTHING.
+     *
+     * It read `subscription_events` straight from the client. That table has
+     * RLS on and NO policies -- service-role only, on purpose, because its
+     * `payload` column is the raw Razorpay event. So the read came back empty
+     * for everybody, always, and every paying restaurant was told "No billing
+     * events yet" however many times it had been charged.
+     *
+     * Worth noticing what the old query did NOT have: any filter by
+     * restaurant. The only thing standing between it and every subscription
+     * event on the platform was the RLS that made it return nothing. Anyone
+     * "fixing" the empty panel with a permissive policy would have shipped a
+     * cross-restaurant leak.
+     *
+     * get_billing_history is manager-checked, scoped to this restaurant, and
+     * returns the two columns rendered below and never the payload.
+     */
+    const { data: events, error: histErr } = await supabase
+      .rpc('get_billing_history', { p_restaurant_id: r.id, p_limit: 10 });
+    /**
+     * TWO KINDS OF FAILURE, and only one of them is worth a red line.
+     *
+     * The function arrives with a migration the owner runs by hand, so until
+     * they do, this comes back PGRST202/42883 -- "no such function". That is
+     * not a fault the owner can do anything about, and it leaves them exactly
+     * where they were an hour ago, so it reads as the empty state rather than
+     * as an error.
+     *
+     * Anything else IS worth saying. An owner who cannot see their history
+     * should be told that, not shown an empty list that reads as "you have
+     * never been charged".
+     */
+    const notYetDeployed = /PGRST202|42883|could not find the function/i
+      .test(String((histErr as any)?.code ?? '') + ' ' + String(histErr?.message ?? ''));
+    setHistoryError(histErr && !notYetDeployed ? 'Could not load your billing history just now.' : '');
+    setHistory((events ?? []) as { event_type: string; processed_at: string }[]);
     setLoading(false);
   };
 
@@ -546,11 +582,17 @@ export function PlanScreen({ preview }: { preview?: boolean } = {}) {
               ? 'Free for your first 30 days'
               : `Free for ${daysLeft(ent.trialEndsAt)} more day(s)`}
           </strong>
+          {/* NAME THE TIER. A trial runs at the plan they chose, so this is a
+              statement about their account rather than about the offer, and an
+              owner comparing what they can see against what they remember
+              buying should not have to work it out from which buttons are
+              greyed. `ent.tier` is a bare key ('growth'); capitalised in CSS
+              rather than mapped, because the three keys are already the three
+              words. */}
           <p className="muted" style={{ fontSize: 14, margin: '6px 0 0' }}>
-            Every plan below starts free — any tier, any billing cycle. Nothing is
-            charged today: you set up autopay now and the first payment is taken
-            when the free period ends. Cancel any time before then and you pay
-            nothing at all.
+            You are on the <strong style={{ textTransform: 'capitalize' }}>{ent.tier}</strong> plan,
+            free until your trial ends — then it is charged at the price below and nothing
+            about your account changes. Cancel any time before then and you pay nothing at all.
           </p>
         </div>
       )}
@@ -750,7 +792,9 @@ export function PlanScreen({ preview }: { preview?: boolean } = {}) {
 
       <h2 className="cat-heading">Payment history</h2>
       <div className="glass" style={{ padding: 16 }}>
-        {history.length === 0 ? (
+        {historyError ? (
+          <p className="field-error" style={{ fontSize: 14, margin: 0 }}>{historyError}</p>
+        ) : history.length === 0 ? (
           <p className="muted" style={{ fontSize: 14 }}>No billing events yet.</p>
         ) : (
           history.map((h, i) => (

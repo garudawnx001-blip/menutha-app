@@ -47,7 +47,7 @@ export function Billing() {
    * actually charged, because that is the figure somebody is about to be
    * asked to pay.
    */
-  const changeBoxes = async (next: number) => {
+  const changeBoxes = (next: number) => guard(async () => {
     const n = Math.max(0, next);
     if (!bill || parcelBusy) return;
     const prev = parcelBoxes;
@@ -77,7 +77,7 @@ export function Billing() {
       setParcelBoxes(prev);
       setParcelNote(e?.message ?? 'Could not change the packing charge.');
     } finally { setParcelBusy(false); }
-  };
+  });
 
   const [billQr, setBillQr] = useState
 ('');
@@ -150,7 +150,7 @@ export function Billing() {
    */
   const waived = chosen.length > 0 && chosen.every((o) => (o as any).service_waived === true);
 
-  const toggleWaive = async (next: boolean) => {
+  const toggleWaive = (next: boolean) => guard(async () => {
     if (!chosen.length || waiving) return;
     setWaiving(true); setError('');
     try {
@@ -164,7 +164,7 @@ export function Billing() {
         ? 'Removing the service charge needs the database update that is staged for this restaurant. Nothing has changed on this bill.'
         : (e?.message ?? 'Could not change the service charge.'));
     } finally { setWaiving(false); }
-  };
+  });
   /**
    * A DISCOUNT CANNOT BE NEGATIVE, and this was only clamped at the top.
    *
@@ -271,7 +271,7 @@ export function Billing() {
    */
   const [acChoice, setAcChoice] = useState<boolean | null>(null);
 
-  const applyAc = async (v: boolean | null) => {
+  const applyAc = (v: boolean | null) => guard(async () => {
     if (busy) return;
     setAcChoice(v);
     // null = back to auto, which the server expresses as a null override. The
@@ -290,7 +290,7 @@ export function Billing() {
     } catch (e: any) {
       setError(e?.message ?? 'Could not change the AC setting.');
     } finally { setBusy(false); }
-  };
+  });
 
   const printData = (): BillData => {
     const b = bill!;

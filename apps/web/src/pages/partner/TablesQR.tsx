@@ -293,6 +293,7 @@ export function TablesQR() {
                     <label className="dim" style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 6, marginTop: 6 }}>
                       Seats
                       <input
+                        key={`seats-${t.id}-${t.seating_capacity ?? ''}`}
                         className="code-input"
                         inputMode="numeric"
                         placeholder="—"
@@ -301,10 +302,19 @@ export function TablesQR() {
                         onBlur={async (e) => {
                           const raw = e.target.value.trim();
                           const next = raw === '' ? null : Number(raw);
-                          if (next !== null && !Number.isFinite(next)) return;
+                          if (next !== null && !Number.isFinite(next)) {
+                            setError(`Seats has to be a number — ${t.label} is unchanged.`);
+                            load();
+                            return;
+                          }
                           if ((t.seating_capacity ?? null) === next) return;
-                          try { await setTableCapacity(t.id, next); load(); }
-                          catch { /* the field keeps what was typed; next blur retries */ }
+                          try {
+                            setError('');
+                            await setTableCapacity(t.id, next);
+                          } catch (err: any) {
+                            setError(err?.message ?? `Could not save the seat count for ${t.label}.`);
+                          }
+                          load();
                         }}
                       />
                     </label>
@@ -322,20 +332,33 @@ export function TablesQR() {
                     <div className="glass" style={{ padding: 10, marginTop: 8, display: 'grid', gap: 8 }}>
                       <label className="dim" style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
                         Type
+                        {/* KEYED ON THE STORED VALUE, and that is not cosmetic.
+                            These are uncontrolled inputs, so React keeps
+                            whatever the user picked on screen even when the
+                            save failed -- staff would set an AC charge, watch
+                            it stick, and every bill from that table would be
+                            short by it until somebody reconciled the day.
+                            Folding the stored value into the key remounts the
+                            control after each save, so what is on screen is
+                            always what the database actually holds. */}
                         <select
+                          key={`kind-${t.id}-${t.table_kind ?? ''}-${t.is_ac ? 1 : 0}`}
                           className="code-input" style={{ flex: 1, padding: '4px 8px', fontSize: 12.5 }}
                           defaultValue={t.table_kind ?? (t.is_ac ? 'ac' : 'non_ac')}
                           onChange={async (e) => {
                             const v = e.target.value;
                             try {
+                              setError('');
                               await updateTableSetup(t.id, {
                                 table_kind: v,
                                 // Leaving a charge on a table that is no longer
                                 // AC would bill for cooling it does not have.
                                 ...(v === 'ac' ? {} : { ac_charge_value: 0 }),
                               });
-                              load();
-                            } catch { /* next change retries */ }
+                            } catch (err: any) {
+                              setError(err?.message ?? `Could not change the type of ${t.label}.`);
+                            }
+                            load();
                           }}
                         >
                           <option value="non_ac">Non-AC</option>
@@ -347,11 +370,17 @@ export function TablesQR() {
                       <label className="dim" style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
                         Availability
                         <select
+                          key={`avail-${t.id}-${t.availability ?? ''}`}
                           className="code-input" style={{ flex: 1, padding: '4px 8px', fontSize: 12.5 }}
                           defaultValue={t.availability ?? 'available'}
                           onChange={async (e) => {
-                            try { await updateTableSetup(t.id, { availability: e.target.value }); load(); }
-                            catch { /* next change retries */ }
+                            try {
+                              setError('');
+                              await updateTableSetup(t.id, { availability: e.target.value });
+                            } catch (err: any) {
+                              setError(err?.message ?? `Could not change availability for ${t.label}.`);
+                            }
+                            load();
                           }}
                         >
                           <option value="available">Available</option>
@@ -365,23 +394,39 @@ export function TablesQR() {
                         <label className="dim" style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
                           AC charge
                           <input
+                            key={`acval-${t.id}-${t.ac_charge_value ?? 0}`}
                             className="code-input" inputMode="decimal"
                             style={{ width: 78, padding: '4px 8px', fontSize: 12.5 }}
                             defaultValue={t.ac_charge_value ?? 0}
                             onBlur={async (e) => {
                               const v = Number(e.target.value.trim() || 0);
-                              if (!Number.isFinite(v) || v < 0) return;
+                              if (!Number.isFinite(v) || v < 0) {
+                                setError(`An AC charge has to be a number that is not negative — ${t.label} is unchanged.`);
+                                load();
+                                return;
+                              }
                               if (Number(t.ac_charge_value ?? 0) === v) return;
-                              try { await updateTableSetup(t.id, { ac_charge_value: v }); load(); }
-                              catch { /* next blur retries */ }
+                              try {
+                                setError('');
+                                await updateTableSetup(t.id, { ac_charge_value: v });
+                              } catch (err: any) {
+                                setError(err?.message ?? `Could not save the AC charge for ${t.label}.`);
+                              }
+                              load();
                             }}
                           />
                           <select
+                            key={`ackind-${t.id}-${t.ac_charge_kind ?? ''}`}
                             className="code-input" style={{ width: 66, padding: '4px 8px', fontSize: 12.5 }}
                             defaultValue={t.ac_charge_kind ?? 'flat'}
                             onChange={async (e) => {
-                              try { await updateTableSetup(t.id, { ac_charge_kind: e.target.value }); load(); }
-                              catch { /* next change retries */ }
+                              try {
+                                setError('');
+                                await updateTableSetup(t.id, { ac_charge_kind: e.target.value });
+                              } catch (err: any) {
+                                setError(err?.message ?? `Could not change the AC charge type for ${t.label}.`);
+                              }
+                              load();
                             }}
                           >
                             <option value="flat">₹</option>

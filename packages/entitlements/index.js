@@ -10,9 +10,11 @@
  *
  * ── THE FOUR STATES ───────────────────────────────────────────────────────
  *
- *   trial    30 days from sign-up. FULL ENTERPRISE ACCESS, deliberately: the
- *            point of a trial is to try the product, and a restaurant that
- *            never sees reservations or chat cannot decide it wants them.
+ *   trial    30 days free, at THE TIER THEY CHOSE. A Basic sign-up trials
+ *            Basic, a Growth sign-up trials Growth. The trial is the paid
+ *            product with the money switched off, not a different product --
+ *            so nothing a restaurant relies on for thirty days disappears on
+ *            day thirty-one.
  *   active   the tier they actually pay for.
  *   grace    a charge failed. Everything keeps working for GRACE_DAYS while
  *            the banner asks them to renew -- a card that expired on a
@@ -86,9 +88,42 @@ export const ADDON_FEATURES = {
 
 export const GRACE_DAYS = 7;
 
-/** The tier a trial runs at. Enterprise, so the trial shows the whole
- *  product; see the note at the top. */
-export const TRIAL_TIER = 'enterprise';
+/**
+ * WHAT A TRIAL RUNS AT WHEN NOTHING SAYS. The lowest tier, and only ever as a
+ * fallback -- a trial normally runs at `plan_tier`, the tier of the plan the
+ * owner picked and armed autopay for.
+ *
+ * This used to be a flat 'enterprise' for every trial, on the reasoning that a
+ * restaurant cannot want a feature it has never seen. That reasoning sells the
+ * product and then takes it away: thirty days of Analytics, white-label and
+ * multiple outlets, followed by a Basic charge that silently removes all
+ * three. The owner did not downgrade and will not read it as one -- they will
+ * read it as the product breaking, on the day we first took their money.
+ *
+ * So the trial is now the tier they chose, and the first charge changes
+ * nothing but the balance. Upselling is a job for the plan screen, which can
+ * show what the higher tiers add without promising it for free first.
+ *
+ * `basic` rather than `enterprise` as the fallback, because a fallback fires
+ * exactly when we do not know what was bought, and the safe answer to "which
+ * tier did they pay for?" when unknown is the smallest one.
+ */
+export const TRIAL_FALLBACK_TIER = 'basic';
+
+/**
+ * The names that are actually tiers. A Set rather than `TIER_FEATURES[t]`,
+ * because that test answers YES for every key on Object.prototype: a plan_tier
+ * of 'constructor' or 'toString' would have passed it, then been spread into
+ * `new Set(aFunction)` and thrown "is not iterable" -- crashing the gate for
+ * that restaurant rather than denying it. A gate that can be crashed by its
+ * own input is worth one extra line to make unreachable.
+ */
+const TIER_NAMES = new Set(Object.keys(TIER_FEATURES));
+
+/** The tier named on the row if it is a real one, else `fallback`. Shared by
+ *  every branch below so they cannot drift apart. `plan_tier` defaults to the
+ *  string 'trial' on a fresh restaurant, which is not a tier and lands here. */
+const knownTier = (t, fallback) => (TIER_NAMES.has(t) ? t : fallback);
 
 const toTime = (v) => (v ? new Date(v).getTime() : null);
 
@@ -129,10 +164,23 @@ export function entitlementsFor(r, now = Date.now()) {
   let tier;
   if (status === 'active') {
     state = 'active';
-    tier = TIER_FEATURES[r?.plan_tier] ? r.plan_tier : 'basic';
+    tier = knownTier(r?.plan_tier, 'basic');
   } else if (trialLive && mandate) {
+    /**
+     * THE TIER THEY CHOSE, not the best one we have.
+     *
+     * `plan_tier` is written by the webhook from the plan row the mandate was
+     * armed against -- subscription.authenticated records the chosen plan and
+     * leaves the status trialing. This branch cannot be reached before that
+     * happens, because it requires the mandate, and the mandate and the tier
+     * are written by the same webhook call. So by the time anyone is in a
+     * real trial, `plan_tier` is the tier they picked.
+     *
+     * The fallback covers the gap between those two writes and any row that
+     * never went through the webhook: unknown tier means Basic, never more.
+     */
     state = 'trial';
-    tier = TRIAL_TIER;
+    tier = knownTier(r?.plan_tier, TRIAL_FALLBACK_TIER);
   } else if (trialLive) {
     /**
      * A TRIAL RUNNING WITHOUT A MANDATE, which is the state this whole change
@@ -150,7 +198,7 @@ export function entitlementsFor(r, now = Date.now()) {
     tier = 'none';
   } else if (graceLive) {
     state = 'grace';
-    tier = TIER_FEATURES[r?.plan_tier] ? r.plan_tier : 'basic';
+    tier = knownTier(r?.plan_tier, 'basic');
   } else {
     state = 'locked';
     tier = 'none';
@@ -165,7 +213,7 @@ export function entitlementsFor(r, now = Date.now()) {
    */
   const barred = state === 'setup' || state === 'locked';
 
-  const features = new Set(barred ? [] : TIER_FEATURES[tier] ?? []);
+  const features = new Set(barred || !TIER_NAMES.has(tier) ? [] : TIER_FEATURES[tier]);
   if (!barred) {
     for (const a of addons) for (const f of ADDON_FEATURES[a] ?? []) features.add(f);
   }
@@ -210,14 +258,16 @@ export function applySubscriptionEvent(eventType, sub, now = Date.now(), trialEn
      * THE MANDATE IS SIGNED, and no money has moved: this is the zero-rupee
      * authentication transaction, with the first real charge on day 30.
      *
-     * Setting 'active' here used to END the free trial the moment the owner
-     * armed autopay -- somebody on the Enterprise trial who picked Basic lost
-     * Analytics and Excel upload about ten seconds after signing up, having
-     * paid nothing and been told nothing. Arming a mandate is not the same
-     * event as paying for a tier.
+     * Setting 'active' here would end the free trial the moment the owner
+     * armed autopay: thirty days they were promised, spent, with nothing
+     * charged and nothing said. Arming a mandate is not the same event as
+     * paying for a tier, and the status has to keep them apart -- "your trial
+     * ends in 12 days" and "you are subscribed" are different sentences, and
+     * only plan_status knows which one is true.
      *
-     * plan_tier is still recorded: it is the plan they chose, and it is what
-     * the first charge will activate. Only the STATUS waits.
+     * plan_tier IS recorded here, and recording it is what makes the trial run
+     * at the chosen tier rather than at a blanket Enterprise. See
+     * TRIAL_FALLBACK_TIER. Only the STATUS waits.
      *
      * A lapsed restaurant re-subscribing has no trial left, and for them
      * authentication genuinely is the thing that revives the account.

@@ -14,24 +14,59 @@ const DAY = 864e5;
 
 // ── Gating matrix ──────────────────────────────────────────────────────────
 
-test('active trial grants full Enterprise — the trial shows the whole product', () => {
-  const e = entitlementsFor(
-    { plan_status: 'trialing', trial_ends_at: new Date(NOW + 5 * DAY).toISOString(),
-      has_mandate: true },
-    NOW,
-  );
-  assert.equal(e.state, 'trial');
-  assert.equal(e.tier, 'enterprise');
-  assert.ok(hasFeature(e, 'excel_upload'));
-  assert.ok(hasFeature(e, 'analytics'));
-  // The trial used to run at Growth, so white_label was asserted ABSENT here.
-  // A restaurant that never sees a feature cannot decide it wants to pay for
-  // it, so the trial now runs at the top tier -- reservations, chat, multiple
-  // outlets and all.
+const trialing = (extra) => ({
+  plan_status: 'trialing',
+  trial_ends_at: new Date(NOW + 5 * DAY).toISOString(),
+  has_mandate: true,
+  ...extra,
+});
+
+test('a trial runs at the tier they chose, not at the best one we have', () => {
+  // The rule, stated once: a trial is the paid product with the money switched
+  // off. It used to be a blanket Enterprise for everyone, which meant a Basic
+  // sign-up spent thirty days with Analytics and white-label and then lost
+  // both on the day we first charged them -- a downgrade they never asked for,
+  // arriving as the product breaking.
+  for (const tier of ['basic', 'growth', 'enterprise']) {
+    const e = entitlementsFor(trialing({ plan_tier: tier }), NOW);
+    assert.equal(e.state, 'trial', tier + ' should be trialing');
+    assert.equal(e.tier, tier);
+    assert.ok(e.canOrder);
+    // and exactly the paid set for that tier, nothing more
+    const paid = entitlementsFor({ plan_status: 'active', plan_tier: tier }, NOW);
+    assert.deepEqual([...e.features].sort(), [...paid.features].sort());
+  }
+});
+
+test('a trial NEVER resolves to a tier above the one chosen', () => {
+  // The property the whole change exists to hold. Anything unrecognised --
+  // the literal 'trial' default on a fresh restaurant row, a typo, a tier
+  // written by some future plan we have not taught this file about -- lands on
+  // the LOWEST tier. An unknown purchase resolving upward is how a trial
+  // silently becomes free Enterprise.
+  for (const bad of [undefined, null, 'trial', 'ENTERPRISE', 'platinum', '', 0]) {
+    const e = entitlementsFor(trialing({ plan_tier: bad }), NOW);
+    assert.equal(e.tier, 'basic', 'plan_tier ' + JSON.stringify(bad) + ' must fall back to basic');
+    assert.ok(!hasFeature(e, 'white_label'), 'and must not carry Enterprise features');
+    assert.ok(!hasFeature(e, 'analytics'), 'nor Growth ones');
+  }
+});
+
+test('a Basic trial is Basic: no excel_upload, no analytics, ordering on', () => {
+  const e = entitlementsFor(trialing({ plan_tier: 'basic' }), NOW);
+  assert.ok(hasFeature(e, 'qr_ordering'));
+  assert.ok(hasFeature(e, 'billing'));
+  assert.ok(!hasFeature(e, 'excel_upload'));
+  assert.ok(!hasFeature(e, 'analytics'));
+  assert.ok(e.canOrder);
+});
+
+test('an Enterprise trial still gets the whole product', () => {
+  const e = entitlementsFor(trialing({ plan_tier: 'enterprise' }), NOW);
   assert.ok(hasFeature(e, 'white_label'));
   assert.ok(hasFeature(e, 'multi_outlet'));
   assert.ok(hasFeature(e, 'reservations'));
-  assert.ok(e.canOrder);
+  assert.ok(hasFeature(e, 'excel_upload'));
 });
 
 test('location is on every tier, and off when locked', () => {
@@ -49,11 +84,16 @@ test('outlet limit: one everywhere except Enterprise', () => {
   assert.equal(outletLimit(entitlementsFor({ plan_status: 'active', plan_tier: 'basic' }, NOW)), 1);
   assert.equal(outletLimit(entitlementsFor({ plan_status: 'active', plan_tier: 'growth' }, NOW)), 1);
   assert.equal(outletLimit(entitlementsFor({ plan_status: 'active', plan_tier: 'enterprise' }, NOW)), Infinity);
-  // A trial runs at Enterprise, so it can open outlets too.
-  assert.equal(
-    outletLimit(entitlementsFor({ plan_status: 'trialing', trial_ends_at: new Date(NOW + DAY).toISOString(), has_mandate: true }, NOW)),
-    Infinity,
-  );
+  // A trial follows its chosen tier here too: an Enterprise trial may open
+  // outlets, a Basic one may not. Under the blanket Enterprise trial, a Basic
+  // sign-up could create outlets it would lose on day 30.
+  const trialAt = (plan_tier) => outletLimit(entitlementsFor(
+    { plan_status: 'trialing', trial_ends_at: new Date(NOW + DAY).toISOString(),
+      has_mandate: true, plan_tier }, NOW));
+  assert.equal(trialAt('enterprise'), Infinity);
+  assert.equal(trialAt('basic'), 1);
+  assert.equal(trialAt('growth'), 1);
+  assert.equal(trialAt(undefined), 1, 'no plan chosen must not unlock outlets');
 });
 
 test('each tier contains the one below it', () => {
@@ -87,7 +127,7 @@ test('a live trial with no mandate is `setup` -- gated, not trialing', () => {
   assert.ok(needsBilling(e));
 });
 
-test('the same trial WITH a mandate is a real Enterprise trial', () => {
+test('the same trial WITH a mandate is a real trial', () => {
   const e = entitlementsFor(
     { plan_status: 'trialing', trial_ends_at: new Date(NOW + 10 * DAY).toISOString(),
       has_mandate: true },
@@ -225,18 +265,38 @@ test('subscription.cancelled → cancelled (locked once trial gone)', () => {
 
 test('signing the mandate mid-trial does NOT end the trial', () => {
   // The zero-rupee authentication transaction. No money has moved, so the
-  // Enterprise trial must survive it -- picking Basic on day one should not
-  // cost the owner Analytics ten seconds later.
+  // thirty free days must survive it -- arming autopay on day one should not
+  // start the clock on a subscription nobody has been charged for.
   const trialEnd = NOW + 30 * DAY;
   const t = applySubscriptionEvent('subscription.authenticated', { plan_id: 'basic' }, NOW, trialEnd);
   assert.equal(t.subStatus, 'authenticated');
   assert.equal(t.restaurant.plan_status, 'trialing');
   assert.equal(t.restaurant.plan_tier, 'basic', 'the chosen plan is still recorded');
 
-  // And the entitlement that results is the full trial, not Basic.
+  // And the trial that results runs at Basic -- the tier they picked, free.
+  // Day 30 charges that same tier, so nothing changes but the balance.
   const e = entitlementsFor({ ...t.restaurant, trial_ends_at: new Date(trialEnd).toISOString(), has_mandate: true }, NOW);
   assert.equal(e.state, 'trial');
-  assert.equal(e.tier, 'enterprise');
+  assert.equal(e.tier, 'basic');
+});
+
+test('the trial tier and the first charge agree, for every tier', () => {
+  // The whole point, end to end: what `authenticated` records is what the
+  // trial runs at, and what a later charge activates. If those two ever
+  // diverge, the owner experiences it as features vanishing on billing day.
+  const trialEnd = NOW + 30 * DAY;
+  for (const tier of ['basic', 'growth', 'enterprise']) {
+    const auth = applySubscriptionEvent('subscription.authenticated', { plan_id: tier }, NOW, trialEnd);
+    const during = entitlementsFor(
+      { ...auth.restaurant, trial_ends_at: new Date(trialEnd).toISOString(), has_mandate: true }, NOW);
+    const charged = applySubscriptionEvent('subscription.charged', { plan_id: tier }, trialEnd);
+    const after = entitlementsFor(
+      { ...charged.restaurant, trial_ends_at: new Date(trialEnd).toISOString(), has_mandate: true }, trialEnd + DAY);
+    assert.equal(during.tier, tier);
+    assert.equal(after.tier, tier);
+    assert.deepEqual([...during.features].sort(), [...after.features].sort(),
+      tier + ': the trial and the paid plan must grant the same thing');
+  }
 });
 
 test('the same mandate AFTER the trial has lapsed does activate', () => {

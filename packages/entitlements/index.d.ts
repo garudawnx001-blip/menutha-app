@@ -1,10 +1,22 @@
 export declare const TIER_FEATURES: Record<string, string[]>;
 export declare const ADDON_FEATURES: Record<string, string[]>;
 export declare const GRACE_DAYS: number;
-/** The tier a trial runs at: Enterprise, so the trial shows the whole product. */
-export declare const TRIAL_TIER: string;
+/**
+ * What a trial runs at when `plan_tier` names nothing real. A trial normally
+ * runs at the tier the owner chose and armed autopay for; this is the floor
+ * for the rows that somehow have no plan, and it is the LOWEST tier on
+ * purpose -- an unknown purchase must never resolve upward.
+ */
+export declare const TRIAL_FALLBACK_TIER: string;
 
 export interface PlanStateInput {
+  /**
+   * The tier this restaurant is on: what it pays for when `active`, and what
+   * its free trial runs at when `trialing` with a mandate. Written by the
+   * webhook from the plan the mandate was armed against. Anything not in
+   * TIER_FEATURES -- including the literal default 'trial' on a fresh row --
+   * resolves to Basic.
+   */
   plan_tier?: string | null;
   plan_status?: string | null;
   trial_ends_at?: string | null;
