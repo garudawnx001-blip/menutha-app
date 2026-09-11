@@ -74,8 +74,19 @@ export function Buffets() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  /** Narrows the chip wall below. Ashwamedha has 165 dishes, and a buffet is
+   *  a dozen of them; without this, putting one together is a scroll-and-scan
+   *  through the whole menu looking for the six paneer dishes. */
+  const [dishQuery, setDishQuery] = useState('');
+
+  const visibleDishes = (() => {
+    const q = dishQuery.trim().toLowerCase();
+    if (!q) return dishes;
+    return dishes.filter((d) => d.name.toLowerCase().includes(q));
+  })();
 
   const load = async () => {
+
     try {
       const [b, m] = await Promise.all([
         fetchBuffets(restaurant.id),
@@ -233,8 +244,22 @@ export function Buffets() {
         <p className="overline" style={{ marginTop: 12, marginBottom: 6 }}>
           What is available ({draft.items.length} selected)
         </p>
+        {/* The box earns its space only on a long menu. On a short one it is
+            another field to look past. */}
+        {dishes.length > 8 && (
+          <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+            <input
+              className="code-input" type="search" style={{ flex: 1 }}
+              placeholder="Search dishes"
+              aria-label="Search dishes to put on this buffet"
+              value={dishQuery} onChange={(e) => setDishQuery(e.target.value)} />
+            {dishQuery && (
+              <button className="btn btn-glass btn-sm" onClick={() => setDishQuery('')}>Clear</button>
+            )}
+          </div>
+        )}
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, maxHeight: 260, overflowY: 'auto' }}>
-          {dishes.map((d) => (
+          {visibleDishes.map((d) => (
             <button
               key={d.id}
               className={draft.items.includes(d.id) ? 'chip active' : 'chip'}
@@ -244,6 +269,16 @@ export function Buffets() {
             </button>
           ))}
         </div>
+        {/* Searching hides chips, including selected ones. The count above
+            still speaks for those, but say plainly that the wall is filtered
+            so an empty-looking picker never reads as a lost buffet. */}
+        {dishQuery.trim() !== '' && (
+          <p className="dim" style={{ marginTop: 6, fontSize: 13 }}>
+            {visibleDishes.length === 0
+              ? `No dish matches “${dishQuery.trim()}”. Clear the search to see all ${dishes.length}.`
+              : `Showing ${visibleDishes.length} of ${dishes.length} dishes. Anything already selected stays on the buffet.`}
+          </p>
+        )}
 
         <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
           <button className="btn btn-primary" disabled={busy} onClick={submit}>

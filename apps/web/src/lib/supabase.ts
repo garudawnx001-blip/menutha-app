@@ -48,10 +48,13 @@ const anonKey =
  * revisiting once sign-up is known-good on the phones that actually matter.
  *
  * GITHUB PAGES DOES NOT EAT THE TOKEN, which was worth checking before
- * blaming it: 404.html re-encodes the path into /?/..., appends the query and
- * the hash verbatim, and index.html puts both back with replaceState in the
- * document head -- before this module is ever evaluated. supabase-js sees the
- * real URL.
+ * blaming it. public/404.html in this repo is the rafgraph redirect hack that
+ * re-encodes a deep link into /?/..., and it would indeed carry the hash --
+ * but it never runs in production: deploy.yml overwrites 404.html with the
+ * built SPA shell. So Pages serves /partner/register#access_token=... as the
+ * app itself, with the URL untouched, and supabase-js reads the real thing.
+ * (The status line on that response is 404, since Pages only knows it as an
+ * unmatched path. Nothing about the fragment or the handshake depends on it.)
  */
 export const supabase = createClient(url, anonKey, {
   auth: {
