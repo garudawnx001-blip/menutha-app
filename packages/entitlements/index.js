@@ -98,31 +98,7 @@ export function entitlementsFor(r, now = Date.now()) {
   const graceUntil = toTime(r?.grace_until);
   const addons = Array.isArray(r?.addons) ? r.addons : [];
 
-  /**
-   * IS THE AUTOPAY MANDATE SIGNED? The caller reads it from `subscriptions`
-   * and hands it in, because this function is pure and deliberately stays so.
-   *
-   * `=== true` RATHER THAN TRUTHY, and that is the whole safety property of
-   * this file. A caller that forgets to pass it sends `undefined`, which
-   * becomes false, which gates. A gate whose default is "open" is not a gate
-   * -- it is a gate-shaped thing that lets through exactly the callers nobody
-   * remembered to update. So the omission fails closed and shows up as a
-   * screen the owner cannot get past, which is loud, rather than as free
-   * Enterprise access, which is silent.
-   */
-  const mandate = r?.has_mandate === true;
-
-  /**
-   * A TRIAL NEEDS A DATE. Null used to mean "unlimited" -- v1 semantics, from
-   * when there was no billing to run out of. Under a hard gate that reading is
-   * a hole big enough to drive the product through: any restaurant row created
-   * outside the sign-up RPC has no trial_ends_at, and would have drawn
-   * permanent free Enterprise without ever seeing a plan.
-   *
-   * Null now means what it says: no trial has been started.
-   */
-  const trialDated = trialEndsAt !== null && trialEndsAt > now;
-  const trialLive = status === 'trialing' && trialDated;
+  const trialLive = status === 'trialing' && (trialEndsAt === null || trialEndsAt > now);
   const graceLive = status === 'grace' && graceUntil !== null && graceUntil > now;
 
   let state;
@@ -130,24 +106,9 @@ export function entitlementsFor(r, now = Date.now()) {
   if (status === 'active') {
     state = 'active';
     tier = TIER_FEATURES[r?.plan_tier] ? r.plan_tier : 'basic';
-  } else if (trialLive && mandate) {
+  } else if (trialLive) {
     state = 'trial';
     tier = TRIAL_TIER;
-  } else if (trialLive) {
-    /**
-     * A TRIAL RUNNING WITHOUT A MANDATE, which is the state this whole change
-     * exists to name. The thirty days are real and ticking, but nothing has
-     * been armed to charge on day thirty -- so left alone it is a countdown to
-     * a silent lockout with no card on file. That is precisely what production
-     * was doing to every new sign-up.
-     *
-     * Held apart from `locked` because the two are opposite messages. This one
-     * is "start your free trial", before anything has been used; locked is
-     * "your subscription ended", after. One screen saying both would be wrong
-     * for whoever is reading it.
-     */
-    state = 'setup';
-    tier = 'none';
   } else if (graceLive) {
     state = 'grace';
     tier = TIER_FEATURES[r?.plan_tier] ? r.plan_tier : 'basic';
@@ -156,34 +117,14 @@ export function entitlementsFor(r, now = Date.now()) {
     tier = 'none';
   }
 
-  /**
-   * `setup` AND `locked` ARE THE SAME ENTITLEMENT and differ only in what the
-   * owner is told. Both hold nothing, and both leave the ability to look and
-   * to subscribe -- the screens stay reachable, the features they gate do not.
-   * Deriving them from one predicate keeps it impossible for a later edit to
-   * grant `setup` something `locked` does not have.
-   */
-  const barred = state === 'setup' || state === 'locked';
-
-  const features = new Set(barred ? [] : TIER_FEATURES[tier] ?? []);
-  if (!barred) {
+  // Locked keeps NOTHING except the ability to look and to subscribe. The
+  // screens stay reachable; the features they gate do not.
+  const features = new Set(state === 'locked' ? [] : TIER_FEATURES[tier] ?? []);
+  if (state !== 'locked') {
     for (const a of addons) for (const f of ADDON_FEATURES[a] ?? []) features.add(f);
   }
 
-  return { tier, state, canOrder: !barred, features, trialEndsAt, graceUntil };
-}
-
-/**
- * THE ROUTING QUESTION, in one place so both surfaces cannot answer it
- * differently: must this restaurant be sent to the plan screen before it may
- * use anything?
- *
- * Exported rather than left as `state === 'setup' || state === 'locked'`
- * written out at each gate, because that expression repeated across two
- * surfaces is two places to forget a state when one is added.
- */
-export function needsBilling(ent) {
-  return ent?.state === 'setup' || ent?.state === 'locked';
+  return { tier, state, canOrder: state !== 'locked', features, trialEndsAt, graceUntil };
 }
 
 export function hasFeature(ent, feature) {
@@ -202,30 +143,12 @@ export function outletLimit(ent) {
   return hasFeature(ent, 'multi_outlet') ? Infinity : 1;
 }
 
-export function applySubscriptionEvent(eventType, sub, now = Date.now(), trialEndsAt = null) {
+export function applySubscriptionEvent(eventType, sub, now = Date.now()) {
   const tier = sub?.plan_id && TIER_FEATURES[sub.plan_id] ? sub.plan_id : 'basic';
-  const trialRunning = trialEndsAt !== null && trialEndsAt > now;
   switch (eventType) {
-    /**
-     * THE MANDATE IS SIGNED, and no money has moved: this is the zero-rupee
-     * authentication transaction, with the first real charge on day 30.
-     *
-     * Setting 'active' here used to END the free trial the moment the owner
-     * armed autopay -- somebody on the Enterprise trial who picked Basic lost
-     * Analytics and Excel upload about ten seconds after signing up, having
-     * paid nothing and been told nothing. Arming a mandate is not the same
-     * event as paying for a tier.
-     *
-     * plan_tier is still recorded: it is the plan they chose, and it is what
-     * the first charge will activate. Only the STATUS waits.
-     *
-     * A lapsed restaurant re-subscribing has no trial left, and for them
-     * authentication genuinely is the thing that revives the account.
-     */
     case 'subscription.authenticated':
       return { subStatus: 'authenticated',
-        restaurant: { plan_tier: tier,
-          plan_status: trialRunning ? 'trialing' : 'active', grace_until: null } };
+        restaurant: { plan_tier: tier, plan_status: 'active', grace_until: null } };
     case 'subscription.activated':
       return { subStatus: 'active',
         restaurant: { plan_tier: tier, plan_status: 'active', grace_until: null } };

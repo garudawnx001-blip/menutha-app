@@ -139,9 +139,6 @@ export function PlanScreen({ preview }: { preview?: boolean } = {}) {
       setState({
         plan_tier: 'trial', plan_status: 'trialing', grace_until: null, addons: [],
         trial_ends_at: new Date(Date.now() + 25 * 864e5).toISOString(),
-        // A healthy mid-trial fixture: autopay already armed, or the preview
-        // would show its own subject as locked.
-        has_mandate: true,
       });
       setLoading(false);
       return;
@@ -176,17 +173,6 @@ export function PlanScreen({ preview }: { preview?: boolean } = {}) {
     // on its three sibling durations.
     const live = (subs ?? []).find((sr: any) => ['authenticated', 'active', 'pending', 'halted'].includes(sr.status));
     setActivePlanId(live?.plan_id ?? null);
-    /**
-     * IS AUTOPAY ARMED -- the same question the shell's gate asks, and
-     * deliberately the same two statuses, so this page and the gate cannot
-     * disagree about whether somebody is let through.
-     *
-     * Narrower than `live` above: that one also counts `pending` and `halted`
-     * so the Cancel button lands on the right card, and a subscription whose
-     * charges are failing is a billing problem rather than proof of a healthy
-     * mandate.
-     */
-    setHasMandate((subs ?? []).some((sr: any) => ['authenticated', 'active'].includes(sr.status)));
     // Open on the duration already being paid for, so a 12-month subscriber
     // does not land on Monthly and think their plan has vanished.
     const liveMonths = (planRows ?? []).find((pr: any) => pr.id === live?.plan_id)?.duration_months;
@@ -204,20 +190,9 @@ export function PlanScreen({ preview }: { preview?: boolean } = {}) {
   useEffect(() => { load(); }, []);
 
   const ent: Entitlements | null = useMemo(
-    () => (state ? entitlementsFor({ ...(state as any), has_mandate: hasMandate }) : null),
-    [state, hasMandate],
+    () => (state ? entitlementsFor(state) : null),
+    [state],
   );
-
-  /**
-   * Did they arrive here because the gate sent them, rather than to look?
-   *
-   * `setup` is a trial running with no mandate -- a brand-new sign-up, and the
-   * only reason this page is the last step of registration. The page then
-   * leads with starting the trial rather than with a price list, because
-   * somebody who has just typed in their restaurant's address is not shopping.
-   */
-  const mustSetUp = ent?.state === 'setup';
-  const lapsed = ent?.state === 'locked';
 
   /** Tier rows only, cheapest tier first then longest term -- add-ons have
    *  their own grid below and no duration. */
@@ -263,9 +238,6 @@ export function PlanScreen({ preview }: { preview?: boolean } = {}) {
    *  offers Cancel. Null while unknown, which is why the card falls back to
    *  the tier match. */
   const [activePlanId, setActivePlanId] = useState<string | null>(null);
-  /** Whether autopay is armed. Feeds the entitlement below, so this page shows
-   *  the same state the rest of the portal is gated on. */
-  const [hasMandate, setHasMandate] = useState(false);
 
   const callFn = async (action: 'subscribe' | 'cancel', planId: string) => {
     setBusyPlan(planId);
@@ -317,55 +289,7 @@ export function PlanScreen({ preview }: { preview?: boolean } = {}) {
         // The forest green here matched nothing -- it was the only place in
         // the payment flow wearing a second brand colour.
         theme: { color: '#D97757' },
-        /**
-         * THE LAST JUNCTION: mandate signed, now let them in.
-         *
-         * Razorpay hands control back the moment the owner finishes; OUR state
-         * changes a moment later, when Razorpay's webhook reaches the edge
-         * function and flips subscriptions.status. So there is nothing to read
-         * yet at the instant this fires, and the old single 2.5s refresh was a
-         * guess at how long that takes -- on a slow hop it reloaded a page
-         * that still said "no plan", which for a new sign-up is the gate
-         * refusing to open for no visible reason.
-         *
-         * So poll, briefly, for the state we actually need rather than for a
-         * fixed delay, and send them to the dashboard the moment it arrives.
-         * If it never does, stop and leave the page showing its own state --
-         * the webhook may be slow or misconfigured, and a spinner that never
-         * ends tells the owner less than a plan page does.
-         */
-        handler: () => {
-          let tries = 0;
-          const poll = async () => {
-            tries += 1;
-            await load();
-            const { data: fresh } = await supabase
-              .from('subscriptions').select('status')
-              .eq('restaurant_id', restaurant!.id)
-              .in('status', ['authenticated', 'active']).limit(1);
-            if ((fresh?.length ?? 0) > 0) { nav('/partner/orders', { replace: true }); return; }
-            if (tries < 6) { setTimeout(poll, 2500); return; }
-            /**
-             * THE MANDATE WENT THROUGH AND OUR CONFIRMATION DID NOT ARRIVE.
-             *
-             * Only Razorpay's webhook flips subscriptions.status, so if it is
-             * slow, misconfigured, or its secret is wrong, this owner has just
-             * authorised autopay and is still looking at the screen that asked
-             * them to. Silence here is the worst possible answer: the obvious
-             * thing to try is paying again, and a second mandate on the same
-             * restaurant is a real mess to unpick.
-             *
-             * So say plainly that the payment side is done, that the wait is
-             * ours, and that refreshing is the whole remedy.
-             */
-            setError(
-              'Autopay was set up successfully — we just have not had confirmation back yet. '
-              + 'This usually clears within a minute: refresh this page and it should show as active. '
-              + 'Please do NOT set up a second plan. If it is still not showing in a few minutes, contact support.',
-            );
-          };
-          setTimeout(poll, 2000);
-        },
+        handler: () => { setTimeout(load, 2500); }, // webhook flips state; refresh shortly after
       });
       rzp.open();
     } catch (e: any) {
@@ -410,46 +334,6 @@ export function PlanScreen({ preview }: { preview?: boolean } = {}) {
           Three facts, the order every streaming service uses: it is free, for
           how long, and that stopping is allowed. What it costs afterwards
           belongs on the card, where it differs per plan. */}
-      {/* THE NEW SIGN-UP, and the reason this page is now the last step of
-          registering rather than a tab somebody might visit.
-
-          `setup` is a trial whose thirty days are already running with nothing
-          armed to charge on day thirty. Under the gate it holds no features,
-          so this is the only page they can reach -- which makes the copy
-          matter: they have just finished typing in their restaurant, they are
-          not shopping, and the honest thing to say is that this is the last
-          step and it costs nothing today.
-
-          Deliberately not phrased as a warning. Nothing has gone wrong. */}
-      {mustSetUp && (
-        <div className="glass" style={{ padding: 16, marginTop: 14, borderColor: 'var(--gold)' }}>
-          <strong style={{ color: '#8a6a25', fontSize: 16 }}>
-            One last step — start your 30-day free trial
-          </strong>
-          <p className="muted" style={{ fontSize: 14, margin: '6px 0 0' }}>
-            Pick a plan below to begin. <strong>You are not charged today</strong> — setting
-            up autopay is what starts the free 30 days, and the first payment is
-            taken only when they end. Cancel any time before then and you pay
-            nothing at all.
-          </p>
-        </div>
-      )}
-
-      {/* COMING BACK AFTER A LAPSE. Different message, same page: they have
-          used the product, so the thing to say is what is paused and that
-          nothing was thrown away. */}
-      {lapsed && (
-        <div className="glass" style={{ padding: 16, marginTop: 14, borderColor: 'rgba(197,64,47,0.5)' }}>
-          <strong style={{ color: 'var(--error)', fontSize: 16 }}>
-            Choose a plan to switch everything back on
-          </strong>
-          <p className="muted" style={{ fontSize: 14, margin: '6px 0 0' }}>
-            Your menu, tables, orders and settings are all exactly as you left them —
-            nothing has been deleted. Ordering is paused until a plan is active.
-          </p>
-        </div>
-      )}
-
       {ent?.state === 'trial' && (
         <div className="glass" style={{ padding: 16, marginTop: 14, borderColor: 'var(--gold)' }}>
           <strong style={{ color: '#8a6a25', fontSize: 16 }}>

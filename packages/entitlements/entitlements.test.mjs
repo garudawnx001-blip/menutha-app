@@ -2,7 +2,6 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   entitlementsFor,
-  needsBilling,
   hasFeature,
   outletLimit,
   applySubscriptionEvent,
@@ -16,8 +15,7 @@ const DAY = 864e5;
 
 test('active trial grants full Enterprise — the trial shows the whole product', () => {
   const e = entitlementsFor(
-    { plan_status: 'trialing', trial_ends_at: new Date(NOW + 5 * DAY).toISOString(),
-      has_mandate: true },
+    { plan_status: 'trialing', trial_ends_at: new Date(NOW + 5 * DAY).toISOString() },
     NOW,
   );
   assert.equal(e.state, 'trial');
@@ -51,7 +49,7 @@ test('outlet limit: one everywhere except Enterprise', () => {
   assert.equal(outletLimit(entitlementsFor({ plan_status: 'active', plan_tier: 'enterprise' }, NOW)), Infinity);
   // A trial runs at Enterprise, so it can open outlets too.
   assert.equal(
-    outletLimit(entitlementsFor({ plan_status: 'trialing', trial_ends_at: new Date(NOW + DAY).toISOString(), has_mandate: true }, NOW)),
+    outletLimit(entitlementsFor({ plan_status: 'trialing', trial_ends_at: new Date(NOW + DAY).toISOString() }, NOW)),
     Infinity,
   );
 });
@@ -63,64 +61,10 @@ test('each tier contains the one below it', () => {
   for (const f of growth) assert.ok(ent.has(f), `enterprise is missing ${f}`);
 });
 
-test('null trial_ends_at means no trial was ever started, not an endless one', () => {
-  // v1 read this as unlimited, from when there was no billing to run out of.
-  // Under the hard gate that is a hole: any restaurant row created outside the
-  // sign-up RPC has no trial_ends_at and would have drawn permanent free
-  // Enterprise without ever seeing a plan.
+test('null trial_ends_at while trialing = unlimited (v1 semantics)', () => {
   const e = entitlementsFor({ plan_status: 'trialing', trial_ends_at: null }, NOW);
-  assert.equal(e.state, 'locked');
-  assert.equal(e.features.size, 0);
-  assert.ok(!e.canOrder);
-});
-
-test('a live trial with no mandate is `setup` -- gated, not trialing', () => {
-  // The thirty days are real and ticking, but nothing is armed to charge on
-  // day thirty. This is what production did to every new sign-up.
-  const e = entitlementsFor(
-    { plan_status: 'trialing', trial_ends_at: new Date(NOW + 10 * DAY).toISOString() },
-    NOW,
-  );
-  assert.equal(e.state, 'setup');
-  assert.equal(e.features.size, 0);
-  assert.ok(!e.canOrder);
-  assert.ok(needsBilling(e));
-});
-
-test('the same trial WITH a mandate is a real Enterprise trial', () => {
-  const e = entitlementsFor(
-    { plan_status: 'trialing', trial_ends_at: new Date(NOW + 10 * DAY).toISOString(),
-      has_mandate: true },
-    NOW,
-  );
   assert.equal(e.state, 'trial');
   assert.ok(e.canOrder);
-  assert.ok(!needsBilling(e));
-});
-
-test('omitting has_mandate gates rather than grants', () => {
-  // The safety property of the whole change: a caller that forgets to pass it
-  // fails CLOSED. Loud (a screen nobody can pass) rather than silent (free
-  // Enterprise for anyone the update missed).
-  const forgot = entitlementsFor(
-    { plan_status: 'trialing', trial_ends_at: new Date(NOW + DAY).toISOString() }, NOW);
-  assert.ok(needsBilling(forgot));
-  // And nothing but an explicit true counts.
-  for (const v of [1, 'yes', {}, null, undefined]) {
-    const e = entitlementsFor(
-      { plan_status: 'trialing', trial_ends_at: new Date(NOW + DAY).toISOString(),
-        has_mandate: v }, NOW);
-    assert.ok(needsBilling(e), `has_mandate: ${String(v)} must not unlock`);
-  }
-});
-
-test('an active subscription never needs the mandate flag', () => {
-  // `active` means Razorpay has charged, so the mandate exists by definition.
-  // Requiring the flag here would lock out every paying restaurant.
-  const e = entitlementsFor({ plan_status: 'active', plan_tier: 'growth' }, NOW);
-  assert.equal(e.state, 'active');
-  assert.ok(e.canOrder);
-  assert.ok(!needsBilling(e));
 });
 
 test('expired trial with no subscription = locked, ordering off', () => {
@@ -223,40 +167,12 @@ test('subscription.cancelled → cancelled (locked once trial gone)', () => {
   assert.equal(e.state, 'locked');
 });
 
-test('signing the mandate mid-trial does NOT end the trial', () => {
-  // The zero-rupee authentication transaction. No money has moved, so the
-  // Enterprise trial must survive it -- picking Basic on day one should not
-  // cost the owner Analytics ten seconds later.
-  const trialEnd = NOW + 30 * DAY;
-  const t = applySubscriptionEvent('subscription.authenticated', { plan_id: 'basic' }, NOW, trialEnd);
-  assert.equal(t.subStatus, 'authenticated');
-  assert.equal(t.restaurant.plan_status, 'trialing');
-  assert.equal(t.restaurant.plan_tier, 'basic', 'the chosen plan is still recorded');
-
-  // And the entitlement that results is the full trial, not Basic.
-  const e = entitlementsFor({ ...t.restaurant, trial_ends_at: new Date(trialEnd).toISOString(), has_mandate: true }, NOW);
-  assert.equal(e.state, 'trial');
-  assert.equal(e.tier, 'enterprise');
-});
-
-test('the same mandate AFTER the trial has lapsed does activate', () => {
-  // A restaurant coming back. There is no trial left to protect, so
-  // authenticating is the thing that revives the account.
-  const t = applySubscriptionEvent('subscription.authenticated', { plan_id: 'growth' }, NOW, NOW - DAY);
-  assert.equal(t.restaurant.plan_status, 'active');
-  assert.equal(t.restaurant.plan_tier, 'growth');
-});
-
 test('unknown event types change nothing', () => {
-
   assert.equal(applySubscriptionEvent('payment.captured', { plan_id: 'growth' }, NOW), null);
 });
 
 test('full lifecycle: trial → paid → halted → grace → lock', () => {
-  // has_mandate: the lifecycle starts AFTER the owner armed autopay, which is
-  // now the only way a trial runs at all.
-  let r = { plan_status: 'trialing', trial_ends_at: new Date(NOW + 2 * DAY).toISOString(),
-            has_mandate: true };
+  let r = { plan_status: 'trialing', trial_ends_at: new Date(NOW + 2 * DAY).toISOString() };
   assert.equal(entitlementsFor(r, NOW).state, 'trial');
 
   const paid = applySubscriptionEvent('subscription.activated', { plan_id: 'growth' }, NOW);

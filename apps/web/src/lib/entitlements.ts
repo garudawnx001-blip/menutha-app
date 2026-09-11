@@ -3,7 +3,6 @@
 export {
   entitlementsFor,
   hasFeature,
-  needsBilling,
   applySubscriptionEvent,
   TIER_FEATURES,
   ADDON_FEATURES,

@@ -215,21 +215,7 @@ export function Register({ previewPhase }: { previewPhase?: Phase } = {}) {
     }
 
     setBusy(false);
-    /**
-     * STEP 4 IS THE PLAN, and this line is the whole reason it was missing.
-     *
-     * Sign-up ended here, on the orders board. The restaurant did have a real
-     * thirty-day trial -- complete_restaurant_signup sets trial_ends_at -- so
-     * the gate let them in and everything worked, which is exactly why nobody
-     * noticed: what it did NOT have was an autopay mandate. Thirty days later
-     * the trial lapsed with nothing on file to charge, and a working
-     * restaurant went dark with no warning and no way for us to bill it.
-     *
-     * So the last step of signing up is arming the trial, not skipping it. The
-     * shell's gate enforces the same thing for anyone who leaves mid-way or
-     * arrives by another route; this is simply the front door.
-     */
-    nav('/partner/plan', { replace: true });
+    nav('/partner/orders', { replace: true });
   };
 
   const stepLabel = phase === 'finish' ? 'Step 2 of 3' : 'Step 3 of 3';
