@@ -3,7 +3,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import QRCode from 'qrcode';
-import { fetchTables, createTable, removeTable, setTableCapacity, setTableAc, type PortalTable } from '../../lib/portalApi';
+import { fetchTables, createTable, removeTable, setTableCapacity, setTableAc, updateTableSetup, type PortalTable } from '../../lib/portalApi';
 import { renderQrSheetHtml, accentFor } from '../../lib/billTemplate';
 import { printBillHtml } from '../../lib/printBill';
 import { usePartner } from './PartnerShell';
@@ -85,6 +85,14 @@ export function TablesQR() {
   // can be genuinely EMPTY -- 0 is not the same answer as "not recorded", and
   // a numeric state would have to pick one of them to start from.
   const [seats, setSeats] = useState('');
+  /** Kind and AC charge at CREATION, so an AC room is priced the moment it
+   *  exists rather than after somebody remembers to come back. */
+  const [kind, setKind] = useState('non_ac');
+  const [acAmt, setAcAmt] = useState('');
+  const [acKind, setAcKind] = useState<'flat' | 'percent'>('flat');
+  /** Which existing table has its editor open. One at a time: a page of open
+   *  forms is a page nobody finishes. */
+  const [editing, setEditing] = useState<string | null>(null);
   const [error, setError] = useState('');
 
   const load = () => fetchTables(restaurant.id).then(setTables).catch((e) => setError(e.message));
@@ -110,8 +118,27 @@ export function TablesQR() {
       const n = seats.trim() === '' ? null : Number(seats.trim());
       if (n !== null && !Number.isFinite(n)) { setError('Seats must be a number.'); return; }
       await createTable(restaurant.id, label.trim(), section.trim() || null, n);
+      /**
+       * The kind and the AC charge are written in a SECOND call, not passed
+       * to createTable.
+       *
+       * createTable already carries its own fallback ladder for a database
+       * without seating_capacity, and threading four more optional columns
+       * through it would mean a fallback for every combination. updateTableSetup
+       * degrades on its own, so the table is created either way and the extra
+       * fields land when the migration has run.
+       */
+      const made = (await fetchTables(restaurant.id)).find((t) => t.label === label.trim());
+      if (made) {
+        await updateTableSetup(made.id, {
+          table_kind: kind,
+          ac_charge_value: kind === 'ac' ? Number(acAmt || 0) : 0,
+          ac_charge_kind: acKind,
+        }).catch(() => { /* the table exists; the extras can be edited */ });
+      }
       setLabel('');
       setSeats('');
+      setAcAmt('');
       load();
     } catch (e: any) { setError(e?.message ?? 'Could not add the table.'); }
   };
@@ -183,6 +210,37 @@ export function TablesQR() {
           placeholder="Seats" value={seats}
           onChange={(e) => setSeats(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && add()} />
+        {/* WHAT KIND OF TABLE, chosen here rather than inferred from the name.
+            "AC 3" and "Hall 2" told us nothing a bill could use. */}
+        <select
+          className="code-input" style={{ width: 132 }}
+          value={kind} onChange={(e) => setKind(e.target.value)}
+          aria-label="Table type"
+        >
+          <option value="non_ac">Non-AC</option>
+          <option value="ac">AC</option>
+          <option value="room">Room</option>
+        </select>
+        {/* THE AC CHARGE, ON THE TABLE, only when the table is one. Priced
+            where the owner already is, so nobody has to find Bill settings. */}
+        {kind === 'ac' && (
+          <>
+            <input
+              className="code-input" style={{ width: 108 }} inputMode="decimal"
+              placeholder="AC charge" value={acAmt}
+              onChange={(e) => setAcAmt(e.target.value)}
+              aria-label="AC charge amount"
+            />
+            <select
+              className="code-input" style={{ width: 74 }}
+              value={acKind} onChange={(e) => setAcKind(e.target.value as 'flat' | 'percent')}
+              aria-label="AC charge kind"
+            >
+              <option value="flat">₹</option>
+              <option value="percent">%</option>
+            </select>
+          </>
+        )}
         <button className="btn btn-primary" style={{ padding: '12px 18px' }} disabled={!label.trim()} onClick={add}>Add table</button>
       </div>
       {!can('multi_qr') && (
@@ -251,7 +309,100 @@ export function TablesQR() {
                       />
                     </label>
                   )}
+                  {/* EDIT ON AN EXISTING TABLE. Every one of these settings
+                      arrived after the tables did, so a create-only form would
+                      leave a restaurant's whole floor on the defaults with no
+                      way to correct them.
+
+                      Collapsed behind Edit, and one open at a time: the row
+                      already carries a QR, a name, seats and four buttons, and
+                      a page of permanently-open forms is a page nobody
+                      finishes. */}
+                  {!t.is_parcel && editing === t.id && (
+                    <div className="glass" style={{ padding: 10, marginTop: 8, display: 'grid', gap: 8 }}>
+                      <label className="dim" style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
+                        Type
+                        <select
+                          className="code-input" style={{ flex: 1, padding: '4px 8px', fontSize: 12.5 }}
+                          defaultValue={t.table_kind ?? (t.is_ac ? 'ac' : 'non_ac')}
+                          onChange={async (e) => {
+                            const v = e.target.value;
+                            try {
+                              await updateTableSetup(t.id, {
+                                table_kind: v,
+                                // Leaving a charge on a table that is no longer
+                                // AC would bill for cooling it does not have.
+                                ...(v === 'ac' ? {} : { ac_charge_value: 0 }),
+                              });
+                              load();
+                            } catch { /* next change retries */ }
+                          }}
+                        >
+                          <option value="non_ac">Non-AC</option>
+                          <option value="ac">AC</option>
+                          <option value="room">Room</option>
+                        </select>
+                      </label>
+
+                      <label className="dim" style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
+                        Availability
+                        <select
+                          className="code-input" style={{ flex: 1, padding: '4px 8px', fontSize: 12.5 }}
+                          defaultValue={t.availability ?? 'available'}
+                          onChange={async (e) => {
+                            try { await updateTableSetup(t.id, { availability: e.target.value }); load(); }
+                            catch { /* next change retries */ }
+                          }}
+                        >
+                          <option value="available">Available</option>
+                          <option value="reserved">Reserved — blocks new scans</option>
+                        </select>
+                      </label>
+
+                      {/* Only on an AC table. A charge field on a Room is a
+                          question with no right answer. */}
+                      {(t.table_kind ?? (t.is_ac ? 'ac' : 'non_ac')) === 'ac' && (
+                        <label className="dim" style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
+                          AC charge
+                          <input
+                            className="code-input" inputMode="decimal"
+                            style={{ width: 78, padding: '4px 8px', fontSize: 12.5 }}
+                            defaultValue={t.ac_charge_value ?? 0}
+                            onBlur={async (e) => {
+                              const v = Number(e.target.value.trim() || 0);
+                              if (!Number.isFinite(v) || v < 0) return;
+                              if (Number(t.ac_charge_value ?? 0) === v) return;
+                              try { await updateTableSetup(t.id, { ac_charge_value: v }); load(); }
+                              catch { /* next blur retries */ }
+                            }}
+                          />
+                          <select
+                            className="code-input" style={{ width: 66, padding: '4px 8px', fontSize: 12.5 }}
+                            defaultValue={t.ac_charge_kind ?? 'flat'}
+                            onChange={async (e) => {
+                              try { await updateTableSetup(t.id, { ac_charge_kind: e.target.value }); load(); }
+                              catch { /* next change retries */ }
+                            }}
+                          >
+                            <option value="flat">₹</option>
+                            <option value="percent">%</option>
+                          </select>
+                        </label>
+                      )}
+                      <p className="dim" style={{ fontSize: 11, margin: 0 }}>
+                        ₹ is charged once per bill. % is worked out on the food subtotal.
+                      </p>
+                    </div>
+                  )}
                   <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
+                    {!t.is_parcel && (
+                      <button
+                        className={editing === t.id ? 'chip active' : 'chip'}
+                        onClick={() => setEditing(editing === t.id ? null : t.id)}
+                      >
+                        {editing === t.id ? 'Done' : '✎ Edit'}
+                      </button>
+                    )}
                     <button className="chip" onClick={() => printCards([t])}>🖨 Print</button>
                     <button className="chip" onClick={() => navigator.clipboard?.writeText(qrLink(t.qr_token))}>Copy link</button>
                     {!t.is_parcel && (

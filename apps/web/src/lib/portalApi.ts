@@ -568,6 +568,53 @@ export interface PortalTable {
   seating_capacity: number | null;
   /** Air-conditioned. Drives the 'AC tables' charge scope -- see setTableAc. */
   is_ac?: boolean | null;
+  /** ac | non_ac | room. Optional so the page still renders against a
+   *  database where 2026-09-11_table_setup has not been run yet. */
+  table_kind?: string | null;
+  /** available | reserved. Reserved blocks a NEW seating, never an existing one. */
+  availability?: string | null;
+  /** Per-table AC charge. 0 = none. */
+  ac_charge_value?: number | null;
+  /** flat = rupees once per bill; percent = of the food subtotal. */
+  ac_charge_kind?: string | null;
+}
+
+/** Everything the table-setup form can change, in one patch. */
+export interface TableSetupPatch {
+  table_kind?: string;
+  availability?: string;
+  seating_capacity?: number | null;
+  ac_charge_value?: number;
+  ac_charge_kind?: string;
+}
+
+/**
+ * ONE WRITE FOR THE WHOLE FORM, and it degrades rather than failing.
+ *
+ * These columns arrive with a migration the owner runs by hand, so a portal
+ * deployed before that migration would otherwise throw 42703 and take the
+ * Tables page down -- the same failure mode seating_capacity already guards
+ * against with seatsColumnMissing.
+ *
+ * On an unknown-column error it retries with only the fields that have always
+ * existed. The owner's capacity edit still lands; the new fields simply wait
+ * for the migration, which is a far better outcome than a broken page.
+ */
+export async function updateTableSetup(id: string, patch: TableSetupPatch): Promise<void> {
+  const clean: Record<string, unknown> = { ...patch };
+  if (patch.seating_capacity != null) {
+    clean.seating_capacity = Math.min(40, Math.max(1, Math.round(patch.seating_capacity)));
+  }
+  const { error } = await supabase.from('dining_table').update(clean).eq('id', id);
+  if (!error) return;
+  if ((error as any).code !== '42703') throw error;
+
+  const fallback: Record<string, unknown> = {};
+  if ('seating_capacity' in clean) fallback.seating_capacity = clean.seating_capacity;
+  if (patch.table_kind) fallback.is_ac = patch.table_kind === 'ac';
+  if (!Object.keys(fallback).length) return;
+  const { error: e2 } = await supabase.from('dining_table').update(fallback).eq('id', id);
+  if (e2) throw e2;
 }
 
 /**
@@ -594,6 +641,8 @@ let seatsColumnMissing = false;
 
 export async function fetchTables(restaurantId: string): Promise<PortalTable[]> {
   const BASE = 'id, label, room, is_parcel, qr_token, is_active';
+  // The optional tier: everything a hand-run migration may not have added yet.
+  const EXTRA = 'seating_capacity, is_ac, table_kind, availability, ac_charge_value, ac_charge_kind';
   const run = (cols: string) => supabase
     .from('dining_table')
     .select(cols)
@@ -602,7 +651,7 @@ export async function fetchTables(restaurantId: string): Promise<PortalTable[]> 
     .order('created_at');
 
   if (!seatsColumnMissing) {
-    const { data, error } = await run(`${BASE}, seating_capacity, is_ac`);
+    const { data, error } = await run(`${BASE}, ${EXTRA}`);
     if (!error) return (data ?? []) as unknown as PortalTable[];
     // 42703 is "undefined_column". Anything else is a real failure and must
     // surface — a network error dressed up as a missing column would hide it.
@@ -612,7 +661,12 @@ export async function fetchTables(restaurantId: string): Promise<PortalTable[]> 
 
   const { data, error } = await run(BASE);
   if (error) throw error;
-  return (data ?? []).map((t: any) => ({ ...t, seating_capacity: null, is_ac: null })) as PortalTable[];
+  // Pre-migration: the page still renders, every new field simply reads as
+  // its default rather than taking the Tables screen down.
+  return (data ?? []).map((t: any) => ({
+    ...t, seating_capacity: null, is_ac: null,
+    table_kind: null, availability: null, ac_charge_value: null, ac_charge_kind: null,
+  })) as PortalTable[];
 }
 
 /** SEATS AT CREATION, not only afterwards.
