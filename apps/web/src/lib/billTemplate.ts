@@ -73,6 +73,19 @@ export type BillLayout = {
    * paper out of a thermal printer after every bill.
    */
   fill: boolean;
+  /**
+   * THE SCAN-TO-PAY CODE, which until now was welded to the underside of the
+   * totals block: always printed, always 48mm, always wherever the totals
+   * happened to sit. All three of those are decisions a restaurant should be
+   * making rather than inheriting.
+   *
+   * Not a SectionStyle, despite the resemblance. `align` means nothing to a
+   * code that is centred by definition, and `size` here is MILLIMETRES OF
+   * PAPER rather than points of type -- a distinction worth keeping in the
+   * field name, because 48 in one and 48 in the other are wildly different
+   * things.
+   */
+  payQr: { show: boolean; mm: number; place: Place };
   sections: Record<SectionKey, SectionStyle>;
 };
 
@@ -100,6 +113,11 @@ export const DEFAULT_LAYOUT: BillLayout = {
   // ON by default, because "cover the page like a real restaurant bill" is what
   // a bill is expected to look like, not an option somebody has to discover.
   fill: true,
+  // Exactly what the bill did before any of this was settable: shown, 48mm,
+  // and in the top band -- where `totals` lives by default, and where the code
+  // was glued to it. Turning the control on changes nothing until somebody
+  // changes something.
+  payQr: { show: true, mm: 48, place: 'top' },
   sections: {
     name:    { align: 'center', size: 20, place: 'top' },
     address: { align: 'center', size: 12, place: 'top' },
@@ -118,6 +136,13 @@ export const DEFAULT_LAYOUT: BillLayout = {
 
 export const MIN_SIZE = 8;
 export const MAX_SIZE = 28;
+
+/** Millimetres, and the ends are the point at which the thing stops working.
+ *  Under about 24mm a phone has to be held close enough that the diner is
+ *  leaning over the bill; over about 72mm it stops fitting a till roll and
+ *  starts costing real paper on every settlement. */
+export const MIN_QR_MM = 24;
+export const MAX_QR_MM = 72;
 
 const ALIGNS: Align[] = ['left', 'center', 'right'];
 export const PLACES: Place[] = ['top', 'middle', 'bottom'];
@@ -157,6 +182,17 @@ export function normaliseLayout(raw: any): BillLayout {
       url: typeof rawLogo.url === 'string' && rawLogo.url ? rawLogo.url : null,
     },
     fill: typeof src.fill === 'boolean' ? src.fill : d.fill,
+    payQr: (() => {
+      const q = src.payQr && typeof src.payQr === 'object' ? src.payQr : {};
+      const mm = Number(q.mm);
+      return {
+        show: typeof q.show === 'boolean' ? q.show : d.payQr.show,
+        mm: Number.isFinite(mm)
+          ? Math.min(MAX_QR_MM, Math.max(MIN_QR_MM, Math.round(mm)))
+          : d.payQr.mm,
+        place: PLACES.indexOf(q.place) >= 0 ? q.place : d.payQr.place,
+      };
+    })(),
     sections,
   };
 }
@@ -336,10 +372,13 @@ export function renderBillHtml(d: BillData, layoutRaw: any): string {
   /* THE PAY QR IS SCANNED FROM A PRINTED SHEET, at whatever distance the
      bill happens to be lying at, by a phone somebody is holding one-handed
      while paying. 28mm was sized like a decoration; 48mm is sized like the
-     thing it is. Centred in its own block rather than sitting beside the
-     caption, because a code the eye has to hunt for is a code nobody uses. */
-  .pay { display: block; text-align: center; margin-top: 5mm; }
-  .pay img { width: 48mm; height: 48mm; border: 1px solid #D8D0C0; border-radius: 2mm; display: block; margin: 0 auto 2mm; }
+     thing it is, and 48mm is still the default -- but it is the restaurant's
+     number now, and it arrives as a custom property so the roll rules below
+     can cap it without knowing what it is. Centred in its own block rather
+     than beside the caption, because a code the eye has to hunt for is a code
+     nobody uses. */
+  .pay { display: block; text-align: center; margin-top: 5mm; --qr: ${l.payQr.mm}mm; }
+  .pay img { width: var(--qr); height: var(--qr); border: 1px solid #D8D0C0; border-radius: 2mm; display: block; margin: 0 auto 2mm; }
   .pay div { font-size: 10pt; line-height: 1.5; }
   .thanks { ${sec(l, 'thanks')}; font-weight: 700; margin: 4mm 0 0; }
   .terms  { ${sec(l, 'terms')}; color: #4A453B; white-space: pre-wrap; margin: 3mm 0 0;
@@ -389,8 +428,10 @@ export function renderBillHtml(d: BillData, layoutRaw: any): string {
     .i-rate { display: none; }
     .totals { width: 100%; }
     /* On a roll, LENGTH is the scarce resource -- every millimetre of QR is
-       paper fed and cut. Still bigger than it was on sheet paper before. */
-    .pay img { width: 34mm; height: 34mm; }
+       paper fed and cut. So the chosen size becomes a CEILING here rather than
+       an instruction: a restaurant that asked for 28mm still gets 28mm, and
+       one that asked for 72mm gets a code that fits the roll. */
+    .pay img { width: min(var(--qr), 34mm); height: min(var(--qr), 34mm); }
     /* No page to fill. Roll stock is continuous, so stretching to a notional
        page height would feed blank paper after every bill. */
     .sheet.fill { min-height: 0; display: block; }
@@ -407,7 +448,7 @@ export function renderBillHtml(d: BillData, layoutRaw: any): string {
   @media print and (max-width: 58mm) {
     body { font-size: 9.5pt; }
     .logo { max-height: 10mm; }
-    .pay img { width: 18mm; height: 18mm; }
+    .pay img { width: min(var(--qr), 18mm); height: min(var(--qr), 18mm); }
     .totals .row { gap: 2mm; }
   }
 </style></head><body>${(() => {
@@ -449,21 +490,42 @@ export function renderBillHtml(d: BillData, layoutRaw: any): string {
     <div class="row"><span>CGST @ ${esc(d.cgstPct)}%</span><span>${inr(d.cgst)}</span></div>
     <div class="row taxtotal"><span>Total tax</span><span>${inr(d.sgst + d.cgst)}</span></div>
     <div class="row grand"><span>Total</span><span>${inr(d.total)}</span></div>
-  </div>
-  ${d.payQrDataUri ? `<div class="pay">
-    <img src="${esc(d.payQrDataUri)}" alt="">
-    <div><b>Scan to pay ${inr(d.total)}</b><br>Any UPI app · pays ${esc(d.restaurant.name)} directly${
-      d.upiVpa ? `<br><span style="color:#6B6557">${esc(d.upiVpa)}</span>` : ''
-    }</div>
-  </div>` : ''}`,
+  </div>`,
     thanks:  d.restaurant.thanks ? `<div class="thanks">${esc(d.restaurant.thanks)}</div>` : '',
     terms:   d.restaurant.terms ? `<div class="terms">${esc(d.restaurant.terms)}</div>` : '',
     footer:  `<div class="footer">SAC ${SAC} · computer-generated GST invoice · powered by Menutha</div>`,
   };
 
-  const band = (p: Place) => SECTIONS
-    .filter((s) => l.sections[s.key].place === p)
-    .map((s) => html[s.key])
+  /**
+   * THE PAY QR, which used to be part of the totals markup and is now its own
+   * block. That is the whole of what makes it placeable: while it was spliced
+   * onto the end of the totals string it could only ever go where the totals
+   * went, and no amount of settings UI would have changed that.
+   *
+   * Two switches stand between here and paper, and they mean different things.
+   * `payQrDataUri` is whether we CAN print one -- no UPI id on the restaurant,
+   * no code. `l.payQr.show` is whether the restaurant WANTS one, which is the
+   * new control: plenty of places take card at a counter and would rather not
+   * invite a scan at the table.
+   */
+  const payHtml = d.payQrDataUri && l.payQr.show
+    ? `<div class="pay">
+    <img src="${esc(d.payQrDataUri)}" alt="">
+    <div><b>Scan to pay ${inr(d.total)}</b><br>Any UPI app · pays ${esc(d.restaurant.name)} directly${
+      d.upiVpa ? `<br><span style="color:#6B6557">${esc(d.upiVpa)}</span>` : ''
+    }</div>
+  </div>`
+    : '';
+
+  /** Last in its band, which is what puts the default back exactly where the
+   *  code has always printed: `totals` is the final top-band section, so a QR
+   *  at the end of the top band sits under the totals as before. */
+  const band = (p: Place) => [
+    ...SECTIONS
+      .filter((s) => l.sections[s.key].place === p)
+      .map((s) => html[s.key]),
+    l.payQr.place === p ? payHtml : '',
+  ]
     .filter(Boolean)
     .join('\n  ');
 
@@ -538,7 +600,22 @@ export function sampleBillData(r: {
   bill_terms?: string | null; logo_url?: string | null; upi_vpa?: string | null;
   sgst_pct?: number | string | null; cgst_pct?: number | string | null;
   service_charge_pct?: number | string | null;
-}): BillData {
+},
+/**
+ * A QR FOR THE PREVIEW, and the reason it is a parameter rather than something
+ * this function makes: the two surfaces carry different QR libraries, which is
+ * the same reason the real bill takes its code as a data URI.
+ *
+ * The preview used to hardcode null here, which was fine while the code was an
+ * unconditional 48mm block -- there was nothing to look at. Now that the
+ * restaurant chooses whether it prints, how big, and which band, a preview
+ * without one cannot show any of those three decisions, and a size control you
+ * cannot see the result of is a number you may as well guess at.
+ *
+ * Null stays honest rather than convenient: a restaurant with no UPI id gets a
+ * preview with no code, because that is what its bills print.
+ */
+payQrDataUri: string | null = null): BillData {
   const items: BillItem[] = [
     { name: 'Paneer Butter Masala', qty: 2, unit_price: 220 },
     { name: 'Butter Naan', qty: 4, unit_price: 30 },
@@ -577,7 +654,7 @@ export function sampleBillData(r: {
     service,
     sgstPct, cgstPct, sgst, cgst,
     total: r2(taxable + sgst + cgst),
-    payQrDataUri: null,
+    payQrDataUri,
     upiVpa: r.upi_vpa || null,
   };
 }
