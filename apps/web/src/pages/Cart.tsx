@@ -1,6 +1,6 @@
 /** Cart & checkout — line steppers, cooking instructions, the bill (subtotal,
  *  parcel packing charge, 5% GST) mirroring the server's place_order math. */
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { placeOrder } from '../lib/api';
 import { calcBill, inr } from '../lib/types';
@@ -35,8 +35,24 @@ export function Cart() {
   const svcPct = Number(session.restaurant.service_charge_pct ?? 0);
   const bill = calcBill(cart, packing, sgstPct, cgstPct, svcPct);
 
+  /**
+   * A REF, BECAUSE `placing` IS STATE AND STATE IS A RENDER BEHIND.
+   *
+   * Two clicks inside one frame both read `placing` as false -- setPlacing has
+   * not committed and the button's `disabled` lands a render later still -- so
+   * both calls reach place_order and the table gets TWO orders for one basket.
+   * That is not a cosmetic race: it is two tickets in the kitchen, two lines
+   * on the bill, and an argument at the table when somebody notices.
+   *
+   * It is also the most likely place in the product for it to happen. A diner
+   * on a restaurant's wifi taps a button that does not visibly respond, and
+   * the human answer to that is to tap it again.
+   */
+  const placingRef = useRef(false);
+
   const submit = async () => {
-    if (placing || !cart.length) return;
+    if (placingRef.current || !cart.length) return;
+    placingRef.current = true;
     setPlacing(true);
     setError('');
     try {
@@ -49,6 +65,7 @@ export function Cart() {
       setError(e?.message ?? t('common.somethingWrong'));
     } finally {
       setPlacing(false);
+      placingRef.current = false;
     }
   };
 

@@ -17,10 +17,10 @@
  */
 import React, { useEffect, useState } from 'react';
 import {
-import { startPoll } from '../../lib/poll';
   fetchOpenServiceRequests, resolveServiceRequest, SERVICE_LABEL,
   type ServiceRequestRow,
 } from '../../lib/portalApi';
+import { startPoll } from '../../lib/poll';
 
 /** How long ago, in the words staff would use. */
 export function ago(iso: string): string {

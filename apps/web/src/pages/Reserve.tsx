@@ -13,7 +13,7 @@
  *
  * Inside the locked diner scope (#O): no account, no partner link.
  */
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useStore } from '../store';
 import { createReservation } from '../lib/api';
@@ -88,17 +88,23 @@ export function Reserve() {
   const phoneDigits = phone.replace(/\D/g, '');
   const canSend = !!date && name.trim().length > 1 && phoneDigits.length >= 10 && !busy;
 
+  /** Same window as the cart's: `canSend` folds in `!busy`, which is state.
+   *  create_reservation has no idempotency, so two clicks are two bookings. */
+  const sendingRef = useRef(false);
+
   const send = async () => {
-    if (!canSend) return;
+    if (!canSend || sendingRef.current) return;
+    sendingRef.current = true;
     // The slug rides along on the scan session for exactly this call; without
     // it there is no way to reach the RPC from a scanned table.
     const slug = restaurant.slug;
-    if (!slug) { setError(t('reserve.unavailable')); return; }
+    if (!slug) { sendingRef.current = false; setError(t('reserve.unavailable')); return; }
     /* THE REAL GUARD. min/max on a time input is advisory -- several mobile
        browsers ignore it outright -- so the check that actually decides is
        here. Same-day hours only: an overnight venue (close < open) spans
        midnight and a simple between-test would reject its whole service. */
     if (sameDayHours && (time < sameDayHours.open || time > sameDayHours.close)) {
+      sendingRef.current = false;
       setError(t('reserve.outsideHours')
         .replace('{open}', sameDayHours.open)
         .replace('{close}', sameDayHours.close));
@@ -120,6 +126,7 @@ export function Reserve() {
       setError(e?.message ?? t('reserve.failed'));
     } finally {
       setBusy(false);
+      sendingRef.current = false;
     }
   };
 
