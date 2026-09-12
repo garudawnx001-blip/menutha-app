@@ -10,7 +10,6 @@ export interface Membership {
   restaurant: Restaurant & {
     address?: string | null;
     gstin?: string | null;
-    upi_vpa?: string | null;
     cuisine_tags?: string | null;
     slug?: string | null;
     own_website?: string | null;

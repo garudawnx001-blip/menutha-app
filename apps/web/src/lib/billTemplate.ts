@@ -73,19 +73,6 @@ export type BillLayout = {
    * paper out of a thermal printer after every bill.
    */
   fill: boolean;
-  /**
-   * THE SCAN-TO-PAY CODE, which until now was welded to the underside of the
-   * totals block: always printed, always 48mm, always wherever the totals
-   * happened to sit. All three of those are decisions a restaurant should be
-   * making rather than inheriting.
-   *
-   * Not a SectionStyle, despite the resemblance. `align` means nothing to a
-   * code that is centred by definition, and `size` here is MILLIMETRES OF
-   * PAPER rather than points of type -- a distinction worth keeping in the
-   * field name, because 48 in one and 48 in the other are wildly different
-   * things.
-   */
-  payQr: { show: boolean; mm: number; place: Place };
   sections: Record<SectionKey, SectionStyle>;
 };
 
@@ -113,11 +100,6 @@ export const DEFAULT_LAYOUT: BillLayout = {
   // ON by default, because "cover the page like a real restaurant bill" is what
   // a bill is expected to look like, not an option somebody has to discover.
   fill: true,
-  // Exactly what the bill did before any of this was settable: shown, 48mm,
-  // and in the top band -- where `totals` lives by default, and where the code
-  // was glued to it. Turning the control on changes nothing until somebody
-  // changes something.
-  payQr: { show: true, mm: 48, place: 'top' },
   sections: {
     name:    { align: 'center', size: 20, place: 'top' },
     address: { align: 'center', size: 12, place: 'top' },
@@ -136,13 +118,6 @@ export const DEFAULT_LAYOUT: BillLayout = {
 
 export const MIN_SIZE = 8;
 export const MAX_SIZE = 28;
-
-/** Millimetres, and the ends are the point at which the thing stops working.
- *  Under about 24mm a phone has to be held close enough that the diner is
- *  leaning over the bill; over about 72mm it stops fitting a till roll and
- *  starts costing real paper on every settlement. */
-export const MIN_QR_MM = 24;
-export const MAX_QR_MM = 72;
 
 const ALIGNS: Align[] = ['left', 'center', 'right'];
 export const PLACES: Place[] = ['top', 'middle', 'bottom'];
@@ -182,17 +157,6 @@ export function normaliseLayout(raw: any): BillLayout {
       url: typeof rawLogo.url === 'string' && rawLogo.url ? rawLogo.url : null,
     },
     fill: typeof src.fill === 'boolean' ? src.fill : d.fill,
-    payQr: (() => {
-      const q = src.payQr && typeof src.payQr === 'object' ? src.payQr : {};
-      const mm = Number(q.mm);
-      return {
-        show: typeof q.show === 'boolean' ? q.show : d.payQr.show,
-        mm: Number.isFinite(mm)
-          ? Math.min(MAX_QR_MM, Math.max(MIN_QR_MM, Math.round(mm)))
-          : d.payQr.mm,
-        place: PLACES.indexOf(q.place) >= 0 ? q.place : d.payQr.place,
-      };
-    })(),
     sections,
   };
 }
@@ -230,11 +194,6 @@ export type BillData = {
   sgstPct: number; cgstPct: number;
   sgst: number; cgst: number;
   total: number;
-  /** A data: URI for the scan-to-pay QR, or null. Passed in rather than
-   *  generated here: the two surfaces have different QR libraries and this
-   *  file is deliberately dependency-free. */
-  payQrDataUri: string | null;
-  upiVpa: string | null;
   /**
    * SERVICE CHARGE WAIVED ON THIS BILL. Diners ask, and in India a service
    * charge is not a tax -- it is discretionary, and the till has always been
@@ -377,9 +336,6 @@ export function renderBillHtml(d: BillData, layoutRaw: any): string {
      can cap it without knowing what it is. Centred in its own block rather
      than beside the caption, because a code the eye has to hunt for is a code
      nobody uses. */
-  .pay { display: block; text-align: center; margin-top: 5mm; --qr: ${l.payQr.mm}mm; }
-  .pay img { width: var(--qr); height: var(--qr); border: 1px solid #D8D0C0; border-radius: 2mm; display: block; margin: 0 auto 2mm; }
-  .pay div { font-size: 10pt; line-height: 1.5; }
   .thanks { ${sec(l, 'thanks')}; font-weight: 700; margin: 4mm 0 0; }
   .terms  { ${sec(l, 'terms')}; color: #4A453B; white-space: pre-wrap; margin: 3mm 0 0;
             border-top: 1px solid #EFE8DA; padding-top: 2mm; }
@@ -496,38 +452,13 @@ export function renderBillHtml(d: BillData, layoutRaw: any): string {
     footer:  `<div class="footer">SAC ${SAC} · computer-generated GST invoice · powered by Menutha</div>`,
   };
 
-  /**
-   * THE PAY QR, which used to be part of the totals markup and is now its own
-   * block. That is the whole of what makes it placeable: while it was spliced
-   * onto the end of the totals string it could only ever go where the totals
-   * went, and no amount of settings UI would have changed that.
-   *
-   * Two switches stand between here and paper, and they mean different things.
-   * `payQrDataUri` is whether we CAN print one -- no UPI id on the restaurant,
-   * no code. `l.payQr.show` is whether the restaurant WANTS one, which is the
-   * new control: plenty of places take card at a counter and would rather not
-   * invite a scan at the table.
-   */
-  const payHtml = d.payQrDataUri && l.payQr.show
-    ? `<div class="pay">
-    <img src="${esc(d.payQrDataUri)}" alt="">
-    <div><b>Scan to pay ${inr(d.total)}</b><br>Any UPI app · pays ${esc(d.restaurant.name)} directly${
-      d.upiVpa ? `<br><span style="color:#6B6557">${esc(d.upiVpa)}</span>` : ''
-    }</div>
-  </div>`
-    : '';
-
-  /** Last in its band, which is what puts the default back exactly where the
-   *  code has always printed: `totals` is the final top-band section, so a QR
-   *  at the end of the top band sits under the totals as before. */
-  const band = (p: Place) => [
-    ...SECTIONS
+  /** The sections of one band, in the order they were configured. */
+  const band = (p: Place) =>
+    SECTIONS
       .filter((s) => l.sections[s.key].place === p)
-      .map((s) => html[s.key]),
-    l.payQr.place === p ? payHtml : '',
-  ]
-    .filter(Boolean)
-    .join('\n  ');
+      .map((s) => html[s.key])
+      .filter(Boolean)
+      .join('\n  ');
 
   // The logo is not a section -- it has its own switch -- and it belongs above
   // whatever the owner put first, so it rides at the head of the top band.
@@ -554,33 +485,6 @@ export function renderBillHtml(d: BillData, layoutRaw: any): string {
  * Returns '' with no VPA, and the renderer then prints no QR block at all
  * rather than a QR that resolves to nothing.
  */
-export function billUpiUri(
-  vpa: string | null | undefined, restaurantName: string, amount: number, billNo: string | number,
-): string {
-  if (!vpa || !vpa.trim()) return '';
-  const q = [
-    ['pa', vpa.trim()],
-    ['pn', (restaurantName || 'Restaurant').slice(0, 60)],
-    ['am', Number(amount).toFixed(2)],
-    ['tn', `Bill #${billNo}`],
-    ['cu', 'INR'],
-  ].map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`).join('&');
-  return 'upi://pay?' + q;
-}
-
-/**
- * An <svg> string as an inline image source. `qrcode`'s toString gives markup,
- * both surfaces have that package, and an SVG has no resolution -- the printer
- * rasterises it at whatever DPI it actually has, where a raster PNG scaled onto
- * a 40mm label at 203dpi visibly blurs. The client saw exactly that blur once.
- *
- * Percent-encoded rather than base64: btoa is not present in React Native, and
- * the print engine on both surfaces is a WebView that reads this form happily.
- */
-export function svgDataUri(svg: string): string {
-  return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
-}
-
 
 /**
  * THE SAMPLE BILL, defined once.
@@ -597,7 +501,7 @@ export function svgDataUri(svg: string): string {
 export function sampleBillData(r: {
   name?: string | null; address?: string | null; city?: string | null; phone?: string | null;
   gstin?: string | null; fssai_no?: string | null; bill_thanks?: string | null;
-  bill_terms?: string | null; logo_url?: string | null; upi_vpa?: string | null;
+  bill_terms?: string | null; logo_url?: string | null;
   sgst_pct?: number | string | null; cgst_pct?: number | string | null;
   service_charge_pct?: number | string | null;
 },
@@ -615,7 +519,7 @@ export function sampleBillData(r: {
  * Null stays honest rather than convenient: a restaurant with no UPI id gets a
  * preview with no code, because that is what its bills print.
  */
-payQrDataUri: string | null = null): BillData {
+): BillData {
   const items: BillItem[] = [
     { name: 'Paneer Butter Masala', qty: 2, unit_price: 220 },
     { name: 'Butter Naan', qty: 4, unit_price: 30 },
@@ -654,8 +558,6 @@ payQrDataUri: string | null = null): BillData {
     service,
     sgstPct, cgstPct, sgst, cgst,
     total: r2(taxable + sgst + cgst),
-    payQrDataUri,
-    upiVpa: r.upi_vpa || null,
   };
 }
 

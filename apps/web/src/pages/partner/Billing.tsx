@@ -3,7 +3,6 @@
  *  mark paid (Cash / UPI received). */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import QRCode from 'qrcode';
 import { fetchLiveOrders, createBill, payBill, fetchBillLayout, setOrdersAc, waiveService, setParcelPacking, type PortalOrder } from '../../lib/portalApi';
 import { supabase } from '../../lib/supabase';
 import { WalkIn } from './WalkIn';
@@ -79,7 +78,6 @@ export function Billing() {
     } finally { setParcelBusy(false); }
   });
 
-  const [billQr, setBillQr] = useState
 ('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -182,17 +180,6 @@ export function Billing() {
   const gst = sgst + cgst;
   const total = Math.round((taxable + gst) * 100) / 100;
 
-  /** upi://pay deep link for the exact bill total — same VPA diners pay. */
-  const billUpiUri = (amount: number, billNo: number | string) => {
-    const vpa = (restaurant as any).upi_vpa as string | undefined;
-    if (!vpa) return '';
-    const p = new URLSearchParams({
-      pa: vpa.trim(), pn: (restaurant.name || 'Restaurant').slice(0, 60),
-      am: Number(amount).toFixed(2), tn: `Bill #${billNo}`, cu: 'INR',
-    });
-    return 'upi://pay?' + p.toString();
-  };
-
   /** One-tap billing. Previously the only route was: find the table, tap
    *  "Select all", scroll past the list, tap "Generate bill" — two taps plus a
    *  scroll for the commonest action in the whole product. billNow takes the
@@ -206,10 +193,6 @@ export function Billing() {
       setSelected(new Set(list.map((o) => o.id)));
       setDiscount('');
       setBill({ ...b, orders: list }); setParcelBoxes(0); setParcelNote('');
-      const uri = billUpiUri(b.total, b.bill_no);
-      setBillQr(uri
-        ? await QRCode.toDataURL(uri, { margin: 1, width: 380, color: { dark: '#1C1A15', light: '#FFFDF8' } }).catch(() => '')
-        : '');
     } catch (e: any) { setError(e?.message ?? 'Could not create the bill.'); }
     finally { setBusy(false); }
   });
@@ -233,11 +216,6 @@ export function Billing() {
     try {
       const b = await createBill(restaurant.id, chosen.map((o) => o.id), disc);
       setBill({ ...b, orders: chosen }); setParcelBoxes(0); setParcelNote('');
-      // Scan-to-pay QR for the exact bill total (blank if no VPA configured).
-      const uri = billUpiUri(b.total, b.bill_no);
-      setBillQr(uri
-        ? await QRCode.toDataURL(uri, { margin: 1, width: 380, color: { dark: '#1C1A15', light: '#FFFDF8' } }).catch(() => '')
-        : '');
     } catch (e: any) { setError(e?.message ?? 'Could not create the bill.'); }
     finally { setBusy(false); }
   });
@@ -247,7 +225,7 @@ export function Billing() {
     setBusy(true); setError('');
     try {
       await payBill(bill.id, mode);
-      setBill(null); setBillQr(''); setSelected(new Set()); setDiscount(''); setParcelBoxes(0); setParcelNote('');
+      setBill(null); setSelected(new Set()); setDiscount(''); setParcelBoxes(0); setParcelNote('');
       await load();
     } catch (e: any) { setError(e?.message ?? 'Could not mark the bill paid.'); }
     finally { setBusy(false); }
@@ -349,8 +327,6 @@ export function Billing() {
         label: String(c.label ?? 'Charge'), amount: Number(c.amount) || 0,
       })),
       serviceWaived: waived,
-      payQrDataUri: billQr || null,
-      upiVpa: (restaurant as any).upi_vpa ?? null,
     };
   };
 
@@ -580,22 +556,6 @@ export function Billing() {
             >+</button>
           </div>
           {parcelNote && <p className="dim" style={{ fontSize: 12, margin: '4px 0 0' }}>{parcelNote}</p>}
-
-          {/* Scan-to-pay: UPI QR for the exact bill total */}
-          {billQr ? (
-            <div style={{ display: 'flex', gap: 14, alignItems: 'center', flexWrap: 'wrap', marginTop: 12 }}>
-              <img src={billQr} width={132} height={132} alt="UPI QR for this bill"
-                style={{ borderRadius: 12, border: '1px solid var(--line-strong)' }} />
-              <p className="muted" style={{ fontSize: 13.5, flex: 1, minWidth: 170 }}>
-                Show this to the diner — any UPI app scans it and pays <strong>{inr(bill.total)}</strong> straight to you.
-                Or take cash below.
-              </p>
-            </div>
-          ) : (
-            <p className="dim" style={{ fontSize: 12, marginTop: 10 }}>
-              Add your UPI ID in Settings to show a scan-to-pay QR on every bill.
-            </p>
-          )}
 
           <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
             <button className="btn btn-primary" style={{ flex: 1 }} disabled={busy} onClick={() => settle('cash')}>

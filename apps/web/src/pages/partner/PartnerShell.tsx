@@ -382,7 +382,7 @@ export function PartnerShell() {
 export function PartnerPreviewProvider({ children }: { children: React.ReactNode }) {
   const restaurant = {
     id: 'preview', name: 'The Green Fork', city: 'Bengaluru', address: '12 Residency Road',
-    phone: '98765 43210', gstin: '29ABCDE1234F1Z5', upi_vpa: 'greenfork@okhdfcbank', upi_account_type: 'merchant',
+    phone: '98765 43210', gstin: '29ABCDE1234F1Z5',
     open_time: '11:00', close_time: '23:00', cuisine_tags: 'North Indian · South Indian · Chinese',
     // ENTERPRISE ON PURPOSE, and it must stay named. A trial now runs at the
     // tier the owner chose rather than at a blanket Enterprise, and the string

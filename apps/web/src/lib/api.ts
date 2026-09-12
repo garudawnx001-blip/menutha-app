@@ -245,30 +245,9 @@ export async function fetchOrderStatus(session: Session | null, orderId: string)
   return data as OrderView;
 }
 
-// ── Diner payments — direct to the restaurant (MODULE 3) ───────────────────
-
-export interface PaymentQr {
-  order_no: number;
-  amount: number;
-  vpa: string | null;
-  payee_name: string;
-  paid: boolean;
-}
-
-export async function fetchPaymentQr(orderId: string, demo?: boolean): Promise<PaymentQr> {
-  if (demo || orderId === 'demo-order') {
-    const o = demoOrderStatus();
-    return {
-      order_no: o?.order_no ?? 108, amount: o?.total ?? 0,
-      vpa: 'saffrongrove@demo', payee_name: 'Saffron Grove Kitchen',
-      paid: o?.payment?.status === 'paid',
-    };
-  }
-  const { data, error } = await supabase.rpc('get_payment_qr', { p_order_id: orderId });
-  if (error) throw error;
-  return data as PaymentQr;
-}
-
+// The diner-facing payment panel was removed: a restaurant's UPI id is no
+// longer read by, or reachable from, any diner surface. `get_payment_qr` is
+// retired with it — see 2026-09-12_retire_payment_qr.sql.
 
 
 // ── Orders the diner may still change (grace window) ───────────────────────

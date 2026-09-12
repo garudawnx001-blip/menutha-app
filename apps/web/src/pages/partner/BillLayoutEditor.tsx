@@ -26,12 +26,10 @@
  */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  DEFAULT_LAYOUT, SECTIONS, MIN_SIZE, MAX_SIZE, MIN_QR_MM, MAX_QR_MM, PLACES,
-  billUpiUri,
+  DEFAULT_LAYOUT, SECTIONS, MIN_SIZE, MAX_SIZE, PLACES,
   normaliseLayout, renderBillHtml, sampleBillData,
   type Align, type BillLayout, type SectionKey,
 } from '../../lib/billTemplate';
-import QRCode from 'qrcode';
 import { fetchBillLayout, saveBillLayout, uploadImage } from '../../lib/portalApi';
 import { AlignLeftIcon, AlignCenterIcon, AlignRightIcon } from './Glyphs';
 
@@ -57,10 +55,9 @@ const ALIGNS: { key: Align; label: string; Icon: (p: { size?: number }) => JSX.E
  * exact — and it means an edit never mutates the object the preview is
  * memoised on, which would leave the preview one keystroke behind.
  *
- * IT WAS NOT EXACT. `fill` and `payQr` arrived with the scan-to-pay work and
- * this clone never learned about them, so every trip through the editor
- * returned a layout with both missing — an owner who changed the font size of
- * one line lost their QR size, its placement, and whether it printed at all.
+ * IT WAS NOT EXACT. `fill` arrived later and this clone never learned about
+ * it, so every trip through the editor returned a layout with it missing — an
+ * owner who changed the font size of one line lost the other setting.
  * Silently, and on save.
  *
  * Spreading `l` first is what stops it happening again: a field added to
@@ -70,7 +67,6 @@ const ALIGNS: { key: Align; label: string; Icon: (p: { size?: number }) => JSX.E
 const clone = (l: BillLayout): BillLayout => ({
   ...l,
   logo: { ...l.logo },
-  payQr: { ...l.payQr },
   sections: Object.fromEntries(
     Object.entries(l.sections).map(([k, v]) => [k, { ...v }]),
   ) as BillLayout['sections'],
@@ -185,36 +181,9 @@ export function BillLayoutEditor({
 
   /** The preview document. Rebuilt on every edit — it is a string, and a
    *  string is cheap; the iframe re-parses roughly as fast as a keystroke. */
-  /**
-   * A REAL QR IN THE PREVIEW. This passed null for as long as the code was an
-   * unconditional 48mm block -- there was nothing to decide, so nothing to
-   * show. Now that the restaurant chooses whether it prints, how big and which
-   * band, a preview without one hides all three, and a size control whose
-   * result you cannot see is a number to guess at.
-   *
-   * Drawn from the restaurant's own UPI id, so a missing or mistyped VPA shows
-   * up here as a missing code rather than at the till.
-   */
-  const sampleTotal = useMemo(() => sampleBillData(restaurant ?? {}).total, [restaurant]);
-  const [sampleQr, setSampleQr] = useState<string | null>(null);
-  useEffect(() => {
-    let alive = true;
-    (async () => {
-      const uri = billUpiUri((restaurant as any)?.upi_vpa, (restaurant as any)?.name ?? '', sampleTotal, 'SAMPLE');
-      if (!uri) { if (alive) setSampleQr(null); return; }
-      // A preview without a code is a small loss; an editor that throws
-      // because a QR would not draw is not.
-      const uriData = await QRCode
-        .toDataURL(uri, { margin: 1, width: 380, color: { dark: '#1C1A15', light: '#FFFFFF' } })
-        .catch(() => '');
-      if (alive) setSampleQr(uriData || null);
-    })();
-    return () => { alive = false; };
-  }, [restaurant, sampleTotal]);
-
   const html = useMemo(
-    () => renderBillHtml(sampleBillData(restaurant ?? {}, sampleQr), layout),
-    [restaurant, layout, sampleQr],
+    () => renderBillHtml(sampleBillData(restaurant ?? {}), layout),
+    [restaurant, layout],
   );
 
   if (loading) return <p className="dim" style={{ fontSize: 13 }}>Loading bill layout…</p>;
@@ -412,88 +381,6 @@ export function BillLayoutEditor({
                 </div>
               );
             })}
-
-            {/* THE SCAN-TO-PAY CODE. Its own row rather than a tenth section,
-                because it answers different questions: a picture has no
-                alignment, and its size is millimetres of paper rather than
-                points of type. Sharing the section row would have made "48"
-                mean two different things one line apart. */}
-            <div
-              style={{
-                display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
-                padding: '8px 6px', borderRadius: 8,
-                borderTop: '1px solid var(--hairline, rgba(28,24,20,0.07))',
-              }}
-            >
-              <div style={{ flex: '1 1 130px', minWidth: 120 }}>
-                <div style={{ fontSize: 13, fontWeight: 600 }}>Scan-to-pay QR</div>
-                <div className="dim" style={{ fontSize: 11.5 }}>
-                  {(restaurant as any)?.upi_vpa
-                    ? `Pays ${String((restaurant as any).upi_vpa)} directly. Size in mm, ${MIN_QR_MM}–${MAX_QR_MM}.`
-                    : 'Add a UPI ID under Bill settings and the code appears on every bill.'}
-                </div>
-              </div>
-
-              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
-                <input
-                  type="checkbox"
-                  checked={layout.payQr.show}
-                  onChange={(e) => edit((d) => { d.payQr.show = e.target.checked; })}
-                />
-                Print it
-              </label>
-
-              {/* Hidden rather than disabled when the code is off: controls for
-                  something that will not print are noise. */}
-              {layout.payQr.show && (
-                <>
-                  <div style={{ display: 'flex', gap: 4 }}>
-                    {PLACES.map((p) => (
-                      <button
-                        key={p}
-                        type="button"
-                        className={layout.payQr.place === p ? 'chip active' : 'chip'}
-                        style={{ padding: '4px 8px' }}
-                        aria-pressed={layout.payQr.place === p}
-                        aria-label={`Scan-to-pay QR: ${p} of the page`}
-                        onClick={() => edit((d) => { d.payQr.place = p; })}
-                      >
-                        {p === 'top' ? 'Top' : p === 'middle' ? 'Mid' : 'Btm'}
-                      </button>
-                    ))}
-                  </div>
-
-                  {/* Four millimetres a click. One would be 48 clicks end to
-                      end for a control nobody nudges by a hair. */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                    <button
-                      type="button" className="chip" style={{ minWidth: 28, padding: '4px 8px' }}
-                      aria-label="Scan-to-pay QR: smaller"
-                      disabled={layout.payQr.mm <= MIN_QR_MM}
-                      onClick={() => edit((d) => { d.payQr.mm = Math.max(MIN_QR_MM, d.payQr.mm - 4); })}
-                    >−</button>
-                    <span style={{ minWidth: 46, textAlign: 'center', fontSize: 13, fontVariantNumeric: 'tabular-nums' }}>
-                      {layout.payQr.mm}mm
-                    </span>
-                    <button
-                      type="button" className="chip" style={{ minWidth: 28, padding: '4px 8px' }}
-                      aria-label="Scan-to-pay QR: larger"
-                      disabled={layout.payQr.mm >= MAX_QR_MM}
-                      onClick={() => edit((d) => { d.payQr.mm = Math.min(MAX_QR_MM, d.payQr.mm + 4); })}
-                    >+</button>
-                  </div>
-                </>
-              )}
-            </div>
-            {/* Said here rather than discovered at the printer: on a till roll
-                the chosen size is a ceiling, because every millimetre of code
-                is paper fed and cut on every bill. */}
-            {layout.payQr.show && layout.payQr.mm > 34 && (
-              <p className="dim" style={{ fontSize: 11.5, marginTop: 6 }}>
-                On an 80mm till roll this prints at 34mm, and 18mm on a 58mm roll — on a roll,
-                length is the paper you pay for.
-              </p>
-            )}
 
             <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
               <button className="btn btn-primary" type="button" disabled={!dirty || saving} onClick={save}>

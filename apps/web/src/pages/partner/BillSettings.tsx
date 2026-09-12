@@ -24,8 +24,7 @@ import { BillChargeLines } from './BillChargeLines';
 import { BillLayoutEditor } from './BillLayoutEditor';
 import { PrinterIcon } from './Glyphs';
 import { printBillHtml, openBillHtml } from '../../lib/printBill';
-import QRCode from 'qrcode';
-import { normaliseLayout, renderBillHtml, sampleBillData, billUpiUri } from '../../lib/billTemplate';
+import { normaliseLayout, renderBillHtml, sampleBillData } from '../../lib/billTemplate';
 
 /** A labelled block, matching the phone's Section. */
 function Section({ title, hint, children }: { title: string; hint?: string; children: React.ReactNode }) {
@@ -68,21 +67,7 @@ export function BillSettings() {
     // Bill layout below, one control on both surfaces rather than a second
     // print-only copy of it.
     const sample = { ...r, ...form };
-    /**
-     * The sample printed without a scan-to-pay code, which was harmless while
-     * the code was a fixed block nobody could change -- and is not, now that
-     * the size is a setting. The one question a printed sample exists to
-     * answer is "does this fit my paper", and the code is the largest thing on
-     * the sheet.
-     *
-     * No VPA, or a code that will not draw, means a sample without the block
-     * rather than a sample that fails to print.
-     */
-    const payUri = billUpiUri((sample as any).upi_vpa, (sample as any).name ?? '', sampleBillData(sample).total, 'SAMPLE');
-    const qr = payUri
-      ? (await QRCode.toDataURL(payUri, { margin: 1, width: 380, color: { dark: '#1C1A15', light: '#FFFFFF' } }).catch(() => '')) || null
-      : null;
-    const html = renderBillHtml(sampleBillData(sample, qr), layout);
+    const html = renderBillHtml(sampleBillData(sample), layout);
     if (toPrinter) printBillHtml(html); else openBillHtml(html);
   };
   const [error, setError] = useState('');
