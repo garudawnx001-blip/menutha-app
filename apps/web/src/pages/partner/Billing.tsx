@@ -182,6 +182,28 @@ export function Billing() {
   const gst = sgst + cgst;
   const total = Math.round((taxable + gst) * 100) / 100;
 
+  /**
+   * DID THE SERVER CHARGE WHAT THE SCREEN PROMISED?
+   *
+   * createBill does its own arithmetic; this page does its own from the
+   * orders' already-repriced figures. They should agree, and when they do not
+   * -- a service charge the bill's own sum leaves out, a GST rate that is not
+   * the one the restaurant is registered for -- the old behaviour was to print
+   * the server's number under this page's items and say nothing about it.
+   *
+   * A bill is a promise about a number somebody is about to hand over. If the
+   * two disagree, staff have to know BEFORE the paper does. A rupee of
+   * tolerance keeps ordinary rounding quiet.
+   */
+  const reconcile = (charged: number, promised: number) => {
+    if (Math.abs(Number(charged) - promised) <= 1) return;
+    setError(
+      `Check this bill before handing it over: the screen came to ${inr(promised)} `
+      + `and the bill was raised at ${inr(Number(charged))}. The bill is the figure that `
+      + 'counts and it is what will print. If this keeps happening, the tax or service settings need a look.',
+    );
+  };
+
   /** One-tap billing. Previously the only route was: find the table, tap
    *  "Select all", scroll past the list, tap "Generate bill" — two taps plus a
    *  scroll for the commonest action in the whole product. billNow takes the
@@ -195,6 +217,9 @@ export function Billing() {
       setSelected(new Set(list.map((o) => o.id)));
       setDiscount('');
       setBill({ ...b, orders: list }); setParcelBoxes(0); setParcelNote('');
+      // billNow skips the preview, so the promise it is measured against is
+      // the orders' own totals rather than this page's running figures.
+      reconcile(b.total, sumOf(list));
     } catch (e: any) { setError(e?.message ?? 'Could not create the bill.'); }
     finally { setBusy(false); }
   });
@@ -218,6 +243,7 @@ export function Billing() {
     try {
       const b = await createBill(restaurant.id, chosen.map((o) => o.id), disc);
       setBill({ ...b, orders: chosen }); setParcelBoxes(0); setParcelNote('');
+      reconcile(b.total, total);
     } catch (e: any) { setError(e?.message ?? 'Could not create the bill.'); }
     finally { setBusy(false); }
   });
