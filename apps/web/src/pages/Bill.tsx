@@ -108,7 +108,6 @@ export function Bill() {
     // interval on every cart keystroke.
   }, [session?.table?.id, session?.orderedAt]);
 
-  // The restaurant's UPI ID isn't part of the cached scan session, so read it
   useEffect(() => {
     if (!session) {
       // /table, not / --  is the marketing landing on the deployed site.
