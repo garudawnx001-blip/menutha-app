@@ -172,6 +172,32 @@ let settledColumnMissing = false;
  *  rather than costing one label. Asked for once, dropped for the session. */
 let waivedColumnMissing = false;
 
+/**
+ * CLOSING A BILL THAT WILL NEVER BE PAID, and cancelling one raised by
+ * mistake. Two different decisions, deliberately two functions.
+ *
+ * void_table_bill has been in the database since the settle-or-void round and
+ * NOTHING has ever called it, on either surface. So the only way to clear a
+ * table that walked out was to mark it paid -- which records money the
+ * restaurant never took, and staff will always choose it over leaving a table
+ * nagging at them. The missing button was quietly inflating the takings.
+ *
+ * void_bill is new (2026-09-12_void_bill.sql) and answers the other case: the
+ * bill was raised against the wrong table, nobody has paid, and the orders
+ * need to go back on the board.
+ */
+export async function voidTableBill(tableId: string, reason: string, note?: string) {
+  const { error } = await supabase.rpc('void_table_bill', {
+    p_table_id: tableId, p_reason: reason, p_note: note ?? null,
+  });
+  if (error) throw error;
+}
+
+export async function voidBill(billId: string, reason = 'staff_error') {
+  const { error } = await supabase.rpc('void_bill', { p_bill_id: billId, p_reason: reason });
+  if (error) throw error;
+}
+
 export async function fetchLiveOrders(restaurantId: string, statuses: string[]): Promise<PortalOrder[]> {
   // service_charge rides along: the printed bill sums it off the orders
   // (#R -- the AC rate is already inside it), and it was silently printing as

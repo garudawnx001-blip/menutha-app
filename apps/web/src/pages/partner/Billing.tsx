@@ -3,7 +3,7 @@
  *  mark paid (Cash / UPI received). */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { fetchLiveOrders, createBill, payBill, fetchBillLayout, setOrdersAc, waiveService, setParcelPacking, type PortalOrder } from '../../lib/portalApi';
+import { fetchLiveOrders, createBill, payBill, fetchBillLayout, setOrdersAc, waiveService, setParcelPacking, voidTableBill, voidBill, type PortalOrder } from '../../lib/portalApi';
 import { supabase } from '../../lib/supabase';
 import { WalkIn } from './WalkIn';
 import { renderBillHtml, type BillData } from '../../lib/billTemplate';
@@ -87,6 +87,8 @@ export function Billing() {
   const [layout, setLayout] = useState<any>(null);
   // Which table has its per-person list expanded.
   const [splitting, setSplitting] = useState<string | null>(null);
+  /** Which table has its write-off reasons open. One at a time. */
+  const [writingOff, setWritingOff] = useState<string | null>(null);
   // Opened from a ticket on the Orders board: focus that table straight away
   // so settling is one tap from the notification, not a hunt.
   const [params] = useSearchParams();
@@ -218,6 +220,56 @@ export function Billing() {
       setBill({ ...b, orders: chosen }); setParcelBoxes(0); setParcelNote('');
     } catch (e: any) { setError(e?.message ?? 'Could not create the bill.'); }
     finally { setBusy(false); }
+  });
+
+  /**
+   * WRITE THE TABLE OFF, WITH A REASON.
+   *
+   * Reports read a void as revenue LOST rather than revenue earned, which is
+   * the whole point: an owner can finally see how much walks out of the door.
+   * Confirmed rather than instant -- it closes every unpaid order at the table
+   * and frees it for the next party, which is not a thing to do by mis-click.
+   */
+  const writeOff = (tableId: string | null, tableName: string, amount: number, reason: string) => guard(async () => {
+    if (!tableId) { setError('Parcel and takeaway orders are not seated at a table, so there is no table bill to write off.'); return; }
+    if (!window.confirm(
+      `Write off ${inr(amount)} at ${tableName}?\n\n`
+      + 'This closes every unpaid order at the table and frees it for the next party. '
+      + 'It is recorded as revenue LOST, never as money taken.',
+    )) return;
+    setBusy(true); setError('');
+    try {
+      await voidTableBill(tableId, reason);
+      setWritingOff(null);
+      setSelected(new Set());
+      setBill(null);
+      await load();
+    } catch (e: any) {
+      setError(/PGRST202|could not find the function/i.test(String(e?.message ?? ''))
+        ? 'Writing a bill off needs a database update that has not been run yet. The table is unchanged.'
+        : (e?.message ?? 'Could not write the bill off.'));
+    } finally { setBusy(false); }
+  });
+
+  /** A bill raised against the wrong table. Nobody has paid; the orders go
+   *  back on the board and the cancelled bill stays on record. */
+  const cancelBill = () => guard(async () => {
+    if (!bill) return;
+    if (!window.confirm(
+      `Cancel bill #${bill.bill_no}?\n\n`
+      + 'The orders go back on the board so you can bill them again. '
+      + 'Nothing is deleted — the cancelled bill stays on record.',
+    )) return;
+    setBusy(true); setError('');
+    try {
+      await voidBill(bill.id);
+      setBill(null); setSelected(new Set()); setDiscount(''); setParcelBoxes(0); setParcelNote('');
+      await load();
+    } catch (e: any) {
+      setError(/PGRST202|could not find the function/i.test(String(e?.message ?? ''))
+        ? 'Cancelling a raised bill needs a database update that has not been run yet. Nothing has changed.'
+        : (e?.message ?? 'Could not cancel the bill.'));
+    } finally { setBusy(false); }
   });
 
   const settle = (mode: 'cash' | 'upi_qr') => guard(async () => {
@@ -397,7 +449,46 @@ export function Billing() {
                 👥 Split by person ({diners.length})
               </button>
             )}
+            {/* The honest way to close a table nobody is going to pay for.
+                Ghost, and last: it is the rare action, and it must never sit
+                where a thumb reaching for "Bill whole table" can find it. */}
+            <button className="btn btn-ghost" disabled={busy}
+              title="Walkout, on the house, or billed by mistake"
+              aria-expanded={writingOff === tableName}
+              onClick={() => setWritingOff((w) => (w === tableName ? null : tableName))}>
+              ✕ Write off
+            </button>
           </div>
+
+          {/* THE REASON IS THE POINT, so it is asked before anything happens
+              rather than assumed. Reports group write-offs by it: "we lost
+              ₹4,200 to walkouts this month" is a number an owner can act on,
+              and one undifferentiated "void" bucket is not. */}
+          {writingOff === tableName && (
+            <div className="glass" style={{ padding: 12, marginBottom: 10 }}>
+              <p className="overline" style={{ marginBottom: 6 }}>
+                Write off {inr(sumOf(list))} — why?
+              </p>
+              <p className="dim" style={{ fontSize: 12, margin: '0 0 8px' }}>
+                Closes every unpaid order at this table and frees it for the next party.
+                Recorded as revenue lost, never as money taken.
+              </p>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                {([
+                  ['walkout', 'Walked out'],
+                  ['comped', 'On the house'],
+                  ['staff_error', 'Staff error'],
+                  ['duplicate', 'Duplicate'],
+                  ['other', 'Other'],
+                ] as const).map(([value, label]) => (
+                  <button key={value} className="chip" disabled={busy}
+                    onClick={() => writeOff(list[0]?.table_id ?? null, tableName, sumOf(list), value)}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           {splitting === tableName && diners.length > 1 && (
             <div className="glass" style={{ padding: 12, marginBottom: 10 }}>
@@ -518,6 +609,12 @@ export function Billing() {
             <strong>Bill #{bill.bill_no}</strong>
             <span style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
               <button className="btn btn-glass btn-sm" onClick={printBill}>🖨 Print bill</button>
+              {/* The way back from a bill raised against the wrong table.
+                  Before this the only exits were "mark it paid" and "leave it
+                  unpaid on record for ever". */}
+              <button className="btn btn-glass btn-sm" disabled={busy} onClick={cancelBill}>
+                ✕ Cancel bill
+              </button>
             </span>
           </div>
           <div className="bill-row total"><span>To collect</span><span>{inr(bill.total)}</span></div>
