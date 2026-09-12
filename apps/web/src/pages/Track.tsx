@@ -3,9 +3,7 @@
  *  render below. Polls get_order_status for cancellation and payment state. */
 import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import QRCode from 'qrcode';
-import { fetchOrderStatus, fetchPaymentQr, type PaymentQr } from '../lib/api';
-import { buildUpiUri, isValidVpa } from '../../../../packages/payments/index.js';
+import { fetchOrderStatus } from '../lib/api';
 import type { OrderView } from '../lib/types';
 import { inr } from '../lib/types';
 import { useStore } from '../store';
@@ -24,26 +22,8 @@ function PaymentPanel({ order, demo, onChanged }: { order: OrderView; demo?: boo
   // resolving identifiers, so an undefined name compiles cleanly and fails in
   // the diner's hand instead.
   const t = useT();
-  const [qr, setQr] = useState<PaymentQr | null>(null);
-  const [qrImg, setQrImg] = useState('');
-  const [upiUri, setUpiUri] = useState('');
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
-
-  useEffect(() => {
-    fetchPaymentQr(order.id, demo).then((q) => {
-      setQr(q);
-      if (q.vpa && isValidVpa(q.vpa)) {
-        const uri = buildUpiUri({
-          vpa: q.vpa, payeeName: q.payee_name, amount: q.amount,
-          note: `Order #${q.order_no}`,
-        });
-        setUpiUri(uri);
-        QRCode.toDataURL(uri, { margin: 1, width: 380, color: { dark: '#1C1A15', light: '#FFFDF8' } })
-          .then(setQrImg).catch(() => {});
-      }
-    }).catch(() => {});
-  }, [order.id]);
 
   const act = async (fn: () => Promise<void>, key: string) => {
     setBusy(key); setError('');
@@ -76,34 +56,29 @@ function PaymentPanel({ order, demo, onChanged }: { order: OrderView; demo?: boo
     );
   }
 
-  if (!qr) return null;
-
-  return (
-    <div className="glass" style={{ padding: 16, marginTop: 16 }}>
-      <p className="overline" style={{ marginBottom: 4 }}>Pay {inr(qr.amount)} — directly to the restaurant</p>
-      {qrImg ? (
-        <div style={{ display: 'flex', gap: 14, alignItems: 'center', flexWrap: 'wrap', marginTop: 8 }}>
-          <img src={qrImg} width={132} height={132} alt="UPI payment QR" style={{ borderRadius: 12, border: '1px solid var(--line-strong)' }} />
-          <div style={{ flex: 1, minWidth: 180 }}>
-            <p className="muted" style={{ fontSize: 13.5 }}>
-              Scan with any UPI app, or tap below — pays <strong>{qr.payee_name}</strong> directly, no fees.
-            </p>
-            <a className="btn btn-primary btn-block" style={{ marginTop: 10 }} href={upiUri}>
-              Pay {inr(qr.amount)} via UPI
-            </a>
-          </div>
-        </div>
-      ) : (
-        <p className="muted" style={{ fontSize: 13.5, marginTop: 6 }}>
-          UPI isn’t set up here yet — pay cash at the counter.
-        </p>
-      )}
-      <p className="dim" style={{ fontSize: 12, marginTop: 12 }}>
-        {t('track.payDirect')}
-      </p>
-      {error && <p style={{ color: 'var(--error)', fontSize: 13.5, marginTop: 8 }}>{error}</p>}
-    </div>
-  );
+  /**
+   * THE PAY PANEL IS GONE FROM HERE TOO, and it was the easier one to miss.
+   *
+   * The diner's bill built a `upi://` string in the page, so it turned up in
+   * any grep for a VPA. This one asked the server: get_payment_qr returns the
+   * restaurant's VPA and payee name, and the page rendered a QR, the owner's
+   * name and a one-tap "Pay via UPI" button from it. Same exposure -- the
+   * owner's personal VPA, on a page any diner reaches after ordering -- by a
+   * route that looks nothing like the other one.
+   *
+   * Nothing replaces it. The payment STATUS blocks above stay: "paying cash",
+   * "awaiting confirmation" and the settled line are about a payment the
+   * counter has recorded, which is information the diner should have. What is
+   * gone is the instrument.
+   */
+  if (error) {
+    return (
+      <div className="glass" style={{ padding: 16, marginTop: 16 }}>
+        <p style={{ color: 'var(--error)', fontSize: 13.5 }}>{error}</p>
+      </div>
+    );
+  }
+  return null;
 }
 
 export function Track() {

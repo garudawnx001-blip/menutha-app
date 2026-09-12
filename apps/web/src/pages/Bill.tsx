@@ -1,17 +1,27 @@
-/** The diner's own bill.
+/** The diner's own bill: what they ordered, and what it comes to.
  *
- *  Shows only what THIS person ordered, plus the QR to pay it. Scoping is done
- *  in the database (my_table_bill), not here: filtering a whole-table payload
- *  in the client would still have put every other diner's name, phone and
- *  total onto a stranger's device, and would still have shown a previous
- *  party's uncleared food to whoever scanned the table next.
+ *  Shows only what THIS person ordered. Scoping is done in the database
+ *  (my_table_bill), not here: filtering a whole-table payload in the client
+ *  would still have put every other diner's name, phone and total onto a
+ *  stranger's device, and would still have shown a previous party's uncleared
+ *  food to whoever scanned the table next.
  *
- *  No "I've paid" button: a static UPI QR has no webhook, so that was always
- *  the diner's word rather than a confirmation, and the counter verifies in
- *  its own UPI app regardless. Polls every 6s. */
+ *  NO PAYMENT ON THIS PAGE, and that is the point of it.
+ *
+ *  It used to carry a UPI QR, the restaurant's UPI ID as a copyable chip, and
+ *  a one-tap intent button. Menutha does not take diner payments -- the
+ *  restaurant collects at the counter, which is the whole "zero commission,
+ *  diners always pay you directly" model -- so all of that existed to hand the
+ *  diner the owner's own VPA. On the pilot restaurant that VPA is the owner's
+ *  personal one, on a family member's number, and this page is reachable by
+ *  anyone who scans a table. A bill is not the place to publish it.
+ *
+ *  So the page is what a bill is: names, items, quantities, the total. The
+ *  restaurant's own billing and settlement are untouched -- the counter still
+ *  prints, still settles, still shows its own QR on the PRINTED bill if the
+ *  owner has configured one there. Polls every 6s. */
 import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import QRCode from 'qrcode';
 // fetchTableBill IS USED AND WAS NEVER IMPORTED. The seating check below
 // called it by name with nothing bound, so the effect threw a
 // ReferenceError the moment it ran -- on the bill page of every diner who
@@ -23,24 +33,11 @@ import QRCode from 'qrcode';
 // fetchSessionBill answers a different question -- what this one person
 // owes -- and is used below for exactly that.
 import { fetchSessionBill, fetchTableBill, type SessionBill } from '../lib/api';
-import { supabase } from '../lib/supabase';
 import { inr } from '../lib/types';
 import { useStore } from '../store';
 import { Spinner, Wordmark } from '../components';
 import { useT } from '../lib/i18n';
 import { startPoll, type Poll } from '../lib/poll';
-
-/** UPI apps cap one-tap (intent) payments to PERSONAL VPAs — commonly at
- *  ₹2,000 for PhonePe. It is the app's risk policy for person-to-person
- *  payments to a payee that isn't a verified merchant, not an NPCI rule and
- *  not something our link can opt out of: a merchant intent is identified by
- *  the VPA's own class, resolved by the PSP, so no combination of parameters
- *  turns a personal VPA into a merchant one.
- *
- *  Scanning with the phone's CAMERA is treated differently from a link or a
- *  gallery image and clears the cap in practice, which is why the QR is the
- *  primary path here and the intent button steps back above the threshold. */
-const UPI_P2P_INTENT_CAP = 2000;
 
 function TotalsBlock({ b, sgstPct, cgstPct }: {
   b: { subtotal: number; packing_charge: number; service_charge?: number; sgst_amount?: number; cgst_amount?: number; gst_amount: number; total: number };
@@ -76,11 +73,6 @@ export function Bill() {
   const t = useT();
   const [bill, setBill] = useState<SessionBill | null>(null);
   const [failed, setFailed] = useState(false);
-  const [vpa, setVpa] = useState<string | null>(null);
-  // 'personal' VPAs are capped for one-tap; 'merchant' are not. Set in Settings.
-  const [acctType, setAcctType] = useState<'personal' | 'merchant' | string>('personal');
-  const [payQr, setPayQr] = useState('');
-  const [copied, setCopied] = useState<'vpa' | 'amt' | ''>('');
   const timer = useRef<Poll>();
 
   /**
@@ -117,31 +109,6 @@ export function Bill() {
   }, [session?.table?.id, session?.orderedAt]);
 
   // The restaurant's UPI ID isn't part of the cached scan session, so read it
-  // directly (public-readable) — this is what makes the pay QR appear here.
-  useEffect(() => {
-    if (!session?.restaurant.id) return;
-    // TWO ARGUMENTS TO `then`, NOT A TRAILING `catch`. A PostgREST builder is
-    // a thenable, not a Promise -- it has no `.catch`, so the failure handler
-    // that looks like it is here was never attached. A read that failed would
-    // have gone to the console as an unhandled rejection instead of leaving
-    // the QR quietly absent, which is what the line intended.
-    supabase.from('restaurant').select('upi_vpa, upi_account_type').eq('id', session.restaurant.id).single()
-      .then(
-        ({ data }) => { setVpa((data?.upi_vpa as string) ?? null); setAcctType(((data as any)?.upi_account_type as string) ?? 'personal'); },
-        () => { /* no VPA: the page simply shows no pay QR */ },
-      );
-  }, [session?.restaurant.id]);
-
-  /** upi://pay for the amount currently shown, regenerated when it changes. */
-  const buildPayUri = (amount: number) => {
-    if (!vpa || !(amount > 0)) return '';
-    const p = new URLSearchParams({
-      pa: vpa.trim(), pn: (session?.restaurant.name || 'Restaurant').slice(0, 60),
-      am: amount.toFixed(2), tn: `${session?.table.label ?? 'Table'} bill`, cu: 'INR',
-    });
-    return 'upi://pay?' + p.toString();
-  };
-
   useEffect(() => {
     if (!session) {
       // /table, not / --  is the marketing landing on the deployed site.
@@ -165,19 +132,6 @@ export function Bill() {
     };
   }, [session?.table.id]);
 
-  // Render the QR whenever the payable amount or VPA changes.
-  useEffect(() => {
-    const amt = bill ? Number(bill.totals.total) : 0;
-    if (!vpa || !(amt > 0) || !session) { setPayQr(''); return; }
-    const p = new URLSearchParams({
-      pa: vpa.trim(), pn: (session.restaurant.name || 'Restaurant').slice(0, 60),
-      am: amt.toFixed(2), tn: `${session.table.label ?? 'Table'} bill`, cu: 'INR',
-    });
-    QRCode.toDataURL('upi://pay?' + p.toString(), {
-      margin: 1, width: 380, color: { dark: '#1C1A15', light: '#FFFDF8' },
-    }).then(setPayQr).catch(() => setPayQr(''));
-  }, [vpa, bill, session?.guest?.phone]);
-
   // A Spinner, not null: the redirect runs in an effect, after this render,
   // so null paints a blank white frame on the way to the gate.
   if (!session) return <Spinner label="…" />;
@@ -199,13 +153,6 @@ export function Bill() {
   const b = bill!;
   const empty = !b.lines.length;
 
-  // There is one amount now: what this diner owes for their own order.
-  const payAmount = Number(b.totals.total);
-  const payLabel = t('bill.tableTotal');
-  const payUri = buildPayUri(payAmount);
-  // One-tap is refused above the cap on a personal VPA; a merchant VPA is P2M
-  // and uncapped, so nothing is hidden for them.
-  const capped = acctType !== 'merchant' && payAmount > UPI_P2P_INTENT_CAP;
   return (
     <div className="page fade-in">
       <div className="topbar">
@@ -255,88 +202,12 @@ export function Bill() {
             <TotalsBlock b={b.totals} sgstPct={b.sgst_pct} cgstPct={b.cgst_pct} />
           </div>
 
-          {/* Pay panel.
-           *
-           *  The QR leads, deliberately. PhonePe and GPay apply risk controls to
-           *  upi:// INTENT links: a real merchant intent carries a merchant
-           *  category code, a transaction reference and often a signature, none
-           *  of which a personal/P2P VPA can supply. An intent at a P2P VPA
-           *  launched from a web page is therefore refused — "declined for
-           *  security reasons" — while scanning the SAME VPA works, because a
-           *  scan is a user-initiated transfer rather than an untrusted
-           *  app-to-app handoff.
-           *
-           *  So: scan first, then a copyable UPI ID and amount (which is what
-           *  PhonePe's own message tells people to fall back to), and the intent
-           *  button last, labelled as "may not work on every app" rather than
-           *  presented as the happy path. */}
-          {payUri ? (
-            <div className="glass" style={{ padding: 16, marginTop: 16 }}>
-              <p className="overline" style={{ marginBottom: 10, textAlign: 'center' }}>
-                {t('bill.pay')} {inr(payAmount)} — {payLabel}
-              </p>
 
-              {/* Adaptive by account type and amount.
-                  Merchant VPAs are P2M and uncapped, so both paths show at any
-                  amount with no warnings. Personal VPAs are capped for one-tap
-                  by the payment apps, so above the cap the tap button is hidden
-                  entirely — showing a button that will be refused is worse than
-                  not showing it — and the QR takes the whole panel. */}
-              {payQr && (
-                <div style={{ textAlign: 'center' }}>
-                  <img src={payQr}
-                    width={capped ? 250 : 190} height={capped ? 250 : 190}
-                    alt="UPI payment QR"
-                    style={{ borderRadius: 12, border: '1px solid var(--line-strong)', margin: '0 auto' }} />
-                  <p style={{ fontWeight: 700, fontSize: capped ? 16 : 14, marginTop: 8 }}>
-                    {capped ? t('bill.scanHereCamera') : t('bill.scanToPay')}
-                  </p>
-                  <p className="muted" style={{ fontSize: 12.5, marginTop: 2 }}>
-                    {t('bill.scanAnyApp')}<br />{t('bill.cameraHint')}
-                  </p>
-                </div>
-              )}
-
-              {/* Copyable fallback — exactly what the payment apps suggest. */}
-              <div style={{ marginTop: 14, borderTop: '1px dashed var(--line)', paddingTop: 12 }}>
-                <div className="bill-row" style={{ fontSize: 13.5 }}>
-                  <span className="dim">{t('bill.upiId')}</span>
-                  <button className="chip" style={{ maxWidth: '62%', overflow: 'hidden', textOverflow: 'ellipsis' }}
-                    onClick={() => { navigator.clipboard?.writeText(vpa ?? ''); setCopied('vpa'); }}>
-                    {copied === 'vpa' ? t('bill.copied') : vpa}
-                  </button>
-                </div>
-                <div className="bill-row" style={{ fontSize: 13.5 }}>
-                  <span className="dim">{t('bill.amount')}</span>
-                  <button className="chip"
-                    onClick={() => { navigator.clipboard?.writeText(payAmount.toFixed(2)); setCopied('amt'); }}>
-                    {copied === 'amt' ? t('bill.copied') : payAmount.toFixed(2)}
-                  </button>
-                </div>
-              </div>
-
-              {/* One-tap: shown when it will actually work. Hidden entirely on
-                  a personal VPA above the cap — a button that gets refused
-                  teaches the diner the product is broken. */}
-              {!capped && (
-                <a
-                  className="btn btn-ghost btn-block"
-                  style={{ marginTop: 12 }}
-                  href={payUri}
-                >
-                  {t('bill.openUpiApp')}
-                </a>
-              )}
-              <p className="dim" style={{ fontSize: 11.5, textAlign: 'center', marginTop: 6 }}>
-                {capped ? t('bill.capNote') : acctType === 'merchant' ? '' : t('bill.intentNote')}
-              </p>
-            </div>
-          ) : null}
-
+          {/* One line, because there is one truth: you pay at the counter.
+              This used to branch on whether a UPI QR had rendered, which is
+              gone -- and "pay at the counter" was already the correct half. */}
           <p className="dim" style={{ fontSize: 12, textAlign: 'center', marginTop: 14 }}>
-            {payUri
-              ? t('bill.payNote')
-              : t('bill.payAtCounter')} {t('bill.updatesLive')}
+            {t('bill.payAtCounter')} {t('bill.updatesLive')}
           </p>
           <div style={{ display: 'flex', gap: 10, marginTop: 12 }}>
             <button className="btn btn-ghost" style={{ flex: 1 }} onClick={() => nav('/menu')}>{t('bill.orderMore')}</button>
