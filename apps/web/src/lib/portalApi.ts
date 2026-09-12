@@ -193,6 +193,52 @@ export async function voidTableBill(tableId: string, reason: string, note?: stri
   if (error) throw error;
 }
 
+/**
+ * A ONE-OFF CHARGE ON ONE BILL -- cake cutting, corkage, a delivery fee.
+ *
+ * Distinct from restaurant.bill_charges, which is the owner's STANDING policy
+ * and is applied to every order by reprice_order. This is tonight, table six.
+ *
+ * The RPC replaces rather than accumulates, so calling it twice with the same
+ * line id is one line, and a retry after a dropped connection cannot double
+ * charge. `applied: false` with a reason is a refusal the UI should show --
+ * a paid bill, for instance -- not an error to throw.
+ */
+export interface BillChargeLine { id: string; label: string; kind: 'flat' | 'percent'; value: number; amount: number }
+export interface BillChargeResult {
+  applied: boolean; reason?: string;
+  extra_charge: number; extra_lines: BillChargeLine[]; total: number;
+}
+
+export async function setBillChargeLine(
+  billId: string, lineId: string, label: string, kind: 'flat' | 'percent', value: number,
+): Promise<BillChargeResult> {
+  const { data, error } = await supabase.rpc('set_bill_charge_line', {
+    p_bill_id: billId, p_line_id: lineId, p_label: label, p_kind: kind, p_value: value,
+  });
+  if (error) throw error;
+  return data as BillChargeResult;
+}
+
+export async function removeBillChargeLine(billId: string, lineId: string): Promise<BillChargeResult> {
+  const { data, error } = await supabase.rpc('remove_bill_charge_line', {
+    p_bill_id: billId, p_line_id: lineId,
+  });
+  if (error) throw error;
+  return data as BillChargeResult;
+}
+
+/** Correct a quantity after the food has gone to the kitchen -- qty 0 removes
+ *  the line, and an order left with nothing is cancelled. Manager only, and
+ *  refused while a live bill stands on the order (cancel that bill first). */
+export async function staffSetOrderItemQty(orderItemId: string, qty: number) {
+  const { data, error } = await supabase.rpc('staff_set_order_item_qty', {
+    p_order_item_id: orderItemId, p_qty: qty,
+  });
+  if (error) throw error;
+  return data as { order_id: string; cancelled: boolean; items_left: number; total: number };
+}
+
 export async function voidBill(billId: string, reason = 'staff_error') {
   const { error } = await supabase.rpc('void_bill', { p_bill_id: billId, p_reason: reason });
   if (error) throw error;

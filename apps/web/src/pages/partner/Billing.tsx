@@ -3,7 +3,7 @@
  *  mark paid (Cash / UPI received). */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { fetchLiveOrders, createBill, payBill, fetchBillLayout, setOrdersAc, waiveService, setParcelPacking, voidTableBill, voidBill, type PortalOrder } from '../../lib/portalApi';
+import { fetchLiveOrders, createBill, payBill, fetchBillLayout, setOrdersAc, waiveService, setParcelPacking, voidTableBill, voidBill, setBillChargeLine, removeBillChargeLine, type BillChargeLine, type PortalOrder } from '../../lib/portalApi';
 import { supabase } from '../../lib/supabase';
 import { WalkIn } from './WalkIn';
 import { renderBillHtml, type BillData } from '../../lib/billTemplate';
@@ -89,6 +89,22 @@ export function Billing() {
   const [splitting, setSplitting] = useState<string | null>(null);
   /** Which table has its write-off reasons open. One at a time. */
   const [writingOff, setWritingOff] = useState<string | null>(null);
+  /**
+   * ONE-OFF CHARGES ON THIS BILL -- cake cutting, corkage, a delivery fee.
+   *
+   * Not Bill settings, which holds the owner's STANDING lines and applies them
+   * to every order through reprice_order. This is tonight, this table, this
+   * reason. Staff have been handling these by not handling them: the only
+   * lever on the screen was a discount, which is the wrong sign.
+   *
+   * The lines live on the bill, so they survive a reload and a second device
+   * sees them. Local state is only what is on screen.
+   */
+  const [extraLines, setExtraLines] = useState<BillChargeLine[]>([]);
+  const [chargeLabel, setChargeLabel] = useState('');
+  const [chargeValue, setChargeValue] = useState('');
+  const [chargeKind, setChargeKind] = useState<'flat' | 'percent'>('flat');
+  const [chargeBusy, setChargeBusy] = useState(false);
   // Opened from a ticket on the Orders board: focus that table straight away
   // so settling is one tap from the notification, not a hunt.
   const [params] = useSearchParams();
@@ -290,6 +306,7 @@ export function Billing() {
     try {
       await voidBill(bill.id);
       setBill(null); setSelected(new Set()); setDiscount(''); setParcelBoxes(0); setParcelNote('');
+      setExtraLines([]);
       await load();
     } catch (e: any) {
       setError(/PGRST202|could not find the function/i.test(String(e?.message ?? ''))
@@ -298,12 +315,53 @@ export function Billing() {
     } finally { setBusy(false); }
   });
 
+  /** Add or replace a line. The id is derived from the label so that typing the
+   *  same charge twice corrects it rather than stacking two of it. */
+  const addCharge = () => guard(async () => {
+    if (!bill || chargeBusy) return;
+    const label = chargeLabel.trim();
+    const value = Number(chargeValue.replace(/[^\d.]/g, '')) || 0;
+    if (!label) { setError('Give the charge a name — it prints on the diner’s bill.'); return; }
+    if (value <= 0) { setError('A charge needs an amount.'); return; }
+    setChargeBusy(true); setError('');
+    try {
+      const r = await setBillChargeLine(
+        bill.id, label.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 40) || 'charge',
+        label, chargeKind, value,
+      );
+      if (!r.applied) { setError(`Charge not added: ${r.reason ?? 'the bill is closed.'}`); return; }
+      setExtraLines(r.extra_lines ?? []);
+      setBill((b) => (b ? { ...b, total: r.total } : b));
+      setChargeLabel(''); setChargeValue('');
+    } catch (e: any) {
+      setError(/PGRST202|could not find the function/i.test(String(e?.message ?? ''))
+        ? 'One-off charges need a database update that has not been run yet. The bill is unchanged.'
+        : /access denied/i.test(String(e?.message ?? ''))
+          ? 'Adding a charge to a bill needs a manager.'
+          : (e?.message ?? 'Could not add the charge.'));
+    } finally { setChargeBusy(false); }
+  });
+
+  const dropCharge = (lineId: string) => guard(async () => {
+    if (!bill || chargeBusy) return;
+    setChargeBusy(true); setError('');
+    try {
+      const r = await removeBillChargeLine(bill.id, lineId);
+      if (!r.applied) { setError(`Charge not removed: ${r.reason ?? 'the bill is closed.'}`); return; }
+      setExtraLines(r.extra_lines ?? []);
+      setBill((b) => (b ? { ...b, total: r.total } : b));
+    } catch (e: any) {
+      setError(e?.message ?? 'Could not remove the charge.');
+    } finally { setChargeBusy(false); }
+  });
+
   const settle = (mode: 'cash' | 'upi_qr') => guard(async () => {
     if (!bill || busy) return;
     setBusy(true); setError('');
     try {
       await payBill(bill.id, mode);
       setBill(null); setSelected(new Set()); setDiscount(''); setParcelBoxes(0); setParcelNote('');
+      setExtraLines([]);
       await load();
     } catch (e: any) { setError(e?.message ?? 'Could not mark the bill paid.'); }
     finally { setBusy(false); }
@@ -382,7 +440,14 @@ export function Billing() {
       items: b.orders.flatMap((o) => o.items.map((it) => ({
         name: it.name, qty: it.qty, unit_price: it.unit_price,
       }))),
-      subtotal: b.subtotal,
+      /**
+       * PACKING WAS PRINTING TWICE. createBill returns `subtotal` as
+       * sum(subtotal + packing_charge) -- packing is already inside it -- and
+       * the template prints a separate "Packing charge" row beneath it. The
+       * grand total counts it once, so the column did not add up to the total
+       * under it. Subtotal is food, packing is packing.
+       */
+      subtotal: b.subtotal - b.orders.reduce((a, o) => a + Number(o.packing_charge ?? 0), 0),
       discount: b.discount,
       // SUMMED FROM THE ORDERS, not zero. I had hardcoded both when moving the
       // printed bill onto the shared template, which meant a restaurant with a
@@ -644,6 +709,47 @@ export function Billing() {
             </span>
           </div>
           <div className="bill-row total"><span>To collect</span><span>{inr(bill.total)}</span></div>
+
+          {/* Every one-off already on this bill, each removable. Shown before
+              the composer so the answer to "did that go on?" is on screen
+              rather than one more tap away. */}
+          {extraLines.map((l) => (
+            <div className="bill-row" key={l.id}>
+              <span>{l.label}{l.kind === 'percent' ? ` (${l.value}%)` : ''}</span>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span>{inr(l.amount)}</span>
+                <button className="chip" disabled={chargeBusy} onClick={() => dropCharge(l.id)}
+                  aria-label={`Remove ${l.label}`}>✕</button>
+              </span>
+            </div>
+          ))}
+
+          {/* A charge this restaurant does not always make. Bill settings holds
+              the ones it always does. */}
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', marginTop: 8 }}>
+            <input
+              className="code-input" style={{ flex: '2 1 150px', padding: '6px 10px' }}
+              placeholder="Cake cutting, corkage…"
+              value={chargeLabel} onChange={(e) => setChargeLabel(e.target.value)}
+              aria-label="What the charge is for"
+            />
+            <input
+              className="code-input" style={{ flex: '0 1 90px', padding: '6px 10px', textAlign: 'right' }}
+              inputMode="decimal" placeholder={chargeKind === 'flat' ? '₹' : '%'}
+              value={chargeValue} onChange={(e) => setChargeValue(e.target.value)}
+              aria-label="How much"
+            />
+            {([['flat', '₹'], ['percent', '%']] as const).map(([k, lbl]) => (
+              <button key={k} className={chargeKind === k ? 'chip active' : 'chip'}
+                aria-pressed={chargeKind === k}
+                onClick={() => setChargeKind(k)}>{lbl}</button>
+            ))}
+            <button className={`btn btn-glass btn-sm${chargeBusy ? ' is-busy' : ''}`}
+              disabled={chargeBusy} onClick={addCharge}>Add charge</button>
+          </div>
+          <p className="dim" style={{ fontSize: 11.5, margin: '4px 0 0' }}>
+            Added after tax, on this bill only. Charges every bill should carry belong in Bill settings.
+          </p>
 
           {/**
             * PACKING FOR LEFTOVERS, on a dine-in bill, chosen by a person.
