@@ -3,7 +3,7 @@
  *  mark paid (Cash / UPI received). */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { fetchLiveOrders, createBill, payBill, fetchBillLayout, setOrdersAc, waiveService, setParcelPacking, voidTableBill, voidBill, setBillChargeLine, removeBillChargeLine, type BillChargeLine, type PortalOrder } from '../../lib/portalApi';
+import { fetchLiveOrders, createBill, payBill, fetchBillLayout, setOrdersAc, waiveService, setParcelPacking, voidTableBill, voidBill, setBillChargeLine, removeBillChargeLine, staffSetOrderItemQty, type BillChargeLine, type PortalOrder } from '../../lib/portalApi';
 import { supabase } from '../../lib/supabase';
 import { WalkIn } from './WalkIn';
 import { renderBillHtml, type BillData } from '../../lib/billTemplate';
@@ -105,6 +105,10 @@ export function Billing() {
   const [chargeValue, setChargeValue] = useState('');
   const [chargeKind, setChargeKind] = useState<'flat' | 'percent'>('flat');
   const [chargeBusy, setChargeBusy] = useState(false);
+  /** Which order has its items open for correction. One at a time: this is the
+   *  destructive end of the screen and it should take a deliberate tap. */
+  const [editingItems, setEditingItems] = useState<string | null>(null);
+  const [itemBusy, setItemBusy] = useState<string>('');
   // Opened from a ticket on the Orders board: focus that table straight away
   // so settling is one tap from the notification, not a hunt.
   const [params] = useSearchParams();
@@ -353,6 +357,35 @@ export function Billing() {
     } catch (e: any) {
       setError(e?.message ?? 'Could not remove the charge.');
     } finally { setChargeBusy(false); }
+  });
+
+  /**
+   * CORRECTING WHAT WAS ORDERED. "That's two dosas, not three." "They sent one
+   * back."
+   *
+   * The diner's own edit window closes the moment the order reaches the
+   * kitchen, so until now the only answers were to discount the bill by
+   * roughly the right amount or to charge for food nobody ate. The server
+   * reprices from the change, so service and GST follow it; nothing is
+   * computed here.
+   *
+   * Refused while a live bill stands on the order, and it names the bill --
+   * cancel that first, correct, raise again. Manager only.
+   */
+  const changeItemQty = (itemId: string, qty: number) => guard(async () => {
+    if (itemBusy) return;
+    setItemBusy(itemId); setError('');
+    try {
+      await staffSetOrderItemQty(itemId, qty);
+      await load();
+    } catch (e: any) {
+      const msg = String(e?.message ?? '');
+      setError(/PGRST202|could not find the function/i.test(msg)
+        ? 'Correcting an order needs a database update that has not been run yet. Nothing has changed.'
+        : /access denied/i.test(msg)
+          ? 'Correcting what was ordered needs a manager.'
+          : (msg || 'Could not change the item.'));
+    } finally { setItemBusy(''); }
   });
 
   const settle = (mode: 'cash' | 'upi_qr') => guard(async () => {
@@ -622,6 +655,50 @@ export function Billing() {
               </label>
             ))}
           </div>
+
+          {/* CORRECTING THE ORDER ITSELF, one step further in than picking
+              which orders to bill. Deliberately behind its own toggle: it
+              changes what the kitchen was told, not just what is being
+              charged. */}
+          <div style={{ padding: '0 16px 10px' }}>
+            <button className="chip" onClick={() => setEditingItems((x) => (x === tableName ? null : tableName))}
+              aria-expanded={editingItems === tableName}>
+              ✎ Correct an item
+            </button>
+          </div>
+          {editingItems === tableName && (
+            <div className="glass" style={{ padding: '8px 16px', marginBottom: 10 }}>
+              <p className="dim" style={{ fontSize: 12, margin: '0 0 6px' }}>
+                Changing a quantity reprices the order — service and GST follow it.
+                Set a quantity to zero to take the dish off. An order left with nothing is cancelled.
+              </p>
+              {list.map((o) => (
+                <div key={o.id}>
+                  <p className="overline" style={{ margin: '8px 0 2px' }}>#{o.order_no}</p>
+                  {(o.items ?? []).map((it: any) => (
+                    <div key={it.id} className="row-item">
+                      <span style={{ minWidth: 0 }}>
+                        <strong style={{ fontSize: 14 }}>{it.name}</strong>
+                        <span className="dim" style={{ display: 'block', fontSize: 12 }}>{inr(it.unit_price)} each</span>
+                      </span>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <button className="chip" disabled={!!itemBusy}
+                          aria-label={`One fewer ${it.name}`}
+                          onClick={() => changeItemQty(it.id, Math.max(0, Number(it.qty) - 1))}>−</button>
+                        <b style={{ minWidth: 18, textAlign: 'center' }}>{it.qty}</b>
+                        <button className="chip" disabled={!!itemBusy}
+                          aria-label={`One more ${it.name}`}
+                          onClick={() => changeItemQty(it.id, Number(it.qty) + 1)}>+</button>
+                        <button className="chip" disabled={!!itemBusy}
+                          aria-label={`Remove ${it.name}`}
+                          onClick={() => changeItemQty(it.id, 0)}>✕</button>
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+          )}
           </details>
         </section>
       );
