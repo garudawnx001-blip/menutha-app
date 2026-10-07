@@ -21,7 +21,7 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { showAppleButton, providerError } from '../../lib/authProviders';
 import {
-  resetByIdentifier, completeReset, changePassword, passwordProblem,
+  resetByIdentifier, completeReset, changePassword, passwordProblem, friendlyAuthError,
   usernameAvailable, usernameProblem, cleanHandle,
 } from '../../lib/auth';
 
@@ -86,7 +86,7 @@ export function Account() {
         ? 'Password changed, and other devices have been signed out.'
         : 'Password changed. It works here and in the app.');
     } catch (e: any) {
-      setError(e?.message ?? 'Could not change the password.');
+      setError(friendlyAuthError(e, 'Could not change the password. Please try again.'));
     } finally { setBusy(false); }
   };
 
@@ -98,7 +98,7 @@ export function Account() {
       setPwCode(''); setPwNew(''); setPwStep('code');
       setMsg(`A 6-digit code is on its way to ${email}.`);
     } catch (e: any) {
-      setError(e?.message ?? 'Could not send the code.');
+      setError(friendlyAuthError(e, 'We could not send the code just now. Please try again in a few minutes.'));
     } finally { setBusy(false); }
   };
 
@@ -112,7 +112,7 @@ export function Account() {
       setPwStep('off'); setPwCode(''); setPwNew('');
       setMsg('Password changed. It works here and in the app.');
     } catch (e: any) {
-      setError(e?.message ?? 'Could not change the password.');
+      setError(friendlyAuthError(e, 'Could not change the password. Please try again.'));
     } finally { setBusy(false); }
   };
 

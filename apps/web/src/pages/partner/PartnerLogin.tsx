@@ -30,6 +30,7 @@ import {
 } from '../../lib/authProviders';
 import {
   loginWithIdentifier, resetByIdentifier, completeReset, passwordProblem,
+  friendlyAuthError, RESEND_SECONDS,
 } from '../../lib/auth';
 import { GoogleMark } from './GoogleMark';
 
@@ -61,6 +62,24 @@ export function PartnerLogin() {
   const [newPassword, setNewPassword] = useState('');
   const [done, setDone] = useState(false);
 
+  /**
+   * A DEAD RESET LINK used to land on the plain login form with no word of
+   * why: Supabase sends an expired or already-used link back as
+   * #error=access_denied&error_code=otp_expired, which carries no
+   * type=recovery, so the recovery screen never opened and the reader was
+   * left looking at the form they had just come from. Read it once, say it.
+   */
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const h = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+    const code = h.get('error_code') || h.get('error');
+    if (!code) return;
+    setError(code === 'otp_expired'
+      ? 'That reset link has expired or was already used. Type your username or email, then tap “Forgot password?” for a new code.'
+      : 'That link did not work. Type your username or email, then tap “Forgot password?” for a new code.');
+    window.history.replaceState(null, '', window.location.pathname + window.location.search);
+  }, []);
+
   useEffect(() => {
     const { data: sub } = supabase.auth.onAuthStateChange((event) => {
       if (event === 'PASSWORD_RECOVERY') setRecovery(true);
@@ -76,14 +95,18 @@ export function PartnerLogin() {
   }, [recovery]);
 
   const saveNewPassword = async () => {
-    if (newPassword.length < 8) { setError('Choose a password of at least 8 characters.'); return; }
+    const bad = passwordProblem(newPassword);
+    if (bad) { setError(bad); return; }
     setBusy(true); setError('');
     const { error: err } = await supabase.auth.updateUser({ password: newPassword });
     setBusy(false);
     if (err) {
-      setError(/expired|invalid/i.test(err.message)
-        ? 'That reset link has expired — request a new one below.'
-        : err.message);
+      // A link whose session never landed (opened twice, or in another
+      // browser) fails as "Auth session missing" -- that is an expired link to
+      // the reader, not a sentence to show them.
+      setError(/expired|invalid|session missing|session_not_found/i.test(err.message)
+        ? 'That reset link has expired — go back and ask for a new code.'
+        : friendlyAuthError(err, 'Could not save the new password. Please try again.'));
       return;
     }
     setDone(true);
@@ -121,7 +144,7 @@ export function PartnerLogin() {
       await loginWithIdentifier(id, pw);
       nav('/partner/orders', { replace: true });
     } catch (e: any) {
-      setError(e?.message ?? 'Could not sign in. Please try again.');
+      setError(friendlyAuthError(e, 'Could not sign in. Please try again.'));
     } finally {
       setBusy(false);
     }
@@ -170,9 +193,9 @@ export function PartnerLogin() {
       setResetIdent(id);
       setResetCode('');
       setResetStep('code');
-      setResetAgain(Date.now() + 30_000);
+      setResetAgain(Date.now() + RESEND_SECONDS * 1000);
     } catch (e: any) {
-      setError(e?.message ?? 'Could not send the reset code.');
+      setError(friendlyAuthError(e, 'We could not send the code just now. Please try again in a few minutes.'));
     } finally {
       setBusy(false);
     }
@@ -190,7 +213,7 @@ export function PartnerLogin() {
       await completeReset(resetIdent, resetCode, resetPw);
       nav('/partner/orders', { replace: true });
     } catch (e: any) {
-      setError(e?.message ?? 'Could not set that password.');
+      setError(friendlyAuthError(e, 'Could not set that password. Please try again.'));
     } finally {
       setBusy(false);
     }
@@ -262,6 +285,12 @@ export function PartnerLogin() {
                   disabled={busy} onClick={saveNewPassword}>
                   Save new password
                 </button>
+                <div className="auth-providers" style={{ marginTop: 12 }}>
+                  <button className="btn btn-link" disabled={busy}
+                    onClick={() => { setRecovery(false); setError(''); window.history.replaceState(null, '', '/partner'); }}>
+                    ‹ Back to log in
+                  </button>
+                </div>
               </>
             )}
           </div>

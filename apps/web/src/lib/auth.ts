@@ -46,6 +46,80 @@ export async function usernameAvailable(handle: string): Promise<boolean> {
 
 const BAD_CREDS = 'Username, email or password is incorrect.';
 
+/**
+ * EVERY AUTH FAILURE, IN A SENTENCE.
+ *
+ * Supabase answers in three shapes -- an AuthApiError with a status and an
+ * error_code, a FunctionsHttpError whose `context` is the raw Response from an
+ * Edge Function, and plain network failures -- and on 2026-09-12 the phone
+ * showed the third raw: a 500 with its request id and headers, because the
+ * screen printed `err.message` verbatim. Nothing a person reads should ever
+ * look like JSON or an HTTP dump, so every auth catch on both surfaces goes
+ * through here. The server's own words are passed through only when they are
+ * short plain English (the edge function's sentences); everything else is
+ * mapped by status / code, and the fallback is the caller's.
+ */
+export function friendlyAuthError(err: unknown, fallback: string): string {
+  const e = (err ?? {}) as { message?: unknown; status?: unknown; code?: unknown; name?: unknown };
+  const msg = typeof e.message === 'string' ? e.message : '';
+  const code = typeof e.code === 'string' ? e.code : '';
+  const status = typeof e.status === 'number' ? e.status : 0;
+
+  // supabase-js reports a 5xx as AuthRetryableFetchError too (status 500,
+  // and a `message` that is the serialised Response -- the raw dump the phone
+  // showed). Only status 0 is really "no connection"; a 5xx is the server's
+  // fault and gets the caller's sentence.
+  if (status >= 500) return fallback;
+  if (/failed to fetch|network request failed|networkerror|load failed|fetch failed/i.test(msg)
+    || ((e.name === 'AuthRetryableFetchError') && !status) || e.name === 'FunctionsFetchError') {
+    return 'No connection. Check your internet and try again.';
+  }
+  if (code === 'over_email_send_rate_limit' || code === 'over_request_rate_limit' || status === 429
+    || /rate limit|too many|only request this after|security purposes/i.test(msg)) {
+    return 'Too many attempts just now. Wait a minute, then try again.';
+  }
+  if (/error sending (recovery|confirmation|magic link|reauthentication)? ?email|sending email/i.test(msg)) {
+    return 'We could not send the email just now. Please try again in a few minutes.';
+  }
+  if (code === 'same_password' || /should be different from the old password/i.test(msg)) {
+    return 'That is your current password — choose a different one.';
+  }
+  if (code === 'weak_password' || /password should (be|contain)|weak password/i.test(msg)) {
+    return 'That password is too weak. Use 8+ characters with a letter and a number.';
+  }
+  if (code === 'otp_expired' || /expired/i.test(msg)) return 'That code has expired — send a new one.';
+  if (/auth session missing|session.*(not found|expired)|refresh token/i.test(msg) || code === 'session_not_found') {
+    return 'Your session has ended. Log in again, then try once more.';
+  }
+  if (code === 'reauthentication_needed' || /reauthenticat|nonce/i.test(msg)) {
+    return 'For your security, log out and back in, then change the password.';
+  }
+  if (msg === 'Invalid login credentials') return 'Username, email or password is incorrect.';
+  if (/email not confirmed/i.test(msg)) return 'Confirm your email first — open the link we sent you, then log in.';
+  // Short, plain sentences (ours, from the edge function) are safe to show.
+  if (msg && msg.length <= 160 && !/[{}<>]|https?:|status code|non-2xx|\bHTTP\b|request.?id/i.test(msg)) return msg;
+  return fallback;
+}
+
+/** An Edge Function's error body is on `context`, a fetch Response -- not a
+ *  string. Reading `context.body` (a ReadableStream) and JSON-parsing it never
+ *  worked, so every function error fell back to the default sentence, and an
+ *  expired code read as a wrong one. */
+export async function functionError(error: unknown, fallback: string): Promise<string> {
+  const ctx = (error as any)?.context;
+  try {
+    if (ctx && typeof ctx.json === 'function') {
+      const body = await (typeof ctx.clone === 'function' ? ctx.clone() : ctx).json();
+      if (body && typeof body.error === 'string') {
+        return friendlyAuthError({ message: body.error }, fallback);
+      }
+      return friendlyAuthError({ status: ctx.status }, fallback);
+    }
+  } catch { /* not JSON -- fall through */ }
+  return friendlyAuthError(error, fallback);
+}
+
+
 /** Where a reset link lands: the portal's login page, which is also its
  *  recovery screen (it reads type=recovery off the fragment). Without this
  *  Supabase falls back to the Site URL, which is the marketing landing --
@@ -67,7 +141,7 @@ export async function loginWithIdentifier(identifier: string, password: string):
   const id = identifier.trim();
   if (isEmailLike(id)) {
     const { error } = await supabase.auth.signInWithPassword({ email: id, password });
-    if (error) throw new Error(loginErrorSentence(error.message));
+    if (error) throw new Error(friendlyAuthError(error, 'Could not log in just now. Please try again.'));
     return;
   }
   const { data, error } = await supabase.functions.invoke('username-login', {
@@ -77,9 +151,7 @@ export async function loginWithIdentifier(identifier: string, password: string):
     // The function answers 401 with a sentence; invoke() wraps that as an
     // error whose message is the JSON body. Unwrap it rather than showing
     // "Edge Function returned a non-2xx status code".
-    let msg = BAD_CREDS;
-    try { msg = JSON.parse(String((error as any)?.context?.body ?? '{}')).error ?? msg; } catch { /* keep default */ }
-    throw new Error(msg);
+    throw new Error(await functionError(error, BAD_CREDS));
   }
   const session = (data as any)?.session;
   if (!session?.access_token) throw new Error(BAD_CREDS);
@@ -111,16 +183,14 @@ export async function completeReset(identifier: string, code: string, newPasswor
     },
   });
   if (error) {
-    let msg = 'That code did not match. Check it and try again.';
-    try { msg = JSON.parse(String((error as any)?.context?.body ?? '{}')).error ?? msg; } catch { /* keep default */ }
-    throw new Error(msg);
+    throw new Error(await functionError(error, 'Could not reset the password. Please try again.'));
   }
   const session = (data as any)?.session;
   if (!session?.access_token) throw new Error('That code did not match. Check it and try again.');
   const { error: setErr } = await supabase.auth.setSession({
     access_token: session.access_token, refresh_token: session.refresh_token,
   });
-  if (setErr) throw setErr;
+  if (setErr) throw new Error('Your password is changed. Log in with it now.');
 }
 
 /**
@@ -134,6 +204,8 @@ export async function completeReset(identifier: string, code: string, newPasswor
 export function passwordProblem(pw: string): string | null {
   if (pw.length < 8) return 'Use at least 8 characters.';
   if (!/[A-Za-z]/.test(pw) || !/\d/.test(pw)) return 'Include at least one letter and one number.';
+  // Supabase (bcrypt) refuses anything past 72 bytes; say so before it does.
+  if (new TextEncoder().encode(pw).length > 72) return 'Use at most 72 characters.';
   return null;
 }
 
@@ -165,11 +237,11 @@ export async function changePassword(
   if (reauth) {
     throw new Error(/invalid login credentials/i.test(reauth.message)
       ? 'That is not your current password.'
-      : loginErrorSentence(reauth.message));
+      : friendlyAuthError(reauth, 'Could not check your current password. Please try again.'));
   }
 
   const { error } = await supabase.auth.updateUser({ password: newPw });
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(friendlyAuthError(error, 'Could not change the password. Please try again.'));
 
   // Everywhere else is signed out only when asked. Someone changing a
   // password because they think it leaked wants this; someone tidying up does
@@ -187,17 +259,24 @@ export function otpErrorSentence(message: string): string {
   return message;
 }
 
+const SEND_FAILED = 'We could not send the code just now. Please try again in a few minutes.';
+
+/** Seconds before another reset code may be asked for. Matches the project's
+ *  SMTP "minimum interval" (60 s): a resend inside it is refused by Supabase,
+ *  and the old 30-second button invited exactly that refusal. */
+export const RESEND_SECONDS = 60;
+
 /** Reset by username OR email. Answers identically whether or not the
  *  identifier exists -- the enumeration this whole module exists to prevent. */
 export async function resetByIdentifier(identifier: string): Promise<void> {
   const id = identifier.trim();
   if (isEmailLike(id)) {
     const { error } = await supabase.auth.resetPasswordForEmail(id, { redirectTo: RESET_REDIRECT() });
-    if (error) throw error;
+    if (error) throw new Error(friendlyAuthError(error, SEND_FAILED));
     return;
   }
   const { error } = await supabase.functions.invoke('username-login', {
     body: { action: 'reset', identifier: id.toLowerCase() },
   });
-  if (error) throw error;
+  if (error) throw new Error(await functionError(error, SEND_FAILED));
 }
