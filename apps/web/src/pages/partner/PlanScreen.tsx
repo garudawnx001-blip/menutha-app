@@ -38,6 +38,8 @@ interface PlanState {
   has_mandate?: boolean;
   grace_until: string | null;
   addons: string[];
+  /** Platform-granted: never billed, never expiring. From get_plan_state. */
+  is_complimentary?: boolean;
 }
 
 /**
@@ -617,8 +619,23 @@ export function PlanScreen({ preview }: { preview?: boolean } = {}) {
           </span>
         </div>
       )}
+      {/* COMPLIMENTARY: granted by Menutha. No countdown, no prices, no
+          checkout -- there is nothing to buy and nothing will ever be charged. */}
+      {ent?.complimentary && (
+        <div className="glass" style={{ padding: 18, marginTop: 14, borderColor: 'var(--gold)' }}>
+          <span className="badge gold">Complimentary</span>
+          <strong style={{ display: 'block', fontSize: 18, marginTop: 10 }}>
+            You are on the <span style={{ textTransform: 'capitalize' }}>{ent.tier}</span> plan, free — courtesy of Menutha.
+          </strong>
+          <p className="muted" style={{ fontSize: 14, margin: '6px 0 0' }}>
+            Everything in your plan is switched on. There is no trial to run out and nothing
+            will ever be charged, so there is nothing to set up here.
+          </p>
+        </div>
+      )}
       {error && <p className="inline-error" style={{ marginTop: 12 }}>{error}</p>}
 
+      {!ent?.complimentary && (<>
       <h2 className="cat-heading">Plans</h2>
       {/* HOW LONG YOU PAY FOR, and each one is a real plan at the gateway.
           A duration with no rows is not offered -- before the migration runs
@@ -793,6 +810,9 @@ export function PlanScreen({ preview }: { preview?: boolean } = {}) {
         })}
       </div>
 
+      </>)}
+
+      {!ent?.complimentary && (<>
       <h2 className="cat-heading">Payment history</h2>
       <div className="glass" style={{ padding: 16 }}>
         {historyError ? (
@@ -813,6 +833,7 @@ export function PlanScreen({ preview }: { preview?: boolean } = {}) {
         Payments are processed by Razorpay (UPI Autopay & cards). Menutha never
         stores your payment details.
       </p>
+      </>)}
     </div>
   );
 }

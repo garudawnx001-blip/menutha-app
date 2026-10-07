@@ -160,9 +160,18 @@ export function entitlementsFor(r, now = Date.now()) {
   const trialLive = status === 'trialing' && trialDated;
   const graceLive = status === 'grace' && graceUntil !== null && graceUntil > now;
 
+  /**
+   * COMPLIMENTARY: granted by the platform (admin console), never billed and
+   * never expiring. Active on the tier it was granted at, whatever the dates
+   * say -- the server pins the row to 'active' as well, this is the same rule
+   * read from the flag so a stale row can never lock a complimentary account.
+   * `=== true` like the mandate: absent means not complimentary.
+   */
+  const complimentary = r?.is_complimentary === true;
+
   let state;
   let tier;
-  if (status === 'active') {
+  if (complimentary || status === 'active') {
     state = 'active';
     tier = knownTier(r?.plan_tier, 'basic');
   } else if (trialLive && mandate) {
@@ -218,7 +227,7 @@ export function entitlementsFor(r, now = Date.now()) {
     for (const a of addons) for (const f of ADDON_FEATURES[a] ?? []) features.add(f);
   }
 
-  return { tier, state, canOrder: !barred, features, trialEndsAt, graceUntil };
+  return { tier, state, canOrder: !barred, features, trialEndsAt: complimentary ? null : trialEndsAt, graceUntil: complimentary ? null : graceUntil, complimentary };
 }
 
 /**
