@@ -13,6 +13,7 @@ import { inr } from '../lib/types';
 import { useStore } from '../store';
 import { IdentityGate, ItemSheet, LanguagePicker, Spinner, Stepper, VegMark, Wordmark } from '../components';
 import { useT, useLang, translateCategory, translateTableLabel } from '../lib/i18n';
+import { dietAvailability, effectiveDiet, matchesDiet, categoriesWithItems } from '../lib/menuFilters';
 import { dishName } from '../lib/translit';
 import { TableSoFar } from './TableSoFar';
 import { CallService, canCallService } from './CallService';
@@ -217,18 +218,31 @@ export function Menu() {
     // setSession, which React keeps stable.
   }, [session?.table?.id, session?.orderedAt]);
 
-  const cats = useMemo(() => {
-    const seen = new Map<string, number>();
-    for (const i of items ?? []) if (!seen.has(i.category)) seen.set(i.category, i.category_sort);
-    return [...seen.entries()].sort((a, b) => a[1] - b[1]).map(([c]) => c);
-  }, [items]);
+  // Filters are built from what can be ORDERED: fetchMenu only returns
+  // available dishes, so a Non-veg chip with no non-veg dish behind it, or a
+  // "Juice" chip whose juices are all switched off, never appears. With only
+  // one kind on offer the diet toggle is hidden entirely (see menuFilters).
+  const dietAvail = useMemo(() => dietAvailability(items ?? []), [items]);
+  const dietNow = effectiveDiet(diet, dietAvail);
+
+  const cats = useMemo(() => categoriesWithItems(items ?? [], dietNow), [items, dietNow]);
+  const catNow = activeCat === 'All' || cats.includes(activeCat) ? activeCat : 'All';
+
+  // A saved filter that no longer matches anything (the last non-veg dish
+  // went out of stock, a category emptied) falls back instead of leaving the
+  // diner on an empty page with nothing highlighted. Only once the menu is in.
+  useEffect(() => {
+    if (!items) return;
+    if (dietNow !== diet) setDiet(dietNow);
+    if (catNow !== activeCat) setActiveCat(catNow);
+  }, [items, dietNow, diet, catNow, activeCat]);
 
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
     return (items ?? []).filter(
       (i) =>
-        (diet === 'all' || (diet === 'veg' ? i.is_veg : !i.is_veg)) &&
-        (activeCat === 'All' || i.category === activeCat) &&
+        matchesDiet(i, dietNow) &&
+        (catNow === 'All' || i.category === catNow) &&
         // Match the name the diner can actually SEE as well as the English one:
         // someone reading a Kannada menu will type Kannada into the search box,
         // and matching only the stored English name would return nothing.
@@ -237,7 +251,7 @@ export function Menu() {
           || dishName(i, lang).toLowerCase().includes(q)
           || (i.description ?? '').toLowerCase().includes(q)),
     );
-  }, [items, query, diet, activeCat, lang]);
+  }, [items, query, dietNow, catNow, lang]);
 
   /** Sections in the order the restaurant arranged their categories.
    *
@@ -336,7 +350,12 @@ export function Menu() {
             aria-label={t("menu.search")}
           />
         </div>
+        {(dietAvail.offer || hasBuffet || canCallService(session)) && (
         <div className="chip-row diet-row" role="group" aria-label={t('menu.dietFilter')}>
+          {/* Only when BOTH kinds can be ordered: a toggle with one possible
+              answer is noise, and a Non-veg chip on an all-veg menu (or one
+              whose non-veg dishes are all out) leads to an empty page. */}
+          {dietAvail.offer && (<>
           <button
             className={'chip diet-chip diet-all' + (diet === 'all' ? ' active' : '')}
             style={diet === 'all' ? { background: '#e8833a', borderColor: '#e8833a', color: '#fffdf8' } : undefined}
@@ -361,6 +380,7 @@ export function Menu() {
           >
             <span className="veg-mark nonveg" /> {t('menu.nonveg')}
           </button>
+          </>)}
 
           {/* BUFFET AND SERVICE, WHERE HE MARKED THEM. He drew both labels into
               this row and crossed out the floating "Call for service" chip that
@@ -371,7 +391,7 @@ export function Menu() {
               the left change what the list below shows, these two leave the
               menu. Same row because that is where a diner's eye already is;
               different half of it because they do different things. */}
-          {(hasBuffet || canCallService(session)) && <span className="chip-gap" aria-hidden />}
+          {dietAvail.offer && (hasBuffet || canCallService(session)) && <span className="chip-gap" aria-hidden />}
           {hasBuffet && (
             <button className="chip chip-go" onClick={() => nav('/buffet')}>
               🍽 {t('start.buffet')}
@@ -387,13 +407,14 @@ export function Menu() {
             </button>
           )}
         </div>
+        )}
         <div className="chip-row" role="tablist">
           {['All', ...cats].map((c) => (
             <button
               key={c}
               role="tab"
-              aria-selected={activeCat === c}
-              className={activeCat === c ? 'chip active' : 'chip'}
+              aria-selected={catNow === c}
+              className={catNow === c ? 'chip active' : 'chip'}
               onClick={() => setActiveCat(c)}
             >
               {/* "All" is ours. Every other chip is the restaurant's category
