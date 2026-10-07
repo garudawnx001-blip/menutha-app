@@ -3,10 +3,9 @@
  *  mark paid (Cash / UPI received). */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { fetchLiveOrders, fetchOrdersByIds, createBill, payBill, fetchBillLayout, setOrdersAc, waiveService, setParcelPacking, voidTableBill, voidBill, setBillChargeLine, removeBillChargeLine, staffSetOrderItemQty, type BillChargeLine, type PortalOrder } from '../../lib/portalApi';
-import { supabase } from '../../lib/supabase';
+import { fetchLiveOrders, fetchOrdersByIds, createBill, quoteBill, fetchBillMoney, payBill, fetchBillLayout, setOrdersAc, waiveService, setParcelPacking, voidTableBill, voidBill, setBillChargeLine, removeBillChargeLine, staffSetOrderItemQty, type BillChargeLine, type PortalOrder } from '../../lib/portalApi';
 import { WalkIn } from './WalkIn';
-import { renderBillHtml, type BillData } from '../../lib/billTemplate';
+import { renderBillHtml, billNumbersFromBreakdown, type BillData } from '../../lib/billTemplate';
 import { printBillHtml } from '../../lib/printBill';
 import { inr } from '../../lib/types';
 import { usePartner } from './PartnerShell';
@@ -14,6 +13,8 @@ import { Spinner } from '../../components';
 
 interface BillDraft {
   id: string; bill_no: number; subtotal: number; discount: number; gst_amount: number; total: number;
+  /** The server's calculation, stored on the bill. What the paper prints. */
+  breakdown?: any;
   orders: PortalOrder[];
 }
 
@@ -64,12 +65,10 @@ export function Billing() {
            owns the total -- it also backs out whatever this function charged
            before -- and a number the counter is about to collect should come
            from the same place the printed sheet reads. */
-        const { data: fresh } = await supabase
-          .from('bill').select('total, parcel_charge, parcel_boxes')
-          .eq('id', bill.id).maybeSingle();
+        const fresh = await fetchBillMoney(bill.id);
         if (fresh) {
-          setBill((b) => (b ? { ...b, total: Number((fresh as any).total) } : b));
-          setParcelBoxes(Number((fresh as any).parcel_boxes ?? n));
+          setBill((b) => (b ? { ...b, total: fresh.total, breakdown: fresh.breakdown } : b));
+          setParcelBoxes(fresh.parcel_boxes);
         }
       }
     } catch (e: any) {
@@ -200,7 +199,28 @@ export function Billing() {
   const sgst = Math.round(taxable * sgstPct) / 100;
   const cgst = Math.round(taxable * cgstPct) / 100;
   const gst = sgst + cgst;
-  const total = Math.round((taxable + gst) * 100) / 100;
+  const localTotal = Math.round((taxable + gst) * 100) / 100;
+
+  /**
+   * THE PREVIEW IS THE SERVER'S OWN CALCULATION. quote_bill runs exactly the
+   * arithmetic create_table_bill stores, so the figure on this screen is the
+   * figure on the paper. The local sum above is only a fallback for a
+   * database that has not had the 2026-10-08 update.
+   */
+  const [quote, setQuote] = useState<any>(null);
+  const chosenKey = chosen.map((o) => `${o.id}:${o.total}`).join(',');
+  useEffect(() => {
+    if (!chosen.length) { setQuote(null); return; }
+    let live = true;
+    const t = setTimeout(() => {
+      quoteBill(restaurant.id, chosen.map((o) => o.id), disc)
+        .then((q) => { if (live) setQuote(q); })
+        .catch(() => { if (live) setQuote(null); });
+    }, 250);
+    return () => { live = false; clearTimeout(t); };
+  }, [restaurant.id, chosenKey, disc]);
+  const qn = quote ? billNumbersFromBreakdown(quote) : null;
+  const total = qn ? qn.total : localTotal;
 
   /**
    * DID THE SERVER CHARGE WHAT THE SCREEN PROMISED?
@@ -215,7 +235,11 @@ export function Billing() {
    * two disagree, staff have to know BEFORE the paper does. A rupee of
    * tolerance keeps ordinary rounding quiet.
    */
-  const reconcile = (charged: number, promised: number) => {
+  const reconcile = (charged: number, promised: number, breakdown?: any) => {
+    // A bill with a breakdown IS the one calculation -- there is no second
+    // opinion left to disagree with it (an AC charge added on raising is part
+    // of it, not a discrepancy).
+    if (breakdown) return;
     if (Math.abs(Number(charged) - promised) <= 1) return;
     setError(
       `Check this bill before handing it over: the screen came to ${inr(promised)} `
@@ -241,7 +265,7 @@ export function Billing() {
       // billNow skips the preview, so the promise it is measured against is
       // the orders' own totals rather than this page's running figures --
       // as the bill left them (a duplicated parcel fee is dropped on billing).
-      reconcile(b.total, sumOf(billed));
+      reconcile(b.total, sumOf(billed), b.breakdown);
     } catch (e: any) { setError(e?.message ?? 'Could not create the bill.'); }
     finally { setBusy(false); }
   });
@@ -278,7 +302,7 @@ export function Billing() {
       setBill({ ...b, orders: billed }); setParcelBoxes(0); setParcelNote('');
       // The server may have dropped a duplicated parcel fee while billing;
       // that correction is not a disagreement worth warning about.
-      reconcile(b.total, total - (sumOf(chosen) - sumOf(billed)));
+      reconcile(b.total, total - (sumOf(chosen) - sumOf(billed)), b.breakdown);
     } catch (e: any) { setError(e?.message ?? 'Could not create the bill.'); }
     finally { setBusy(false); }
   });
@@ -350,7 +374,8 @@ export function Billing() {
       );
       if (!r.applied) { setError(`Charge not added: ${r.reason ?? 'the bill is closed.'}`); return; }
       setExtraLines(r.extra_lines ?? []);
-      setBill((b) => (b ? { ...b, total: r.total } : b));
+      const fresh = await fetchBillMoney(bill.id).catch(() => null);
+      setBill((b) => (b ? { ...b, total: fresh?.total ?? r.total, breakdown: fresh?.breakdown ?? b.breakdown } : b));
       setChargeLabel(''); setChargeValue('');
     } catch (e: any) {
       setError(/PGRST202|could not find the function/i.test(String(e?.message ?? ''))
@@ -368,7 +393,8 @@ export function Billing() {
       const r = await removeBillChargeLine(bill.id, lineId);
       if (!r.applied) { setError(`Charge not removed: ${r.reason ?? 'the bill is closed.'}`); return; }
       setExtraLines(r.extra_lines ?? []);
-      setBill((b) => (b ? { ...b, total: r.total } : b));
+      const fresh = await fetchBillMoney(bill.id).catch(() => null);
+      setBill((b) => (b ? { ...b, total: fresh?.total ?? r.total, breakdown: fresh?.breakdown ?? b.breakdown } : b));
     } catch (e: any) {
       setError(e?.message ?? 'Could not remove the charge.');
     } finally { setChargeBusy(false); }
@@ -518,6 +544,12 @@ export function Billing() {
         label: String(c.label ?? 'Charge'), amount: Number(c.amount) || 0,
       })),
       serviceWaived: waived,
+      /* A bill raised after the 2026-10-08 update carries the server's whole
+         calculation. Every number on the paper then comes from it -- items,
+         every charge (AC, boxes, one-off lines included), taxable value, tax,
+         round-off, total -- so the column always adds up to the total under
+         it. Everything above is only for a bill raised before that. */
+      ...(b.breakdown ? billNumbersFromBreakdown(b.breakdown) : {}),
     };
   };
 
@@ -777,8 +809,16 @@ export function Billing() {
               </span>
             </div>
           )}
-          <div className="bill-row"><span>SGST ({sgstPct}%)</span><span>{inr(sgst)}</span></div>
-          <div className="bill-row"><span>CGST ({cgstPct}%)</span><span>{inr(cgst)}</span></div>
+          {qn && qn.discount > 0 && (
+            <div className="bill-row"><span>After discount</span><span>{inr(qn.subtotal - qn.discount)}</span></div>
+          )}
+          {qn?.chargeLines?.map((c, i) => (
+            <div className="bill-row" key={`${c.label}-${i}`}><span>{c.label}</span><span>{inr(c.amount)}</span></div>
+          ))}
+          {qn && <div className="bill-row"><span>Taxable value</span><span>{inr(qn.taxable ?? 0)}</span></div>}
+          <div className="bill-row"><span>SGST ({qn ? qn.sgstPct : sgstPct}%)</span><span>{inr(qn ? qn.sgst : sgst)}</span></div>
+          <div className="bill-row"><span>CGST ({qn ? qn.cgstPct : cgstPct}%)</span><span>{inr(qn ? qn.cgst : cgst)}</span></div>
+          {qn && qn.roundOff ? <div className="bill-row"><span>Round off</span><span>{inr(qn.roundOff)}</span></div> : null}
           <div className="bill-row total"><span>Total</span><span>{inr(total)}</span></div>
           <button className={`btn btn-primary btn-block${busy ? ' is-busy' : ''}`} style={{ marginTop: 12 }} disabled={busy} onClick={generate}>
             {'Generate bill'}

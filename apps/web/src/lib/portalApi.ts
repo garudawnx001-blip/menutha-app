@@ -853,7 +853,11 @@ export async function createBill(restaurantId: string, orderIds: string[], disco
     p_restaurant_id: restaurantId, p_order_ids: orderIds, p_discount: discount,
   });
   if (error) throw error;
-  const bill = data as { id: string; bill_no: number; subtotal: number; discount: number; gst_amount: number; total: number };
+  const bill = data as {
+    id: string; bill_no: number; subtotal: number; discount: number; gst_amount: number; total: number;
+    /** The server's full calculation (2026-10-08 on). Absent on an older database. */
+    breakdown?: any;
+  };
 
   /**
    * THE AC CHARGE, ADDED AFTER THE BILL EXISTS.
@@ -872,11 +876,54 @@ export async function createBill(restaurantId: string, orderIds: string[], disco
    * The function is idempotent, so a retry of this whole call cannot
    * double-charge.
    */
-  await supabase.rpc('apply_table_ac_charge', { p_bill_id: bill.id }).then(
-    () => {}, () => {},
+  const ac = await supabase.rpc('apply_table_ac_charge', { p_bill_id: bill.id }).then(
+    (r) => r.data as { applied?: boolean } | null, () => null,
   );
 
+  /* The AC charge changed the bill AFTER create_table_bill returned it, so
+     the total and breakdown in hand are stale. Re-read them: the counter
+     collects, and the paper prints, what the server stored. */
+  if (ac?.applied) {
+    const fresh = await fetchBillMoney(bill.id).catch(() => null);
+    if (fresh) return { ...bill, ...fresh };
+  }
   return bill;
+}
+
+/**
+ * THE BILL'S MONEY AS THE SERVER STORED IT: total, the full breakdown the
+ * paper prints, and the one-off lines. Re-read after anything changes a raised
+ * bill, so the screen never adds a delta of its own.
+ */
+export async function fetchBillMoney(billId: string) {
+  const { data, error } = await supabase
+    .from('bill').select('total, breakdown, extra_lines, parcel_boxes')
+    .eq('id', billId).maybeSingle();
+  if (error) throw error;
+  if (!data) return null;
+  return {
+    total: Number((data as any).total),
+    breakdown: (data as any).breakdown ?? null,
+    extra_lines: ((data as any).extra_lines ?? []) as BillChargeLine[],
+    parcel_boxes: Number((data as any).parcel_boxes ?? 0),
+  };
+}
+
+/**
+ * THE PREVIEW BEFORE A BILL EXISTS, from the server's own calculation
+ * (quote_bill = bill_compute, writes nothing). Null when the database has not
+ * had the 2026-10-08 billing update yet; the screen then falls back to its
+ * old estimate and the raised bill is still the figure that counts.
+ */
+export async function quoteBill(restaurantId: string, orderIds: string[], discount: number) {
+  const { data, error } = await supabase.rpc('quote_bill', {
+    p_restaurant_id: restaurantId, p_order_ids: orderIds, p_discount: discount,
+  });
+  if (error) {
+    if (/PGRST202|could not find the function/i.test(String(error.message ?? ''))) return null;
+    throw error;
+  }
+  return data as any;
 }
 
 /**

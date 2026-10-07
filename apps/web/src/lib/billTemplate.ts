@@ -222,7 +222,52 @@ export type BillData = {
    * SGST/CGST lines below still stand on their own.
    */
   chargeLines?: { label: string; amount: number }[];
+  /**
+   * TAXABLE VALUE AND ROUND-OFF, from the server's breakdown. Present on every
+   * bill raised after the 2026-10-08 billing update; absent (and not printed)
+   * on older bills and on the sample. With them the column reads top to
+   * bottom as one sum: lines -> taxable value -> tax -> round-off -> total.
+   */
+  taxable?: number;
+  roundOff?: number;
 };
+
+/**
+ * THE PRINTED NUMBERS, STRAIGHT FROM THE SERVER'S BREAKDOWN.
+ *
+ * bill.breakdown (create_table_bill / quote_bill) is the one calculation, in
+ * integer paise. This only converts it to rupees and names the lines -- it
+ * adds nothing up -- so every line on the paper is a line in the total and
+ * the paper always agrees with what the counter collects.
+ */
+export function billNumbersFromBreakdown(bd: any): Pick<BillData,
+  'items' | 'subtotal' | 'discount' | 'packing' | 'service' | 'sgstPct' | 'cgstPct'
+  | 'sgst' | 'cgst' | 'total' | 'serviceWaived' | 'chargeLines' | 'taxable' | 'roundOff'> {
+  const r = (p: unknown) => (Number(p) || 0) / 100;
+  const lines: { label: string; amount: number }[] = [];
+  for (const c of bd?.charges ?? []) lines.push({ label: String(c.label ?? 'Charge'), amount: r(c.amount_p) });
+  if (Number(bd?.boxes_p) > 0) {
+    lines.push({ label: `Packing${Number(bd.boxes) > 0 ? ` (${bd.boxes} box${Number(bd.boxes) === 1 ? '' : 'es'})` : ''}`, amount: r(bd.boxes_p) });
+  }
+  if (Number(bd?.ac_p) > 0) lines.push({ label: 'AC charge', amount: r(bd.ac_p) });
+  for (const e of bd?.extras ?? []) lines.push({ label: String(e.label ?? 'Charge'), amount: r(e.amount_p) });
+  return {
+    items: (bd?.items ?? []).map((i: any) => ({ name: String(i.name), qty: Number(i.qty), unit_price: r(i.rate_p) })),
+    subtotal: r(bd?.food_p),
+    discount: r(bd?.discount_p),
+    packing: r(bd?.packing_p),
+    service: r(bd?.service_p),
+    serviceWaived: bd?.service_waived === true,
+    chargeLines: lines,
+    taxable: r(bd?.taxable_p),
+    sgstPct: Number(bd?.sgst_rate) || 0,
+    cgstPct: Number(bd?.cgst_rate) || 0,
+    sgst: r(bd?.sgst_p),
+    cgst: r(bd?.cgst_p),
+    roundOff: r(bd?.round_off_p),
+    total: r(bd?.total_p),
+  };
+}
 
 /* ── Rendering ───────────────────────────────────────────────────────────── */
 
@@ -464,11 +509,13 @@ export function renderBillHtml(d: BillData, layoutRaw: any): string {
     ${d.packing > 0 ? `<div class="row"><span>Packing charge</span><span>${inr(d.packing)}</span></div>` : ''}
     ${serviceRow}
     ${consolidateChargeLines(d.chargeLines).map((c) => `<div class="row"><span>${esc(c.label)}</span><span>${inr(c.amount)}</span></div>`).join('')}
+    ${d.taxable != null ? `<div class="row taxtotal"><span>Taxable value</span><span>${inr(d.taxable)}</span></div>` : ''}
     <!-- The RATE on the label describes the money beside it. A bill that says
          2.5% while charging 9% is worse than one showing no rate at all. -->
     <div class="row"><span>SGST @ ${esc(d.sgstPct)}%</span><span>${inr(d.sgst)}</span></div>
     <div class="row"><span>CGST @ ${esc(d.cgstPct)}%</span><span>${inr(d.cgst)}</span></div>
     <div class="row taxtotal"><span>Total tax</span><span>${inr(d.sgst + d.cgst)}</span></div>
+    ${d.roundOff ? `<div class="row"><span>Round off</span><span>${d.roundOff < 0 ? '− ' : ''}${inr(Math.abs(d.roundOff))}</span></div>` : ''}
     <div class="row grand"><span>Total</span><span>${inr(d.total)}</span></div>
   </div>`,
     thanks:  d.restaurant.thanks ? `<div class="thanks">${esc(d.restaurant.thanks)}</div>` : '',
