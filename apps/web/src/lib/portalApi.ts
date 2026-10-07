@@ -327,6 +327,26 @@ export async function fetchLiveOrders(restaurantId: string, statuses: string[]):
  * One exported mapper, used by every loader, so a third one cannot quietly
  * reintroduce this.
  */
+/**
+ * THE ORDERS AS THE BILL LEFT THEM.
+ *
+ * create_table_bill re-prices a bill's parcel orders when it raises it (the
+ * parcel fee lands once, on one order, and never on dine-in), so the order
+ * rows the page fetched BEFORE billing may still carry a fee the bill did not
+ * charge. The printed sheet reads packing and charge lines off the orders, so
+ * it must read them after. Same columns and same mapper as fetchLiveOrders.
+ */
+export async function fetchOrdersByIds(ids: string[]): Promise<PortalOrder[]> {
+  if (!ids.length) return [];
+  const BASE = 'id, order_no, status, is_parcel, subtotal, packing_charge, service_charge, gst_amount, total, notes, placed_at, ready_at, released_at, guest_name, guest_phone, table_id, dining_table(label), order_item(id, name, qty, unit_price, is_veg), payment(id, status, provider)';
+  const run = (cols: string) => supabase.from('food_order').select(cols).in('id', ids);
+  let { data, error } = await run(waivedColumnMissing ? BASE : `${BASE}, service_waived, charge_lines`);
+  if (error && (error as any).code === '42703') ({ data, error } = await run(BASE));
+  if (error) throw error;
+  const byId = new Map((data ?? []).map((r: any) => [r.id, toPortalOrder(r)]));
+  return ids.map((id) => byId.get(id)).filter(Boolean) as PortalOrder[];
+}
+
 export function toPortalOrder(row: any): PortalOrder {
   return {
     ...row,

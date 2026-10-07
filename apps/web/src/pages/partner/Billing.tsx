@@ -3,7 +3,7 @@
  *  mark paid (Cash / UPI received). */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { fetchLiveOrders, createBill, payBill, fetchBillLayout, setOrdersAc, waiveService, setParcelPacking, voidTableBill, voidBill, setBillChargeLine, removeBillChargeLine, staffSetOrderItemQty, type BillChargeLine, type PortalOrder } from '../../lib/portalApi';
+import { fetchLiveOrders, fetchOrdersByIds, createBill, payBill, fetchBillLayout, setOrdersAc, waiveService, setParcelPacking, voidTableBill, voidBill, setBillChargeLine, removeBillChargeLine, staffSetOrderItemQty, type BillChargeLine, type PortalOrder } from '../../lib/portalApi';
 import { supabase } from '../../lib/supabase';
 import { WalkIn } from './WalkIn';
 import { renderBillHtml, type BillData } from '../../lib/billTemplate';
@@ -234,12 +234,14 @@ export function Billing() {
     setBusy(true); setError('');
     try {
       const b = await createBill(restaurant.id, list.map((o) => o.id), 0);
+      const billed = await billedOrders(list);
       setSelected(new Set(list.map((o) => o.id)));
       setDiscount('');
-      setBill({ ...b, orders: list }); setParcelBoxes(0); setParcelNote('');
+      setBill({ ...b, orders: billed }); setParcelBoxes(0); setParcelNote('');
       // billNow skips the preview, so the promise it is measured against is
-      // the orders' own totals rather than this page's running figures.
-      reconcile(b.total, sumOf(list));
+      // the orders' own totals rather than this page's running figures --
+      // as the bill left them (a duplicated parcel fee is dropped on billing).
+      reconcile(b.total, sumOf(billed));
     } catch (e: any) { setError(e?.message ?? 'Could not create the bill.'); }
     finally { setBusy(false); }
   });
@@ -257,13 +259,26 @@ export function Billing() {
 
   const sumOf = (list: PortalOrder[]) => list.reduce((a, o) => a + Number(o.total || 0), 0);
 
+  /** The orders re-read after billing (see fetchOrdersByIds). If the re-read
+   *  fails the bill still exists and is right; the page falls back to what it
+   *  had rather than refusing to show it. */
+  const billedOrders = async (list: PortalOrder[]) => {
+    try {
+      const fresh = await fetchOrdersByIds(list.map((o) => o.id));
+      return fresh.length === list.length ? fresh : list;
+    } catch { return list; }
+  };
+
   const generate = () => guard(async () => {
     if (!chosen.length || busy) return;
     setBusy(true); setError('');
     try {
       const b = await createBill(restaurant.id, chosen.map((o) => o.id), disc);
-      setBill({ ...b, orders: chosen }); setParcelBoxes(0); setParcelNote('');
-      reconcile(b.total, total);
+      const billed = await billedOrders(chosen);
+      setBill({ ...b, orders: billed }); setParcelBoxes(0); setParcelNote('');
+      // The server may have dropped a duplicated parcel fee while billing;
+      // that correction is not a disagreement worth warning about.
+      reconcile(b.total, total - (sumOf(chosen) - sumOf(billed)));
     } catch (e: any) { setError(e?.message ?? 'Could not create the bill.'); }
     finally { setBusy(false); }
   });
