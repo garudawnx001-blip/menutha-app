@@ -30,6 +30,7 @@ import {
 } from '../../lib/authProviders';
 import {
   loginWithIdentifier, resetByIdentifier, completeReset, passwordProblem,
+  sendErrorSentence,
 } from '../../lib/auth';
 import { GoogleMark } from './GoogleMark';
 
@@ -83,7 +84,7 @@ export function PartnerLogin() {
     if (err) {
       setError(/expired|invalid/i.test(err.message)
         ? 'That reset link has expired — request a new one below.'
-        : err.message);
+        : sendErrorSentence(err, 'Could not set that password. Try again in a minute.'));
       return;
     }
     setDone(true);
