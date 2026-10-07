@@ -230,7 +230,25 @@ export type BillData = {
    */
   taxable?: number;
   roundOff?: number;
+  /**
+   * A REPRINT. The first print of a bill is the original; any later print of
+   * the same bill says DUPLICATE in the heading and under the total, so a
+   * second copy can never pass as a second bill (record_bill_print counts).
+   */
+  duplicate?: boolean;
 };
+
+/**
+ * WHAT THE PAPER MAY CALL ITSELF. Only a GST-registered restaurant -- one with
+ * a GSTIN on its profile -- issues a "Tax invoice" (CGST Rules, rule 46).
+ * Without a GSTIN the same document is headed "Bill". The heading follows the
+ * profile; it never decides whether GST is charged, which is the owner's
+ * setting and is not changed here.
+ */
+export function billHeading(d: Pick<BillData, 'restaurant' | 'duplicate'>): string {
+  const kind = d.restaurant.gstin?.trim() ? 'TAX INVOICE' : 'BILL';
+  return d.duplicate ? `${kind} — DUPLICATE` : kind;
+}
 
 /**
  * THE PRINTED NUMBERS, STRAIGHT FROM THE SERVER'S BREAKDOWN.
@@ -502,7 +520,7 @@ export function renderBillHtml(d: BillData, layoutRaw: any): string {
     ids:     idLines ? `<div class="ids">${idLines}</div>` : '',
     meta:    `<hr class="rule">
   <div class="meta">
-    <b>TAX INVOICE — ${esc(d.billNo)}</b><br>
+    <b>${esc(billHeading(d))} — ${esc(d.billNo)}</b><br>
     ${esc(d.dateText)} · ${esc(d.tableText)}${
       d.customer.name && d.customer.name !== 'Guest'
         ? `<br>Bill to: ${esc(d.customer.name)}${d.customer.phone ? ` · ${esc(d.customer.phone)}` : ''}`
@@ -527,10 +545,11 @@ export function renderBillHtml(d: BillData, layoutRaw: any): string {
     <div class="row taxtotal"><span>Total tax</span><span>${inr(d.sgst + d.cgst)}</span></div>
     ${d.roundOff ? `<div class="row"><span>Round off</span><span>${d.roundOff < 0 ? '− ' : ''}${inr(Math.abs(d.roundOff))}</span></div>` : ''}
     <div class="row grand"><span>Total</span><span>${inr(d.total)}</span></div>
+    ${d.duplicate ? `<div class="row" style="justify-content:center;font-weight:800;letter-spacing:.12em">DUPLICATE COPY</div>` : ''}
   </div>`,
     thanks:  d.restaurant.thanks ? `<div class="thanks">${esc(d.restaurant.thanks)}</div>` : '',
     terms:   d.restaurant.terms ? `<div class="terms">${esc(d.restaurant.terms)}</div>` : '',
-    footer:  `<div class="footer">SAC ${SAC} · computer-generated GST invoice · powered by Menutha</div>`,
+    footer:  `<div class="footer">SAC ${SAC} · computer-generated ${d.restaurant.gstin?.trim() ? 'tax invoice' : 'bill'} · powered by Menutha</div>`,
   };
 
   /** The sections of one band, in the order they were configured. */
@@ -628,7 +647,7 @@ export function sampleBillData(r: {
       terms: r.bill_terms || '',
       logoUrl: r.logo_url || null,
     },
-    billNo: 'SAMPLE — not a tax invoice',
+    billNo: 'SAMPLE — not a real bill',
     dateText: new Date().toLocaleString('en-IN'),
     tableText: 'Table 4',
     customer: { name: 'Guest', phone: '' },

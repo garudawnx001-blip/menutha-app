@@ -3,7 +3,7 @@
  *  mark paid (Cash / UPI received). */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { fetchLiveOrders, fetchOrdersByIds, createBill, quoteBill, fetchBillMoney, payBill, fetchBillLayout, setOrdersAc, waiveService, setParcelPacking, voidTableBill, voidBill, setBillChargeLine, removeBillChargeLine, staffSetOrderItemQty, type BillChargeLine, type PortalOrder } from '../../lib/portalApi';
+import { fetchLiveOrders, fetchOrdersByIds, createBill, quoteBill, fetchBillMoney, recordBillPrint, payBill, fetchBillLayout, setOrdersAc, waiveService, setParcelPacking, voidTableBill, voidBill, setBillChargeLine, removeBillChargeLine, staffSetOrderItemQty, type BillChargeLine, type PortalOrder } from '../../lib/portalApi';
 import { WalkIn } from './WalkIn';
 import { renderBillHtml, billNumbersFromBreakdown, billLabel, type BillData } from '../../lib/billTemplate';
 import { printBillHtml } from '../../lib/printBill';
@@ -572,9 +572,11 @@ export function Billing() {
    * own thermal rules are the only ones in force and all three documents are
    * the same one.
    */
-  const printBill = () => {
+  const printBill = async () => {
     if (!bill) return;
-    printBillHtml(renderBillHtml(printData(), layout));
+    // Counted first: the second and later prints of one bill say DUPLICATE.
+    const n = await recordBillPrint(bill.id);
+    printBillHtml(renderBillHtml({ ...printData(), duplicate: n != null && n > 1 }, layout));
   };
 
   if (orders === null) return <Spinner label="Loading unpaid orders…" />;

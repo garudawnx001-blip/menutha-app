@@ -912,6 +912,20 @@ export async function fetchBillMoney(billId: string) {
 }
 
 /**
+ * COUNT A PRINT. Returns how many times this bill has now been printed; 2 or
+ * more means the paper is a DUPLICATE. Null for a bill raised before the
+ * 2026-10-08 update (never counted) or when the database lacks the function
+ * -- printing never waits on, or fails because of, this.
+ */
+export async function recordBillPrint(billId: string): Promise<number | null> {
+  try {
+    const { data, error } = await supabase.rpc('record_bill_print', { p_bill_id: billId });
+    if (error) return null;
+    return data == null ? null : Number(data);
+  } catch { return null; }
+}
+
+/**
  * THE PREVIEW BEFORE A BILL EXISTS, from the server's own calculation
  * (quote_bill = bill_compute, writes nothing). Null when the database has not
  * had the 2026-10-08 billing update yet; the screen then falls back to its
