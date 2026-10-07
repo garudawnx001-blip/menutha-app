@@ -35,9 +35,9 @@
 
 <header class="wrap" style="padding:64px 0 8px">
   <div class="stagger" style="max-width:640px">
-    <p class="eyebrow">Pricing</p>
-    <h1>One flat subscription. 0% commission.</h1>
-    <p class="lede">Diners pay you directly — UPI or cash. Menutha's only charge is the plan below. Every plan starts with a 30-day free trial of the plan you choose.</p>
+    <p class="eyebrow" data-cms="pricing.eyebrow">Pricing</p>
+    <h1 data-cms="pricing.title">One flat subscription. 0% commission.</h1>
+    <p class="lede" data-cms="pricing.intro">Diners pay you directly — UPI or cash. Menutha's only charge is the plan below. Every plan starts with a 30-day free trial of the plan you choose.</p>
   </div>
   <!-- Filled by /plans-live.js when an offer is marked "show on pricing page". -->
   <div class="card" data-offer-banner style="display:none;margin-top:18px;max-width:640px;border-color:#e2cf9f;background:#fdf8ec"></div>
@@ -106,16 +106,18 @@
 </div></section>
 
 <section class="block"><div class="wrap" style="max-width:760px">
-  <h2 class="reveal">Questions, answered</h2>
+  <h2 class="reveal" data-cms="faq_title">Questions, answered</h2>
+  <div data-cms-faqs>
   <details class="reveal"><summary>Do you really take no commission?</summary><p>Really. Diner payments go straight to your UPI ID, your counter, or your own gateway account. Menutha's revenue is the subscription — that's the whole model.</p></details>
   <details class="reveal"><summary>How do I pay for the subscription?</summary><p>UPI Autopay or card e-mandate through Razorpay — set up once from your dashboard, cancel anytime. If a charge fails you get a 7-day grace period before ordering pauses; your menu never disappears.</p></details>
   <details class="reveal"><summary>What happens after the 30-day trial?</summary><p>Pick a plan to keep going. If you don't, your public menu stays visible but table ordering pauses until you subscribe.</p></details>
   <details class="reveal"><summary>Do my diners need to install anything?</summary><p>No. The QR opens your menu in their phone's browser — order and pay with nothing to download.</p></details>
   <details class="reveal"><summary>Can I change or cancel plans?</summary><p>Upgrade, downgrade, or cancel from the dashboard at any time. Cancellations apply at the end of the billing cycle.</p></details>
+  </div>
 </div></section>
 
 <footer><div class="wrap foot">
-  <div><span class="wordmark" style="font-size:18px"><b>menu</b>tha</span><p style="margin-top:6px">Menutha Technologies · Hospet &amp; Hubli, Karnataka</p></div>
+  <div><span class="wordmark" style="font-size:18px"><b>menu</b>tha</span><p style="margin-top:6px" data-cms="footer.tagline">Menutha Technologies · Hospet &amp; Hubli, Karnataka</p><p data-cms-social style="display:none;margin-top:6px"></p></div>
   <div><a href="/">Home</a><a href="/about/">About</a><a href="/for-restaurants/">For restaurants</a><a href="/contact/">Contact</a></div>
 </div></footer>
 <script>
@@ -124,5 +126,6 @@
 </script>
 <!-- Live prices from the plan catalog; the prices written above stay as the fallback. -->
 <script src="/plans-live.js?v=1" defer></script>
+<script src="/site-live.js?v=1" defer></script>
 </body>
 </html>

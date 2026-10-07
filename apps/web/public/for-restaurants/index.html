@@ -43,12 +43,13 @@
   <div class="band reveal"><div><h2>From first QR to first order: about 15 minutes.</h2></div><a class="btn btn-solid" href="/partner?mode=signup">Get started →</a></div>
 </div></section>
 <footer><div class="wrap foot">
-  <div><span class="wordmark" style="font-size:18px"><b>menu</b>tha</span><p style="margin-top:6px">Menutha Technologies · Hospet &amp; Hubli, Karnataka</p></div>
+  <div><span class="wordmark" style="font-size:18px"><b>menu</b>tha</span><p style="margin-top:6px" data-cms="footer.tagline">Menutha Technologies · Hospet &amp; Hubli, Karnataka</p><p data-cms-social style="display:none;margin-top:6px"></p></div>
   <div><a href="/">Home</a><a href="/pricing/">Pricing</a><a href="/about/">About</a><a href="/contact/">Contact</a></div>
 </div></footer>
 <script>
   const io = new IntersectionObserver((es)=>es.forEach((e)=>e.isIntersecting&&e.target.classList.add('in')),{threshold:0.12});
   document.querySelectorAll('.reveal').forEach((el)=>io.observe(el));
 </script>
+<script src="/site-live.js?v=1" defer></script>
 </body>
 </html>

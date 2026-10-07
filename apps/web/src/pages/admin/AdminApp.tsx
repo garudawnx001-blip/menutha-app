@@ -22,7 +22,9 @@ import { Shell } from './Shell';
 import { Home } from './Home';
 import { Restaurants } from './Restaurants';
 import { Activity } from './Activity';
-import { ComingNext } from './ComingNext';
+import { Payments } from './Payments';
+import { Website } from './Website';
+import { AppSettings } from './AppSettings';
 import { Plans } from './Plans';
 import { Offers } from './Offers';
 import { DetailDrawer } from './DetailDrawer';
@@ -206,9 +208,9 @@ function Console({ email, api, mocked, signOut, lostAccess }: {
           <Route path="restaurants" element={<Restaurants />} />
           <Route path="plans" element={<Plans />} />
           <Route path="offers" element={<Offers />} />
-          <Route path="payments" element={<ComingNext section="payments" />} />
-          <Route path="website" element={<ComingNext section="website" />} />
-          <Route path="settings" element={<ComingNext section="settings" />} />
+          <Route path="payments" element={<Payments />} />
+          <Route path="website" element={<Website />} />
+          <Route path="settings" element={<AppSettings />} />
           <Route path="activity" element={<Activity />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
