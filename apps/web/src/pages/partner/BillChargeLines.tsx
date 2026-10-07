@@ -38,6 +38,11 @@ import { inr } from '../../lib/types';
 
 export type ChargeKind = 'percent' | 'flat';
 export type ChargeBase = 'food' | 'gross';
+/** Which orders a line applies to. reprice_order honours this (migration
+ *  2026-10-07_parcel_charge_once): a 'parcel' line is charged only on orders
+ *  from the parcel/takeaway QR, once per customer per bill, and never on
+ *  dine-in. Lines saved before the field existed are read by their name. */
+export type ChargeScope = 'all' | 'parcel' | 'dine_in';
 
 export interface ChargeLine {
   id: string;
@@ -46,6 +51,16 @@ export interface ChargeLine {
   value: number;
   base: ChargeBase;
   enabled: boolean;
+  appliesTo: ChargeScope;
+}
+
+/** Same rule as charge_line_scope() in the database, so the editor shows
+ *  what the bill will actually do with an older line. */
+const PARCEL_NAME = /(parcel|packing|packaging|take[ -]?away|carry[ -]?bag|container)/i;
+export function scopeOf(raw: { applies_to?: unknown; label?: unknown }): ChargeScope {
+  const s = raw.applies_to;
+  if (s === 'all' || s === 'parcel' || s === 'dine_in') return s;
+  return PARCEL_NAME.test(String(raw.label ?? '')) ? 'parcel' : 'all';
 }
 
 /**
@@ -54,13 +69,13 @@ export interface ChargeLine {
  * six and should not have to know that "SGST" is spelt in capitals or that GST
  * is charged on the service charge rather than the food.
  */
-const PRESETS: { key: string; label: string; kind: ChargeKind; value: number; base: ChargeBase; hint: string }[] = [
-  { key: 'sgst',    label: 'SGST',           kind: 'percent', value: 2.5, base: 'gross', hint: 'State GST, on the subtotal plus other charges' },
-  { key: 'cgst',    label: 'CGST',           kind: 'percent', value: 2.5, base: 'gross', hint: 'Central GST, on the subtotal plus other charges' },
-  { key: 'vat',     label: 'VAT',            kind: 'percent', value: 5,   base: 'food',  hint: 'On the food subtotal' },
-  { key: 'service', label: 'Service charge', kind: 'percent', value: 5,   base: 'food',  hint: 'On the food subtotal, before tax' },
-  { key: 'packing', label: 'Packing',        kind: 'flat',    value: 20,  base: 'food',  hint: 'A flat amount per bill' },
-  { key: 'delivery', label: 'Delivery',      kind: 'flat',    value: 30,  base: 'food',  hint: 'A flat amount per bill' },
+const PRESETS: { key: string; label: string; kind: ChargeKind; value: number; base: ChargeBase; appliesTo: ChargeScope; hint: string }[] = [
+  { key: 'sgst',    label: 'SGST',           kind: 'percent', value: 2.5, base: 'gross', appliesTo: 'all',     hint: 'State GST, on the subtotal plus other charges' },
+  { key: 'cgst',    label: 'CGST',           kind: 'percent', value: 2.5, base: 'gross', appliesTo: 'all',     hint: 'Central GST, on the subtotal plus other charges' },
+  { key: 'vat',     label: 'VAT',            kind: 'percent', value: 5,   base: 'food',  appliesTo: 'all',     hint: 'On the food subtotal' },
+  { key: 'service', label: 'Service charge', kind: 'percent', value: 5,   base: 'food',  appliesTo: 'all',     hint: 'On the food subtotal, before tax' },
+  { key: 'packing', label: 'Packing',        kind: 'flat',    value: 20,  base: 'food',  appliesTo: 'parcel',  hint: 'Parcel QR orders only, once per bill' },
+  { key: 'delivery', label: 'Delivery',      kind: 'flat',    value: 30,  base: 'food',  appliesTo: 'all',     hint: 'A flat amount on each order' },
 ];
 
 const uid = () => Math.random().toString(36).slice(2, 9);
@@ -78,7 +93,8 @@ function preview(lines: ChargeLine[]): { rows: { label: string; amount: number }
       ? l.value
       : Math.round((l.base === 'gross' ? running : SAMPLE_FOOD) * l.value) / 100;
     running += amount;
-    rows.push({ label: l.label || 'Charge', amount });
+    const only = l.appliesTo === 'parcel' ? ' (parcel only)' : l.appliesTo === 'dine_in' ? ' (dine-in only)' : '';
+    rows.push({ label: (l.label || 'Charge') + only, amount });
   }
   return { rows, total: running };
 }
@@ -121,6 +137,7 @@ export function BillChargeLines({ restaurantId }: { restaurantId: string }) {
         value: Number(l.value) || 0,
         base: l.base === 'gross' ? 'gross' : 'food',
         enabled: l.enabled !== false,
+        appliesTo: scopeOf(l),
       })));
       setLoaded(true);
     })().catch((e: any) => { setError(e?.message ?? 'Could not load your charges.'); setLoaded(true); });
@@ -129,7 +146,16 @@ export function BillChargeLines({ restaurantId }: { restaurantId: string }) {
   const p = useMemo(() => preview(lines), [lines]);
 
   const edit = (id: string, patch: Partial<ChargeLine>) =>
-    setLines((ls) => ls.map((l) => (l.id === id ? { ...l, ...patch } : l)));
+    setLines((ls) => ls.map((l) => {
+      if (l.id !== id) return l;
+      const next = { ...l, ...patch };
+      // Naming a line "Parcel…" / "Packing…" makes it parcel-only unless the
+      // owner has chosen a scope by hand -- the safe default is never to put a
+      // packing fee on a dine-in table.
+      if (patch.label !== undefined && patch.appliesTo === undefined && l.appliesTo === 'all'
+          && PARCEL_NAME.test(patch.label)) next.appliesTo = 'parcel';
+      return next;
+    }));
 
   const move = (i: number, by: number) =>
     setLines((ls) => {
@@ -145,13 +171,13 @@ export function BillChargeLines({ restaurantId }: { restaurantId: string }) {
     if (!preset) return;
     setLines((ls) => [...ls, {
       id: uid(), label: preset.label, kind: preset.kind,
-      value: preset.value, base: preset.base, enabled: true,
+      value: preset.value, base: preset.base, enabled: true, appliesTo: preset.appliesTo,
     }]);
     setPresetKey('');
   };
 
   const addCustom = () =>
-    setLines((ls) => [...ls, { id: uid(), label: '', kind: 'percent', value: 0, base: 'food', enabled: true }]);
+    setLines((ls) => [...ls, { id: uid(), label: '', kind: 'percent', value: 0, base: 'food', enabled: true, appliesTo: 'all' }]);
 
   const save = async () => {
     for (const l of lines) {
@@ -160,8 +186,8 @@ export function BillChargeLines({ restaurantId }: { restaurantId: string }) {
     setBusy(true); setError(''); setNote('');
     try {
       await updateRestaurant(restaurantId, {
-        bill_charges: lines.map(({ id, label, kind, value, base, enabled }) => ({
-          id, label: label.trim(), kind, value: Number(value) || 0, base, enabled,
+        bill_charges: lines.map(({ id, label, kind, value, base, enabled, appliesTo }) => ({
+          id, label: label.trim(), kind, value: Number(value) || 0, base, enabled, applies_to: appliesTo,
         })),
       });
       setNote('Saved. New orders are priced with these lines from now on.');
@@ -231,6 +257,13 @@ export function BillChargeLines({ restaurantId }: { restaurantId: string }) {
                 <option value="gross">of the running total</option>
               </select>
             )}
+            <select className="code-input" style={{ flex: '1 1 170px' }} value={l.appliesTo}
+              aria-label="Which orders this applies to"
+              onChange={(e) => edit(l.id, { appliesTo: e.target.value as ChargeScope })}>
+              <option value="all">All orders</option>
+              <option value="parcel">Parcel QR orders only (once per bill)</option>
+              <option value="dine_in">Dine-in orders only</option>
+            </select>
           </div>
           <div style={{ display: 'flex', gap: 6, marginTop: 8, alignItems: 'center', flexWrap: 'wrap' }}>
             <label className="dim" style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5 }}>

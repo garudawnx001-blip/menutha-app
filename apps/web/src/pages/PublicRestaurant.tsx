@@ -8,6 +8,7 @@ import { supabase } from '../lib/supabase';
 import { inr } from '../lib/types';
 import { createReservation } from '../lib/api';
 import { Spinner, VegMark, Wordmark } from '../components';
+import { dietAvailability, effectiveDiet, matchesDiet, categoriesWithItems } from '../lib/menuFilters';
 
 interface PublicDish { category: string; category_sort: number; name: string; description: string | null; price: number; is_veg: boolean; photo_url: string | null }
 interface PublicRest {
@@ -84,15 +85,16 @@ export function PublicRestaurant() {
     return () => { document.getElementById('restaurant-jsonld')?.remove(); };
   }, [r]);
 
-  const cats = useMemo(() => {
-    const seen = new Map<string, number>();
-    for (const d of r?.menu ?? []) if (!seen.has(d.category)) seen.set(d.category, d.category_sort);
-    return [...seen.entries()].sort((a, b) => a[1] - b[1]).map(([c]) => c);
-  }, [r]);
+  // get_public_restaurant returns available dishes only, so these filters are
+  // built from what is actually on offer (see lib/menuFilters).
+  const dietAvail = useMemo(() => dietAvailability(r?.menu ?? []), [r]);
+  const dietNow = effectiveDiet(diet, dietAvail);
+  const cats = useMemo(() => categoriesWithItems(r?.menu ?? [], dietNow), [r, dietNow]);
+  const catNow = cat === 'All' || cats.includes(cat) ? cat : 'All';
 
   const visible = (r?.menu ?? []).filter((d) =>
-    (diet === 'all' || (diet === 'veg' ? d.is_veg : !d.is_veg)) &&
-    (cat === 'All' || d.category === cat));
+    matchesDiet(d, dietNow) &&
+    (catNow === 'All' || d.category === catNow));
 
   const bookingRef = useRef(false);
 
@@ -170,14 +172,16 @@ export function PublicRestaurant() {
 
       <div className="sticky-tools">
         <div className="chip-row" style={{ paddingTop: 10 }}>
-          <button className={diet === 'veg' ? 'chip active' : 'chip'} onClick={() => setDiet(diet === 'veg' ? 'all' : 'veg')}>
+          {dietAvail.offer && (<>
+          <button className={dietNow === 'veg' ? 'chip active' : 'chip'} onClick={() => setDiet(dietNow === 'veg' ? 'all' : 'veg')}>
             <span className="veg-mark" /> Veg
           </button>
-          <button className={diet === 'nonveg' ? 'chip active' : 'chip'} onClick={() => setDiet(diet === 'nonveg' ? 'all' : 'nonveg')}>
+          <button className={dietNow === 'nonveg' ? 'chip active' : 'chip'} onClick={() => setDiet(dietNow === 'nonveg' ? 'all' : 'nonveg')}>
             <span className="veg-mark nonveg" /> Non-veg
           </button>
+          </>)}
           {['All', ...cats].map((c) => (
-            <button key={c} className={cat === c ? 'chip active' : 'chip'} onClick={() => setCat(c)}>{c}</button>
+            <button key={c} className={catNow === c ? 'chip active' : 'chip'} onClick={() => setCat(c)}>{c}</button>
           ))}
         </div>
       </div>
