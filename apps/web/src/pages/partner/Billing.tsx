@@ -3,9 +3,9 @@
  *  mark paid (Cash / UPI received). */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { fetchLiveOrders, fetchOrdersByIds, createBill, quoteBill, fetchBillMoney, recordBillPrint, payBill, fetchBillLayout, setOrdersAc, waiveService, setParcelPacking, voidTableBill, voidBill, setBillChargeLine, removeBillChargeLine, staffSetOrderItemQty, type BillChargeLine, type PortalOrder } from '../../lib/portalApi';
+import { fetchLiveOrders, fetchOrdersByIds, createBill, quoteBill, fetchBillMoney, recordBillPrint, payBill, fetchBillLayout, setOrdersAc, waiveService, setParcelPacking, voidTableBill, voidBill, setBillChargeLine, removeBillChargeLine, staffSetOrderItemQty, setBillService, type BillChargeLine, type PortalOrder } from '../../lib/portalApi';
 import { WalkIn } from './WalkIn';
-import { renderBillHtml, billNumbersFromBreakdown, billLabel, needsGstinWarning, GSTIN_WARNING, type BillData } from '../../lib/billTemplate';
+import { renderBillHtml, billNumbersFromBreakdown, billLabel, billDateText, needsGstinWarning, GSTIN_WARNING, type BillData } from '../../lib/billTemplate';
 import { printBillHtml } from '../../lib/printBill';
 import { inr } from '../../lib/types';
 import { usePartner } from './PartnerShell';
@@ -115,7 +115,13 @@ export function Billing() {
   const [params] = useSearchParams();
   const focusTable = params.get('table');
 
-  const canDiscount = role === 'owner' || role === 'manager';
+  // Who may discount / cancel is the owner's choice in Bill settings
+  // (default owner + manager). The server checks it again either way.
+  const rolesOf = (k: string): string[] =>
+    Array.isArray((restaurant as any)[k]) ? (restaurant as any)[k] : ['owner', 'manager'];
+  const canDiscount = role === 'owner' || rolesOf('bill_discount_roles').includes(String(role));
+  const canCancel = role === 'owner' || rolesOf('bill_cancel_roles').includes(String(role));
+  const svcPctSet = Number((restaurant as any).service_charge_pct ?? 0) > 0;
 
   /* Synchronous re-entry guard for the three handlers that create or settle a
      bill. `busy` is React state, so setBusy only schedules a re-render — a
@@ -496,9 +502,14 @@ export function Billing() {
         thanks: (restaurant as any).bill_thanks ?? (restaurant as any).bill_footer ?? '',
         terms: (restaurant as any).bill_terms ?? '',
         logoUrl: (restaurant as any).logo_url ?? null,
+        header: (restaurant as any).bill_header ?? '',
+        paper: (restaurant as any).bill_paper ?? null,
+        gstMode: (restaurant as any).gst_mode ?? null,
       },
       billNo: billLabel(b),
-      dateText: new Date().toLocaleString('en-IN'),
+      // The date the bill was RAISED, in India time, from the server -- never
+      // the moment of printing on whatever clock this computer keeps.
+      dateText: billDateText((b as any).issued_at ?? (b as any).created_at),
       // The label from the orders themselves. A bill can span several orders
       // at one table, so the first one's label is the table's; a parcel bill
       // says so, and 'Dine-in' is the honest answer when nothing carries a
@@ -633,12 +644,14 @@ export function Billing() {
             {/* The honest way to close a table nobody is going to pay for.
                 Ghost, and last: it is the rare action, and it must never sit
                 where a thumb reaching for "Bill whole table" can find it. */}
-            <button className="btn btn-ghost" disabled={busy}
-              title="Walkout, on the house, or billed by mistake"
-              aria-expanded={writingOff === tableName}
-              onClick={() => setWritingOff((w) => (w === tableName ? null : tableName))}>
-              ✕ Write off
-            </button>
+            {canCancel && (
+              <button className="btn btn-ghost" disabled={busy}
+                title="Walkout, on the house, or billed by mistake"
+                aria-expanded={writingOff === tableName}
+                onClick={() => setWritingOff((w) => (w === tableName ? null : tableName))}>
+                ✕ Write off
+              </button>
+            )}
           </div>
 
           {/* THE REASON IS THE POINT, so it is asked before anything happens
@@ -780,14 +793,16 @@ export function Billing() {
               and total all fall out of the one calculation. GST is charged on
               subtotal PLUS service, so a waiver that only hid the line would
               print a total that does not add up. */}
-          {(service > 0 || waived) && (
+          {/* VOLUNTARY (CCPA 2022): not on the bill unless the guest agreed,
+              and anyone at the till can take it off in one tap. */}
+          {(service > 0 || waived || svcPctSet) && (
             <div className="bill-row">
-              <span>Service charge</span>
+              <span>Service charge (voluntary)</span>
               <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <span>{waived ? 'Waived' : inr(service)}</span>
+                <span>{service > 0 ? inr(service) : 'Not added'}</span>
                 <button className={`chip${waiving ? ' is-busy' : ''}`} disabled={waiving}
-                  onClick={() => toggleWaive(!waived)}>
-                  {waived ? 'Put it back' : 'Remove'}
+                  onClick={() => toggleWaive(service > 0)}>
+                  {service > 0 ? 'Remove' : 'Guest agreed — add'}
                 </button>
               </span>
             </div>
@@ -826,8 +841,10 @@ export function Billing() {
             <div className="bill-row" key={`${c.label}-${i}`}><span>{c.label}</span><span>{inr(c.amount)}</span></div>
           ))}
           {qn && <div className="bill-row"><span>Taxable value</span><span>{inr(qn.taxable ?? 0)}</span></div>}
-          <div className="bill-row"><span>SGST ({qn ? qn.sgstPct : sgstPct}%)</span><span>{inr(qn ? qn.sgst : sgst)}</span></div>
-          <div className="bill-row"><span>CGST ({qn ? qn.cgstPct : cgstPct}%)</span><span>{inr(qn ? qn.cgst : cgst)}</span></div>
+          {!(qn && qn.sgst + qn.cgst === 0 && /SUPPLY/.test(qn.docTitle ?? '')) && (<>
+          <div className="bill-row"><span>SGST ({qn ? qn.sgstPct : sgstPct}%){qn?.pricesIncludeGst ? ' included' : ''}</span><span>{inr(qn ? qn.sgst : sgst)}</span></div>
+          <div className="bill-row"><span>CGST ({qn ? qn.cgstPct : cgstPct}%){qn?.pricesIncludeGst ? ' included' : ''}</span><span>{inr(qn ? qn.cgst : cgst)}</span></div>
+          </>)}
           {qn && qn.roundOff ? <div className="bill-row"><span>Round off</span><span>{inr(qn.roundOff)}</span></div> : null}
           <div className="bill-row total"><span>Total</span><span>{inr(total)}</span></div>
           <button className={`btn btn-primary btn-block${busy ? ' is-busy' : ''}`} style={{ marginTop: 12 }} disabled={busy} onClick={generate}>
@@ -845,12 +862,35 @@ export function Billing() {
               {/* The way back from a bill raised against the wrong table.
                   Before this the only exits were "mark it paid" and "leave it
                   unpaid on record for ever". */}
-              <button className="btn btn-glass btn-sm" disabled={busy} onClick={cancelBill}>
-                ✕ Cancel bill
-              </button>
+              {canCancel && (
+                <button className="btn btn-glass btn-sm" disabled={busy} onClick={cancelBill}>
+                  ✕ Cancel bill
+                </button>
+              )}
             </span>
           </div>
           <div className="bill-row total"><span>To collect</span><span>{inr(bill.total)}</span></div>
+          {svcPctSet && bill.breakdown && (
+            <div className="bill-row">
+              <span>Service charge (voluntary)</span>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span>{Number(bill.breakdown.service_p) > 0 ? inr(Number(bill.breakdown.service_p) / 100) : 'Not added'}</span>
+                <button className={`chip${waiving ? ' is-busy' : ''}`} disabled={waiving}
+                  onClick={() => guard(async () => {
+                    setWaiving(true); setError('');
+                    try {
+                      const r = await setBillService(bill.id, !(Number(bill.breakdown.service_p) > 0));
+                      if (r?.applied === false && r.reason) setError(r.reason);
+                      const fresh = await fetchBillMoney(bill.id);
+                      if (fresh) setBill((b) => (b ? { ...b, total: fresh.total, breakdown: fresh.breakdown } : b));
+                    } catch (e: any) { setError(e?.message ?? 'Could not change the service charge.'); }
+                    finally { setWaiving(false); }
+                  })}>
+                  {Number(bill.breakdown.service_p) > 0 ? 'Remove' : 'Guest agreed — add'}
+                </button>
+              </span>
+            </div>
+          )}
 
           {/* Every one-off already on this bill, each removable. Shown before
               the composer so the answer to "did that go on?" is on screen

@@ -429,6 +429,8 @@ export interface PortalDish {
 
 const ADMIN_COLS = 'id, category_id, name, description, price, is_veg, is_available, photo_url, sort_order';
 const ADMIN_COLS_I18N = ADMIN_COLS.replace('name,', 'name, name_kn, name_hi,');
+// + the dish's own GST rate (2026-10-11). Tried first; older databases fall back.
+const ADMIN_COLS_GST = ADMIN_COLS_I18N + ', gst_rate';
 
 export async function fetchMenuAdmin(restaurantId: string) {
   const dishes = (cols: string) =>
@@ -440,8 +442,9 @@ export async function fetchMenuAdmin(restaurantId: string) {
   // the migration independent of each other rather than ordered.
   let [{ data: cats, error: e1 }, { data: items, error: e2 }] = await Promise.all([
     supabase.from('menu_category').select('id, name, sort_order').eq('restaurant_id', restaurantId).order('sort_order'),
-    dishes(ADMIN_COLS_I18N),
+    dishes(ADMIN_COLS_GST),
   ]);
+  if (e2) ({ data: items, error: e2 } = await dishes(ADMIN_COLS_I18N));
   if (e2) ({ data: items, error: e2 } = await dishes(ADMIN_COLS));
   if (e1 || e2) throw e1 ?? e2;
   return { categories: (cats ?? []) as PortalCategory[], items: (items ?? []) as unknown as PortalDish[] };
@@ -533,8 +536,8 @@ export async function saveDish(restaurantId: string, dish: Partial<PortalDish> &
     // Before the name_kn/name_hi migration reaches a database, writing them is
     // a 400 — and a failed save loses the owner's typing. Retry without them so
     // the dish itself still saves; the translated names simply wait.
-    const { name_kn, name_hi, ...rest } = payload;
-    if (name_kn !== undefined || name_hi !== undefined) ({ data, error } = await write(rest));
+    const { name_kn, name_hi, gst_rate, ...rest } = payload;
+    if (name_kn !== undefined || name_hi !== undefined || gst_rate !== undefined) ({ data, error } = await write(rest));
   }
   if (error) throw error;
   if (!data || data.length === 0) {
@@ -909,6 +912,32 @@ export async function fetchBillMoney(billId: string) {
     extra_lines: ((data as any).extra_lines ?? []) as BillChargeLine[],
     parcel_boxes: Number((data as any).parcel_boxes ?? 0),
   };
+}
+
+/** GST rate per category (2026-10-11). null = the restaurant's own rate. */
+export async function fetchCategoryGst(restaurantId: string): Promise<{ id: string; name: string; gst_rate: number | null }[]> {
+  const { data, error } = await supabase.from('menu_category')
+    .select('id, name, gst_rate').eq('restaurant_id', restaurantId).order('sort_order');
+  if (error) throw error;
+  return ((data ?? []) as any[]).map((c) => ({ id: c.id, name: c.name, gst_rate: c.gst_rate == null ? null : Number(c.gst_rate) }));
+}
+export async function setCategoryGst(categoryId: string, rate: number | null): Promise<void> {
+  const { error } = await supabase.from('menu_category').update({ gst_rate: rate } as any).eq('id', categoryId);
+  if (error) throw error;
+}
+export async function setItemGst(itemId: string, rate: number | null): Promise<void> {
+  const { error } = await supabase.from('menu_item').update({ gst_rate: rate } as any).eq('id', itemId);
+  if (error) throw error;
+}
+
+/**
+ * VOLUNTARY SERVICE CHARGE ON A RAISED BILL (CCPA 2022): on only when the
+ * guest agreed, off in one tap by anyone. The server re-prices the bill.
+ */
+export async function setBillService(billId: string, on: boolean): Promise<{ applied?: boolean; reason?: string } | null> {
+  const { data, error } = await supabase.rpc('bill_set_service', { p_bill_id: billId, p_on: on });
+  if (error) throw error;
+  return (data as any) ?? null;
 }
 
 /**

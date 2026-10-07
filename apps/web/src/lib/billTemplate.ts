@@ -181,7 +181,18 @@ export type BillData = {
     name: string; address: string; city: string; phone: string;
     gstin: string; fssai: string; thanks: string; terms: string;
     logoUrl: string | null;
+    /** Bill settings (2026-10-11): a line under the name, and a fixed roll
+     *  width when the owner chose one ('58' | '80' | 'a4'; empty = auto-fit). */
+    header?: string; paper?: string | null;
+    gstMode?: string | null;
   };
+  /** From the server's breakdown (version 2): what the paper is called, the
+   *  tax per rate, lines outside the GST base, and whether prices include GST. */
+  docTitle?: string;
+  taxBuckets?: { rate: number; sgstPct: number; cgstPct: number; taxable: number; sgst: number; cgst: number }[];
+  pricesIncludeGst?: boolean;
+  taxIncluded?: number;
+  untaxedLabels?: string[];
   billNo: string;
   dateText: string;
   tableText: string;
@@ -245,11 +256,16 @@ export type BillData = {
  * profile; it never decides whether GST is charged, which is the owner's
  * setting and is not changed here.
  */
-export function billHeading(d: Pick<BillData, 'restaurant' | 'duplicate'>): string {
+export function billHeading(d: Pick<BillData, 'restaurant' | 'duplicate'> & { docTitle?: string }): string {
   // Owner decision 2026-10-08: until a GSTIN is on the profile the paper is
   // headed "Bill of supply", whatever the GST settings charge. The settings
   // are not changed; the portal and the app warn the owner to add the GSTIN.
-  const kind = d.restaurant.gstin?.trim() ? 'TAX INVOICE' : 'BILL OF SUPPLY';
+  // From 2026-10-11 the server names the document (GST registration setting);
+  // the GSTIN rule stays as the fallback for older bills and the sample.
+  const mode = d.restaurant.gstMode;
+  const kind = d.docTitle
+    || (mode === 'composition' || mode === 'unregistered' ? 'BILL OF SUPPLY'
+      : d.restaurant.gstin?.trim() ? 'TAX INVOICE' : 'BILL OF SUPPLY');
   return d.duplicate ? `${kind} — DUPLICATE` : kind;
 }
 
@@ -279,22 +295,60 @@ export const GSTIN_WARNING =
   'You are charging GST but there is no GSTIN on your restaurant profile. Add your GSTIN in Settings. '
   + 'Until you do, bills print as "Bill of supply" instead of "Tax invoice".';
 
+/**
+ * THE BILL'S DATE, always India time. A bill is dated when it was raised
+ * (bill.created_at from the server), in Asia/Kolkata whatever timezone the
+ * printing device is set to. Without a server time (the sample) it is now.
+ */
+export function billDateText(iso?: string | null): string {
+  const d = iso ? new Date(iso) : new Date();
+  const t = Number.isNaN(d.getTime()) ? new Date() : d;
+  return t.toLocaleString('en-IN', {
+    timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric',
+    hour: '2-digit', minute: '2-digit', hour12: true,
+  }) + ' IST';
+}
+
 export function billLabel(b: { invoice_no?: string | null; bill_no?: number | string | null }): string {
   return b.invoice_no ? `Invoice ${b.invoice_no}` : `Bill #${b.bill_no ?? ''}`;
 }
 
 export function billNumbersFromBreakdown(bd: any): Pick<BillData,
   'items' | 'subtotal' | 'discount' | 'packing' | 'service' | 'sgstPct' | 'cgstPct'
-  | 'sgst' | 'cgst' | 'total' | 'serviceWaived' | 'chargeLines' | 'taxable' | 'roundOff'> {
+  | 'sgst' | 'cgst' | 'total' | 'serviceWaived' | 'chargeLines' | 'taxable' | 'roundOff'
+  | 'docTitle' | 'taxBuckets' | 'pricesIncludeGst' | 'taxIncluded' | 'untaxedLabels'> {
   const r = (p: unknown) => (Number(p) || 0) / 100;
   const lines: { label: string; amount: number }[] = [];
-  for (const c of bd?.charges ?? []) lines.push({ label: String(c.label ?? 'Charge'), amount: r(c.amount_p) });
-  if (Number(bd?.boxes_p) > 0) {
-    lines.push({ label: `Packing${Number(bd.boxes) > 0 ? ` (${bd.boxes} box${Number(bd.boxes) === 1 ? '' : 'es'})` : ''}`, amount: r(bd.boxes_p) });
+  const taxed = bd?.taxed ?? {};
+  const untaxed: string[] = [];
+  for (const c of bd?.charges ?? []) {
+    lines.push({ label: String(c.label ?? 'Charge'), amount: r(c.amount_p) });
+    if (c.taxable === false) untaxed.push(String(c.label ?? 'Charge'));
   }
-  if (Number(bd?.ac_p) > 0) lines.push({ label: 'AC charge', amount: r(bd.ac_p) });
-  for (const e of bd?.extras ?? []) lines.push({ label: String(e.label ?? 'Charge'), amount: r(e.amount_p) });
+  if (Number(bd?.boxes_p) > 0) {
+    const label = `Packing${Number(bd.boxes) > 0 ? ` (${bd.boxes} box${Number(bd.boxes) === 1 ? '' : 'es'})` : ''}`;
+    lines.push({ label, amount: r(bd.boxes_p) });
+    if (taxed.packing === false) untaxed.push(label);
+  }
+  if (Number(bd?.ac_p) > 0) {
+    lines.push({ label: 'AC charge', amount: r(bd.ac_p) });
+    if (taxed.ac === false) untaxed.push('AC charge');
+  }
+  for (const e of bd?.extras ?? []) {
+    lines.push({ label: String(e.label ?? 'Charge'), amount: r(e.amount_p) });
+    if (e.taxable === false) untaxed.push(String(e.label ?? 'Charge'));
+  }
+  if (taxed.packing === false && Number(bd?.packing_p) > 0) untaxed.push('Packing charge');
+  if (taxed.service === false && Number(bd?.service_p) > 0) untaxed.push('Service charge (voluntary)');
   return {
+    docTitle: bd?.doc_title || undefined,
+    taxBuckets: Array.isArray(bd?.tax_buckets) && bd.tax_buckets.length > 1
+      ? bd.tax_buckets.map((b: any) => ({ rate: Number(b.rate) || 0, sgstPct: Number(b.sgst_rate) || 0,
+          cgstPct: Number(b.cgst_rate) || 0, taxable: r(b.taxable_p), sgst: r(b.sgst_p), cgst: r(b.cgst_p) }))
+      : undefined,
+    pricesIncludeGst: bd?.prices_include_gst === true,
+    taxIncluded: r(bd?.tax_included_p),
+    untaxedLabels: untaxed,
     items: (bd?.items ?? []).map((i: any) => ({ name: String(i.name), qty: Number(i.qty), unit_price: r(i.rate_p) })),
     subtotal: r(bd?.food_p),
     discount: r(bd?.discount_p),
@@ -382,11 +436,33 @@ export function renderBillHtml(d: BillData, layoutRaw: any): string {
       <td class="i-amt">${inr(it.unit_price * it.qty)}</td>
     </tr>`).join('');
 
+  // CCPA (2022): a service charge is voluntary, and the paper says so.
   const serviceRow = d.serviceWaived
     ? `<div class="row"><span>Service charge</span><span>Waived</span></div>`
     : d.service > 0
-      ? `<div class="row"><span>Service charge</span><span>${inr(d.service)}</span></div>`
+      ? `<div class="row"><span>Service charge (voluntary)</span><span>${inr(d.service)}</span></div>`
       : '';
+  const untaxed = new Set((d.untaxedLabels ?? []).map((s) => s.toLowerCase()));
+  const noGst = (label: string) => (untaxed.has(label.toLowerCase()) ? ' <small>(no GST)</small>' : '');
+  const title = billHeading(d);
+  const isSupply = /SUPPLY/.test(title);
+  const composition = d.restaurant.gstMode === 'composition';
+  const taxRows = (() => {
+    const tax = d.sgst + d.cgst;
+    if (tax === 0 && (isSupply || (d.docTitle && d.taxable != null))) return '';
+    const incl = d.pricesIncludeGst ? ' (included)' : '';
+    const rows = d.taxBuckets && d.taxBuckets.length > 1
+      ? d.taxBuckets.map((b) => `
+    <div class="row"><span>SGST @ ${esc(b.sgstPct)}% on ${inr(b.taxable)}${incl}</span><span>${inr(b.sgst)}</span></div>
+    <div class="row"><span>CGST @ ${esc(b.cgstPct)}% on ${inr(b.taxable)}${incl}</span><span>${inr(b.cgst)}</span></div>`).join('')
+      : `
+    <div class="row"><span>SGST @ ${esc(d.sgstPct)}%${incl}</span><span>${inr(d.sgst)}</span></div>
+    <div class="row"><span>CGST @ ${esc(d.cgstPct)}%${incl}</span><span>${inr(d.cgst)}</span></div>`;
+    return `${rows}
+    <div class="row taxtotal"><span>Total tax${incl}</span><span>${inr(tax)}</span></div>`;
+  })();
+  const pageSize = d.restaurant.paper === '58' ? '58mm auto'
+    : d.restaurant.paper === '80' ? '80mm auto' : d.restaurant.paper === 'a4' ? 'A4' : 'auto';
 
   const idLines = [
     d.restaurant.gstin ? `GSTIN: ${esc(d.restaurant.gstin)}` : '',
@@ -405,7 +481,7 @@ export function renderBillHtml(d: BillData, layoutRaw: any): string {
      the owner to declare it first, in our words, before the print dialog asks
      in the platform's, is a question we have no business asking; answering it
      wrong prints a ruined sheet. Same reasoning as the QR cards. */
-  @page { size: auto; margin: 8mm; }
+  @page { size: ${pageSize}; margin: ${pageSize === 'auto' || pageSize === 'A4' ? '8mm' : '2mm'}; }
   * { box-sizing: border-box; }
   body {
     margin: 0; padding: 0; color: #1C1A15; background: #fff;
@@ -530,7 +606,9 @@ export function renderBillHtml(d: BillData, layoutRaw: any): string {
    * the foot does not also reshuffle everything around them.
    */
   const html: Record<SectionKey, string> = {
-    name:    `<div class="name">${esc(d.restaurant.name)}</div>`,
+    name:    `<div class="name">${esc(d.restaurant.name)}</div>${
+      d.restaurant.header?.trim() ? `<div class="address">${esc(d.restaurant.header)}</div>` : ''}${
+      composition ? '<div class="address"><b>Composition taxable person, not eligible to collect tax on supplies</b></div>' : ''}`,
     address: addrLines ? `<div class="address">${addrLines}</div>` : '',
     ids:     idLines ? `<div class="ids">${idLines}</div>` : '',
     meta:    `<hr class="rule">
@@ -551,20 +629,18 @@ export function renderBillHtml(d: BillData, layoutRaw: any): string {
     ${d.discount > 0 ? `<div class="row"><span>Discount</span><span>− ${inr(d.discount)}</span></div>` : ''}
     ${d.packing > 0 ? `<div class="row"><span>Packing charge</span><span>${inr(d.packing)}</span></div>` : ''}
     ${serviceRow}
-    ${consolidateChargeLines(d.chargeLines).map((c) => `<div class="row"><span>${esc(c.label)}</span><span>${inr(c.amount)}</span></div>`).join('')}
-    ${d.taxable != null ? `<div class="row taxtotal"><span>Taxable value</span><span>${inr(d.taxable)}</span></div>` : ''}
+    ${consolidateChargeLines(d.chargeLines).map((c) => `<div class="row"><span>${esc(c.label)}${noGst(c.label)}</span><span>${inr(c.amount)}</span></div>`).join('')}
+    ${d.taxable != null && !(isSupply && d.sgst + d.cgst === 0) ? `<div class="row taxtotal"><span>Taxable value</span><span>${inr(d.taxable)}</span></div>` : ''}
     <!-- The RATE on the label describes the money beside it. A bill that says
          2.5% while charging 9% is worse than one showing no rate at all. -->
-    <div class="row"><span>SGST @ ${esc(d.sgstPct)}%</span><span>${inr(d.sgst)}</span></div>
-    <div class="row"><span>CGST @ ${esc(d.cgstPct)}%</span><span>${inr(d.cgst)}</span></div>
-    <div class="row taxtotal"><span>Total tax</span><span>${inr(d.sgst + d.cgst)}</span></div>
+    ${taxRows}
     ${d.roundOff ? `<div class="row"><span>Round off</span><span>${d.roundOff < 0 ? '− ' : ''}${inr(Math.abs(d.roundOff))}</span></div>` : ''}
     <div class="row grand"><span>Total</span><span>${inr(d.total)}</span></div>
     ${d.duplicate ? `<div class="row" style="justify-content:center;font-weight:800;letter-spacing:.12em">DUPLICATE COPY</div>` : ''}
   </div>`,
     thanks:  d.restaurant.thanks ? `<div class="thanks">${esc(d.restaurant.thanks)}</div>` : '',
     terms:   d.restaurant.terms ? `<div class="terms">${esc(d.restaurant.terms)}</div>` : '',
-    footer:  `<div class="footer">SAC ${SAC} · computer-generated ${d.restaurant.gstin?.trim() ? 'tax invoice' : 'bill of supply'} · powered by Menutha</div>`,
+    footer:  `<div class="footer">SAC ${SAC} · computer-generated ${isSupply ? 'bill of supply' : 'tax invoice'}${d.pricesIncludeGst ? ' · prices include GST' : ''} · powered by Menutha</div>`,
   };
 
   /** The sections of one band, in the order they were configured. */
@@ -619,6 +695,7 @@ export function sampleBillData(r: {
   bill_terms?: string | null; logo_url?: string | null;
   sgst_pct?: number | string | null; cgst_pct?: number | string | null;
   service_charge_pct?: number | string | null;
+  bill_header?: string | null; bill_paper?: string | null; gst_mode?: string | null;
 },
 /**
  * A QR FOR THE PREVIEW, and the reason it is a parameter rather than something
@@ -642,9 +719,11 @@ export function sampleBillData(r: {
   ];
   const subtotal = items.reduce((a, i) => a + i.qty * i.unit_price, 0);
   const r2 = (n: number) => Math.round(n * 100) / 100;
-  const svcPct = Number(r.service_charge_pct ?? 0) || 0;
-  const sgstPct = Number(r.sgst_pct ?? 2.5) || 0;
-  const cgstPct = Number(r.cgst_pct ?? 2.5) || 0;
+  // The sample shows no service charge: it is voluntary and off until a guest agrees.
+  const svcPct = 0;
+  const noTax = r.gst_mode === 'composition' || r.gst_mode === 'unregistered';
+  const sgstPct = noTax ? 0 : Number(r.sgst_pct ?? 2.5) || 0;
+  const cgstPct = noTax ? 0 : Number(r.cgst_pct ?? 2.5) || 0;
   const service = r2((subtotal * svcPct) / 100);
   const taxable = subtotal + service;
   const sgst = r2((taxable * sgstPct) / 100);
@@ -661,6 +740,9 @@ export function sampleBillData(r: {
       thanks: r.bill_thanks || '',
       terms: r.bill_terms || '',
       logoUrl: r.logo_url || null,
+      header: r.bill_header || '',
+      paper: r.bill_paper || null,
+      gstMode: r.gst_mode || null,
     },
     billNo: 'SAMPLE — not a real bill',
     dateText: new Date().toLocaleString('en-IN'),

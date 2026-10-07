@@ -22,6 +22,7 @@ import { usePartner } from './PartnerShell';
 import { updateRestaurant, fetchBillLayout } from '../../lib/portalApi';
 import { BillChargeLines } from './BillChargeLines';
 import { BillLayoutEditor } from './BillLayoutEditor';
+import { BillingRules } from './BillingRules';
 import { PrinterIcon } from './Glyphs';
 import { printBillHtml, openBillHtml } from '../../lib/printBill';
 import { normaliseLayout, renderBillHtml, sampleBillData } from '../../lib/billTemplate';
@@ -156,6 +157,11 @@ export function BillSettings() {
               value={form.service_charge_ac_pct} onChange={set('service_charge_ac_pct')} />
           </div>
         </div>
+      </Section>
+
+      <Section title="Billing rules"
+        hint="GST registration, prices with or without GST, the voluntary service charge, what is taxed, round-off, paper and who may cancel or discount. Defaults are how your bills work today.">
+        <BillingRules />
       </Section>
 
       <Section title="On the bill" hint="Printed at the foot of every bill.">

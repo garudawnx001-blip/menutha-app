@@ -20,12 +20,14 @@ interface DishDraft {
   id?: string; name: string; price: string; category_id: string | null;
   description: string; is_veg: boolean; is_available: boolean; photo_url: string | null;
   name_kn: string; name_hi: string;
+  /** GST % for this dish; '' = the category's, else the restaurant's. */
+  gst_rate: string;
 }
 
 const emptyDraft = (categoryId: string | null): DishDraft => ({
   name: '', price: '', category_id: categoryId, description: '',
   is_veg: true, is_available: true, photo_url: null,
-  name_kn: '', name_hi: '',
+  name_kn: '', name_hi: '', gst_rate: '',
 });
 
 export function MenuManager() {
@@ -178,6 +180,8 @@ export function MenuManager() {
         name_hi: draft.name_hi.trim() || null,
         category_id: draft.category_id, description: draft.description.trim() || null,
         is_veg: draft.is_veg, is_available: draft.is_available, photo_url: draft.photo_url,
+        // Blank = no rate of its own. Bounded 0-28 here and by the database.
+        gst_rate: draft.gst_rate.trim() === '' ? null : Math.min(28, Math.max(0, Number(draft.gst_rate) || 0)),
       } as any, draft.id);
       setDraft(null);
       await load();
@@ -522,6 +526,7 @@ export function MenuManager() {
                 description: d.description ?? '', is_veg: d.is_veg, is_available: d.is_available,
                 photo_url: d.photo_url,
                 name_kn: d.name_kn ?? '', name_hi: d.name_hi ?? '',
+                gst_rate: (d as any).gst_rate == null ? '' : String((d as any).gst_rate),
               })}>Edit</button>
             </div>
           </div>
@@ -593,6 +598,12 @@ export function MenuManager() {
                 <p className="overline" style={{ marginBottom: 6 }}>Price (₹)</p>
                 <input className="code-input" inputMode="decimal" value={draft.price}
                   onChange={(e) => setDraft({ ...draft, price: e.target.value })} />
+              </div>
+              <div style={{ flex: '0 1 110px', minWidth: 0 }}>
+                <p className="overline" style={{ marginBottom: 6 }}>GST %</p>
+                <input className="code-input" inputMode="decimal" placeholder="default" value={draft.gst_rate}
+                  title="Leave blank to use the category's or the restaurant's rate"
+                  onChange={(e) => setDraft({ ...draft, gst_rate: e.target.value })} />
               </div>
               <div style={{ flex: 1 }}>
                 <p className="overline" style={{ marginBottom: 6 }}>Category</p>
