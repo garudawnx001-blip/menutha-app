@@ -12,14 +12,12 @@
  * So the console has its own client:
  *   - its own storageKey  -> its session never mixes with the portal's;
  *   - PKCE flow           -> Google comes back as /admin?code=..., which the
- *                            shared implicit client ignores (it only acts on a
- *                            #access_token fragment, or on a ?code= whose PKCE
- *                            verifier sits in ITS storage — and this one's
- *                            verifier sits under the console's key).
+ *                            shared implicit client ignores.
  *
- * Every read goes through SECURITY DEFINER RPCs that call is_platform_admin()
- * first; nothing here is trusted to hide data. The UI only decides what to
- * draw.
+ * Every read and write goes through SECURITY DEFINER RPCs (or the
+ * admin-accounts edge function) that call is_platform_admin() first; nothing
+ * here is trusted to hide data or refuse an action. The UI only decides what
+ * to draw.
  */
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
@@ -46,6 +44,9 @@ export function consoleClient(): SupabaseClient {
 // ── Types: mirror public.admin_list_restaurants() ─────────────────────────
 
 export type Lifecycle = 'active' | 'trialing' | 'trial_expired' | 'grace' | 'suspended' | 'lapsed';
+export type Tier = 'basic' | 'growth' | 'enterprise';
+export const TIERS: Tier[] = ['basic', 'growth', 'enterprise'];
+export type PlanStatus = 'trialing' | 'active' | 'grace' | 'cancelled';
 
 export interface AdminSubscription {
   plan_id: string | null;
@@ -59,6 +60,15 @@ export interface AdminSubscription {
   razorpay_subscription_id?: string | null;
 }
 
+export interface AdminOwner {
+  user_id: string;
+  name: string | null;
+  username?: string | null;
+  member_role?: string | null;
+  email: string | null;
+  phone: string | null;
+}
+
 export interface AdminRestaurant {
   id: string;
   name: string;
@@ -70,6 +80,7 @@ export interface AdminRestaurant {
   parent_id: string | null;
   parent_name: string | null;
   is_pilot: boolean | null;
+  is_complimentary: boolean;
   created_at: string;
   own_plan_tier: string | null;
   own_plan_status: string | null;
@@ -79,7 +90,7 @@ export interface AdminRestaurant {
   grace_until: string | null;
   lifecycle: Lifecycle;
   ends_at: string | null;
-  owner: { user_id: string; name: string | null; email: string | null; phone: string | null } | null;
+  owner: AdminOwner | null;
   latest_subscription: AdminSubscription | null;
   subscriptions: AdminSubscription[];
   addons: { addon_id: string; status: string; updated_at: string | null }[];
@@ -95,6 +106,7 @@ export interface AdminKpis {
   total: number;
   outlets: number;
   active: number;
+  complimentary: number;
   trialing: number;
   trial_expired: number;
   grace: number;
@@ -111,7 +123,127 @@ export interface AdminOverview {
   restaurants: AdminRestaurant[];
 }
 
-// ── Calls ─────────────────────────────────────────────────────────────────
+export interface AuditRow {
+  id: number;
+  actor_email: string | null;
+  action: string;
+  target_type: string | null;
+  target_id: string | null;
+  before: Record<string, unknown> | null;
+  after: Record<string, unknown> | null;
+  at: string;
+}
+
+/** What "Create restaurant account" / "Reset login" hand back — ONCE. */
+export interface Credentials {
+  username: string | null;
+  password: string;
+  login_url: string;
+  restaurant_id?: string;
+  name?: string | null;
+}
+
+export interface NewRestaurantInput {
+  restaurant_name: string;
+  city: string;
+  owner_name: string;
+  phone: string;
+  username: string;
+  tier: Tier;
+  complimentary: boolean;
+}
+
+/** Everything the console can do. Real (Supabase) and DEV mock share it. */
+export interface ConsoleApi {
+  fetchOverview(): Promise<AdminOverview>;
+  fetchActivity(): Promise<AuditRow[]>;
+  setPlan(id: string, tier: Tier, status: PlanStatus): Promise<void>;
+  extendTrial(id: string, by: { days: number } | { until: string }): Promise<void>;
+  setComplimentary(id: string, on: boolean, opts?: { tier?: Tier; trialDays?: number }): Promise<void>;
+  setStatus(id: string, status: 'active' | 'suspended'): Promise<void>;
+  resetLogin(id: string): Promise<Credentials>;
+  createRestaurant(input: NewRestaurantInput): Promise<Credentials>;
+}
+
+// ── Errors ─────────────────────────────────────────────────────────────────
+
+/** An error the UI can show as-is. `denied` = no longer an admin. */
+export class ConsoleError extends Error {
+  constructor(message: string, public denied = false) { super(message); }
+}
+
+function rpcError(e: { message?: string; code?: string } | null): ConsoleError {
+  if (e?.code === '42501') return new ConsoleError('You are no longer signed in as an admin.', true);
+  if (!e?.message || /fetch|network/i.test(e.message)) return new ConsoleError('Could not reach the server. Check your connection and try again.');
+  return new ConsoleError(e.message);
+}
+
+// ── Real implementation ────────────────────────────────────────────────────
+
+async function rpc<T = unknown>(fn: string, args?: Record<string, unknown>): Promise<T> {
+  const { data, error } = await consoleClient().rpc(fn, args ?? {});
+  if (error) throw rpcError(error);
+  return data as T;
+}
+
+async function accountsFn(body: Record<string, unknown>): Promise<Credentials> {
+  const c = consoleClient();
+  const { data: s } = await c.auth.getSession();
+  const token = s.session?.access_token;
+  if (!token) throw new ConsoleError('You are no longer signed in as an admin.', true);
+  const { data, error } = await c.functions.invoke('admin-accounts', {
+    body, headers: { Authorization: `Bearer ${token}` },
+  });
+  if (error) {
+    let msg = '';
+    let status = 0;
+    try {
+      const ctx = (error as { context?: Response }).context;
+      status = ctx?.status ?? 0;
+      msg = ((await ctx?.json()) as { error?: string })?.error ?? '';
+    } catch { /* body was not JSON */ }
+    if (status === 404 && (!msg || msg === 'not found')) throw new ConsoleError('You are no longer signed in as an admin.', true);
+    throw new ConsoleError(msg || 'Could not reach the server. Nothing was changed — try again.');
+  }
+  return data as Credentials;
+}
+
+export const realApi: ConsoleApi = {
+  async fetchOverview() {
+    const o = await rpc<AdminOverview>('admin_list_restaurants');
+    // numeric columns arrive as JSON numbers, but be defensive about strings
+    o.kpis.mrr_inr = Number(o.kpis.mrr_inr) || 0;
+    o.kpis.pipeline_mrr_inr = Number(o.kpis.pipeline_mrr_inr) || 0;
+    o.kpis.complimentary = Number(o.kpis.complimentary) || 0;
+    for (const r of o.restaurants) {
+      r.revenue_30d = Number(r.revenue_30d) || 0;
+      r.is_complimentary = r.is_complimentary === true;
+    }
+    return o;
+  },
+  async fetchActivity() {
+    const { data, error } = await consoleClient()
+      .from('admin_audit_log').select('*').order('at', { ascending: false }).limit(150);
+    if (error) throw rpcError(error);
+    return (data ?? []) as AuditRow[];
+  },
+  async setPlan(id, tier, status) { await rpc('admin_set_plan', { p_restaurant_id: id, p_tier: tier, p_status: status }); },
+  async extendTrial(id, by) {
+    await rpc('admin_extend_trial', 'days' in by
+      ? { p_restaurant_id: id, p_days: by.days, p_until: null }
+      : { p_restaurant_id: id, p_days: null, p_until: by.until });
+  },
+  async setComplimentary(id, on, opts) {
+    await rpc('admin_set_complimentary', {
+      p_restaurant_id: id, p_on: on, p_tier: opts?.tier ?? null, p_trial_days: opts?.trialDays ?? 7,
+    });
+  },
+  async setStatus(id, status) { await rpc('admin_set_restaurant_status', { p_restaurant_id: id, p_status: status }); },
+  resetLogin: (id) => accountsFn({ action: 'reset_login', restaurant_id: id }),
+  createRestaurant: (input) => accountsFn({ action: 'create_restaurant', ...input }),
+};
+
+// ── Session calls (unchanged from phase 1) ─────────────────────────────────
 
 /** True only for a platform admin. Anything else — including an error — is
  *  treated as "not an admin" by the caller, so a failure never opens a door. */
@@ -129,15 +261,4 @@ export async function startAdminSession(userId: string): Promise<void> {
   const { error } = await consoleClient().rpc('admin_session_start');
   if (error) throw error;
   try { sessionStorage.setItem(key, '1'); } catch { /* ignore */ }
-}
-
-export async function fetchOverview(): Promise<AdminOverview> {
-  const { data, error } = await consoleClient().rpc('admin_list_restaurants');
-  if (error) throw error;
-  const o = data as AdminOverview;
-  // numeric columns arrive as JSON numbers, but be defensive about strings
-  o.kpis.mrr_inr = Number(o.kpis.mrr_inr) || 0;
-  o.kpis.pipeline_mrr_inr = Number(o.kpis.pipeline_mrr_inr) || 0;
-  for (const r of o.restaurants) r.revenue_30d = Number(r.revenue_30d) || 0;
-  return o;
 }

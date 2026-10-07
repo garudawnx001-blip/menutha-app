@@ -32,6 +32,9 @@ export interface PlanStateInput {
    * up as free Enterprise, which nobody reports.
    */
   has_mandate?: boolean;
+  /** Platform-granted, never billed and never expiring: always `active` on
+   *  plan_tier. Read from restaurant.is_complimentary / get_plan_state. */
+  is_complimentary?: boolean | null;
 }
 
 export interface Entitlements {
@@ -48,6 +51,9 @@ export interface Entitlements {
   features: Set<string>;
   trialEndsAt: number | null;
   graceUntil: number | null;
+  /** True for a complimentary (never billed, never expiring) restaurant:
+   *  show no trial countdown and no payment prompts. */
+  complimentary: boolean;
 }
 
 export declare function entitlementsFor(r: PlanStateInput, now?: number): Entitlements;

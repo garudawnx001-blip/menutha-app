@@ -1,135 +1,141 @@
 import React, { useEffect, useRef, useState } from 'react';
 import type { AdminRestaurant } from './adminApi';
-import { StatusPill, TierPill } from './Pills';
-import { fmtDate, fmtDateTime, fmtInr, fmtNum, relDays, titleCase } from './format';
+import { ActionDialog, type ActionKind } from './Actions';
+import { StatusChip, TierPill } from './Pills';
+import { LIFECYCLE_HINT, fmtDate, fmtDateTime, fmtInr, fmtNum, relDays, tierName, titleCase } from './format';
+import { Icon } from './icons';
 
-/** Read-only detail panel. Phase 1 has no write actions by design. */
+/** One restaurant: what is going on, in plain words, and big buttons to act. */
 export function DetailDrawer({ restaurant: r, onClose }: { restaurant: AdminRestaurant | null; onClose: () => void }) {
   const panelRef = useRef<HTMLDivElement>(null);
-  const lastFocus = useRef<HTMLElement | null>(null);
+  const [action, setAction] = useState<ActionKind | null>(null);
 
+  useEffect(() => { setAction(null); }, [r?.id]);
   useEffect(() => {
     if (!r) return;
-    lastFocus.current = document.activeElement as HTMLElement;
+    const last = document.activeElement as HTMLElement;
     panelRef.current?.focus();
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', onKey);
     const prev = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
-    return () => {
-      window.removeEventListener('keydown', onKey);
-      document.body.style.overflow = prev;
-      lastFocus.current?.focus?.();
-    };
-  }, [r, onClose]);
+    return () => { window.removeEventListener('keydown', onKey); document.body.style.overflow = prev; last?.focus?.(); };
+  }, [r?.id, onClose]);
 
   if (!r) return null;
   const sub = r.latest_subscription;
+  const outlet = !!r.parent_id;
+  const suspended = r.restaurant_status === 'suspended';
 
   return (
     <div className="mc-drawer-layer" role="presentation">
       <div className="mc-scrim" onClick={onClose} />
-      <aside
-        ref={panelRef}
-        className="mc-drawer"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="mc-drawer-title"
-        tabIndex={-1}
-      >
+      <aside ref={panelRef} className="mc-drawer" role="dialog" aria-modal="true" aria-labelledby="mc-drawer-title" tabIndex={-1}>
         <header className="mc-drawer-head">
-          <div>
+          <div style={{ minWidth: 0 }}>
             <h2 id="mc-drawer-title" className="mc-display mc-drawer-title">{r.name}</h2>
             <div className="mc-drawer-meta">
-              <StatusPill lifecycle={r.lifecycle} />
-              <TierPill tier={r.plan_tier} />
-              {r.is_pilot && <span className="mc-tag mc-tag-gold">Pilot</span>}
               <span className="mc-muted">{r.city || 'No city'}</span>
+              {outlet && <span className="mc-tag">Outlet of {r.parent_name}</span>}
+              {r.is_pilot && <span className="mc-tag mc-tag-gold">Pilot</span>}
             </div>
           </div>
-          <button className="mc-icon-btn" onClick={onClose} aria-label="Close details">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden><path d="M18 6 6 18M6 6l12 12" /></svg>
-          </button>
+          <button className="mc-icon-btn" onClick={onClose} aria-label="Close"><Icon name="close" /></button>
         </header>
 
         <div className="mc-drawer-body">
-          <Section title="Plan">
-            <Field label="Tier" value={titleCase(r.plan_tier)} />
-            <Field label="Plan status" value={titleCase(r.plan_status)} />
-            <Field label="Trial ends" value={r.trial_ends_at ? `${fmtDate(r.trial_ends_at)} · ${relDays(r.trial_ends_at)}` : '—'} />
-            <Field label="Grace until" value={r.grace_until ? `${fmtDate(r.grace_until)} · ${relDays(r.grace_until)}` : '—'} />
-            <Field label="Restaurant status" value={titleCase(r.restaurant_status)} />
-            {r.parent_id && (
-              <Field label="Billed through" value={r.parent_name || r.parent_id}
-                hint={`Outlet — plan read from the parent (own row: ${titleCase(r.own_plan_tier)} / ${titleCase(r.own_plan_status)})`} />
-            )}
-          </Section>
+          {/* THE ANSWER FIRST: what state is it in, in one glance. */}
+          <div className={`mc-hero mc-hero-${r.is_complimentary && !suspended ? 'complimentary' : r.lifecycle}`}>
+            <div className="mc-hero-row">
+              <StatusChip r={r} size="lg" />
+              <TierPill tier={r.plan_tier} />
+            </div>
+            <p className="mc-hero-text">{heroSentence(r)}</p>
+          </div>
+
+          <div className="mc-actions">
+            <BigAction icon="layers" label="Change plan" sub={`Now: ${tierName(r.plan_tier)}`} disabled={outlet} onClick={() => setAction('plan')} />
+            <BigAction icon="calendar" label="Give more free days" sub={r.is_complimentary ? 'Not needed — never expires' : r.trial_ends_at ? `Trial ends ${fmtDate(r.trial_ends_at)}` : 'Extend the free trial'}
+              disabled={outlet || r.is_complimentary} onClick={() => setAction('trial')} />
+            {r.is_complimentary
+              ? <BigAction icon="gift" label="Remove complimentary" sub="They will need to pay again" tone="gold" disabled={outlet} onClick={() => setAction('comp-off')} />
+              : <BigAction icon="gift" label="Make complimentary" sub="Free forever, never billed" tone="gold" disabled={outlet} onClick={() => setAction('comp-on')} />}
+            {suspended
+              ? <BigAction icon="power" label="Switch back on" sub="Let diners order again" tone="green" onClick={() => setAction('activate')} />
+              : <BigAction icon="power" label="Suspend" sub="Stop all orders now" tone="danger" onClick={() => setAction('suspend')} />}
+            <BigAction icon="key" label="Reset owner login" sub="Make a new password" disabled={!r.owner} onClick={() => setAction('reset')} />
+          </div>
+          {outlet && <p className="mc-note">This is an outlet: its plan comes from <strong>{r.parent_name}</strong>. Open that restaurant to change the plan.</p>}
 
           <Section title="Owner">
             <Field label="Name" value={r.owner?.name || '—'} />
+            <Field label="Username" value={r.owner?.username || '—'} copy={r.owner?.username ?? undefined} />
             <Field label="Email" value={r.owner?.email || '—'} href={r.owner?.email ? `mailto:${r.owner.email}` : undefined} copy={r.owner?.email ?? undefined} />
-            <Field label="Phone" value={r.owner?.phone || '—'} href={r.owner?.phone ? `tel:${r.owner.phone.replace(/\s+/g, '')}` : undefined} copy={r.owner?.phone ?? undefined} />
-            <Field label="Restaurant phone" value={r.phone || '—'} />
+            <Field label="Phone" value={r.owner?.phone || r.phone || '—'} href={(r.owner?.phone || r.phone) ? `tel:${(r.owner?.phone || r.phone || '').replace(/\s+/g, '')}` : undefined} copy={r.owner?.phone || r.phone || undefined} />
           </Section>
 
-          <Section title="Subscription">
-            {sub ? (
-              <>
-                <Field label="Plan" value={sub.plan_name || titleCase(sub.plan_id)} />
-                <Field label="Status" value={titleCase(sub.status)} />
-                <Field label="Current period" value={sub.current_start || sub.current_end ? `${fmtDate(sub.current_start)} – ${fmtDate(sub.current_end)}` : '—'} />
-                <Field label="Next charge" value={fmtDate(sub.next_charge_at)} />
-                <Field label="Last update" value={fmtDateTime(sub.updated_at)} />
-                {sub.razorpay_subscription_id && <Field label="Razorpay ID" value={sub.razorpay_subscription_id} mono copy={sub.razorpay_subscription_id} />}
-              </>
-            ) : <p className="mc-muted mc-small">No subscription has been started.</p>}
-
-            {r.subscriptions.length > 1 && (
-              <div className="mc-history">
-                <div className="mc-history-title">History</div>
-                {r.subscriptions.map((s, i) => (
-                  <div key={i} className="mc-history-row">
-                    <span>{titleCase(s.plan_id)}</span>
-                    <span className="mc-cap">{s.status}</span>
-                    <span className="mc-muted">{fmtDate(s.created_at)}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-            {r.addons.length > 0 && (
-              <div className="mc-history">
-                <div className="mc-history-title">Add-ons</div>
-                {r.addons.map((a, i) => (
-                  <div key={i} className="mc-history-row">
-                    <span>{titleCase(a.addon_id.replace(/^addon_/, ''))}</span>
-                    <span className="mc-cap">{a.status}</span>
-                    <span className="mc-muted">{fmtDate(a.updated_at)}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </Section>
-
-          <Section title="Activity · last 30 days">
+          <Section title="Last 30 days">
             <div className="mc-stats">
               <Stat label="Orders" value={fmtNum(r.orders_30d)} />
               <Stat label="Order value" value={fmtInr(r.revenue_30d)} />
-              <Stat label="Tables" value={fmtNum(r.table_count)} />
-              <Stat label="Menu items" value={fmtNum(r.menu_item_count)} />
-              <Stat label="Staff" value={fmtNum(r.member_count)} />
               <Stat label="Last order" value={r.last_order_at ? relDays(r.last_order_at) : 'Never'} />
+              <Stat label="Tables" value={fmtNum(r.table_count)} />
+              <Stat label="Dishes" value={fmtNum(r.menu_item_count)} />
+              <Stat label="Staff" value={fmtNum(r.member_count)} />
             </div>
+          </Section>
+
+          <Section title="Payments">
+            {r.is_complimentary ? <p className="mc-muted mc-small">Complimentary — nothing is ever charged.</p>
+              : sub ? (
+                <>
+                  <Field label="Plan paid for" value={sub.plan_name || titleCase(sub.plan_id)} />
+                  <Field label="Razorpay status" value={payWords(sub.status)} />
+                  <Field label="Next payment" value={fmtDate(sub.next_charge_at)} />
+                  {sub.razorpay_subscription_id && <Field label="Razorpay ID" value={sub.razorpay_subscription_id} mono copy={sub.razorpay_subscription_id} />}
+                </>
+              ) : <p className="mc-muted mc-small">They have not set up payment yet.</p>}
           </Section>
 
           <Section title="Details">
             <Field label="Address" value={r.address || '—'} />
             <Field label="Public page" value={r.slug ? `/r/${r.slug}` : '—'} href={r.slug ? `/r/${r.slug}` : undefined} external />
-            <Field label="Created" value={fmtDateTime(r.created_at)} />
-            <Field label="Restaurant ID" value={r.id} mono copy={r.id} />
+            <Field label="Joined" value={fmtDateTime(r.created_at)} />
+            <Field label="ID" value={r.id} mono copy={r.id} />
           </Section>
         </div>
       </aside>
+      {action && <ActionDialog kind={action} r={r} onClose={() => setAction(null)} />}
     </div>
+  );
+}
+
+function heroSentence(r: AdminRestaurant): string {
+  if (r.restaurant_status === 'suspended') return 'You switched this restaurant off. Diners cannot order.';
+  if (r.is_complimentary) return `Free forever on ${tierName(r.plan_tier)}, courtesy of Menutha. Never billed, never expires.`;
+  switch (r.lifecycle) {
+    case 'trialing': return r.trial_ends_at ? `Free trial ends ${fmtDate(r.trial_ends_at)} (${relDays(r.trial_ends_at)}).` : LIFECYCLE_HINT.trialing;
+    case 'trial_expired': return `Free trial ended ${fmtDate(r.trial_ends_at)}. Diners cannot order until they pay.`;
+    case 'grace': return `A payment failed. Orders keep working until ${fmtDate(r.grace_until)} (${relDays(r.grace_until)}).`;
+    case 'active': return `Paying for ${tierName(r.plan_tier)}. Everything is on.`;
+    default: return LIFECYCLE_HINT[r.lifecycle];
+  }
+}
+
+const payWords = (s: string | null) => ({
+  active: 'Paying', authenticated: 'Autopay set up — first payment pending', created: 'Started, not finished',
+  pending: 'Payment failing', halted: 'Payment stopped', cancelled: 'Cancelled', completed: 'Finished',
+} as Record<string, string>)[s ?? ''] ?? titleCase(s);
+
+function BigAction({ icon, label, sub, onClick, disabled, tone }: {
+  icon: string; label: string; sub: string; onClick: () => void; disabled?: boolean; tone?: 'danger' | 'gold' | 'green';
+}) {
+  return (
+    <button className={`mc-big-action${tone ? ` mc-big-${tone}` : ''}`} onClick={onClick} disabled={disabled}>
+      <span className="mc-big-icon"><Icon name={icon} size={20} /></span>
+      <span className="mc-big-text"><strong>{label}</strong><small>{sub}</small></span>
+      <Icon name="chevron" size={16} className="mc-big-chev" />
+    </button>
   );
 }
 
@@ -142,8 +148,8 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-function Field({ label, value, hint, href, external, mono, copy }: {
-  label: string; value: string; hint?: string; href?: string; external?: boolean; mono?: boolean; copy?: string;
+function Field({ label, value, href, external, mono, copy }: {
+  label: string; value: string; href?: string; external?: boolean; mono?: boolean; copy?: string;
 }) {
   const [copied, setCopied] = useState(false);
   const doCopy = async () => {
@@ -154,13 +160,8 @@ function Field({ label, value, hint, href, external, mono, copy }: {
     <div className="mc-field">
       <span className="mc-field-label">{label}</span>
       <span className={`mc-field-value${mono ? ' mc-mono' : ''}`}>
-        {href
-          ? <a href={href} {...(external ? { target: '_blank', rel: 'noopener noreferrer' } : {})}>{value}</a>
-          : value}
-        {copy && (
-          <button className="mc-copy" onClick={doCopy} aria-label={`Copy ${label}`}>{copied ? 'Copied' : 'Copy'}</button>
-        )}
-        {hint && <span className="mc-field-hint">{hint}</span>}
+        {href ? <a href={href} {...(external ? { target: '_blank', rel: 'noopener noreferrer' } : {})}>{value}</a> : value}
+        {copy && <button className="mc-copy" onClick={doCopy} aria-label={`Copy ${label}`}>{copied ? 'Copied' : 'Copy'}</button>}
       </span>
     </div>
   );

@@ -9,16 +9,24 @@
  * different client and storage key, is untouched). Any deeper /admin/... path
  * is a 404 for everyone who is not a signed-in admin.
  *
- * This file only decides what to draw. The data is protected in Postgres: every
- * RPC the console calls re-checks is_platform_admin() and raises otherwise.
+ * This file only decides what to draw. The data and every action are
+ * protected in Postgres: each RPC re-checks is_platform_admin() and raises
+ * otherwise, and the admin-accounts edge function does the same.
  */
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Route, Routes, useLocation } from 'react-router-dom';
 import {
-  checkIsAdmin, consoleClient, fetchOverview, startAdminSession, type AdminOverview,
+  checkIsAdmin, consoleClient, realApi, startAdminSession, type AdminOverview, type ConsoleApi,
 } from './adminApi';
-import { Dashboard } from './Dashboard';
+import { Shell } from './Shell';
+import { Home } from './Home';
+import { Restaurants } from './Restaurants';
+import { Activity } from './Activity';
+import { ComingNext } from './ComingNext';
+import { DetailDrawer } from './DetailDrawer';
+import { CreateAccount } from './CreateAccount';
 import { NotFound } from './NotFound';
+import { Ctx, ToastProvider, useToast, type ConsoleCtx } from './ui';
 import { GoogleMark } from '../partner/GoogleMark';
 import './admin.css';
 
@@ -57,30 +65,8 @@ export default function AdminApp() {
   const isRoot = /^\/admin\/?$/.test(loc.pathname);
 
   const [gate, setGate] = useState<Gate>({ kind: 'loading' });
-  const [data, setData] = useState<AdminOverview | null>(null);
-  const [loadError, setLoadError] = useState('');
-  const [refreshing, setRefreshing] = useState(false);
+  const [api, setApi] = useState<ConsoleApi>(realApi);
   const mocked = useRef(false);
-
-  const load = useCallback(async () => {
-    setRefreshing(true); setLoadError('');
-    try {
-      if (import.meta.env.DEV && mocked.current) {
-        const { mockOverview } = await import('./mockOverview');
-        await new Promise((r) => setTimeout(r, 350));
-        setData(mockOverview());
-      } else {
-        setData(await fetchOverview());
-      }
-    } catch (e) {
-      const code = (e as { code?: string })?.code;
-      // Lost admin rights mid-session: become a 404, like any other non-admin.
-      if (code === '42501') { await consoleClient().auth.signOut({ scope: 'local' }); setGate({ kind: 'notfound' }); return; }
-      setLoadError('Could not load the latest data. Check your connection and try again.');
-    } finally {
-      setRefreshing(false);
-    }
-  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -90,10 +76,14 @@ export default function AdminApp() {
       // the fixtures chunk are not shipped.
       if (import.meta.env.DEV) {
         const m = new URLSearchParams(window.location.search).get('mock');
-        if (m !== null) {
+        if (m !== null || sessionStorage.getItem('menutha-console-mock')) {
           mocked.current = true;
+          sessionStorage.setItem('menutha-console-mock', '1');
           if (m === 'denied') { setGate({ kind: 'notfound' }); return; }
           if (m === 'signin') { setGate({ kind: 'signin' }); return; }
+          const { mockApi } = await import('./mockOverview');
+          if (cancelled) return;
+          setApi(mockApi());
           setGate({ kind: 'admin', email: 'menutha45@gmail.com' });
           return;
         }
@@ -129,56 +119,101 @@ export default function AdminApp() {
 
     const { data: sub } = consoleClient().auth.onAuthStateChange((evt) => {
       if (evt === 'SIGNED_OUT' && !mocked.current) {
-        setData(null);
         setGate((g) => (g.kind === 'admin' ? { kind: 'signin' } : g));
       }
     });
     return () => { cancelled = true; sub.subscription.unsubscribe(); };
   }, []);
 
-  useEffect(() => {
-    if (gate.kind === 'admin' && !data) void load();
-  }, [gate.kind, data, load]);
-
   const signIn = async () => {
     setGate({ kind: 'loading' });
     const { error } = await consoleClient().auth.signInWithOAuth({
       provider: 'google',
-      options: {
-        redirectTo: `${window.location.origin}/admin`,
-        queryParams: { prompt: 'select_account' },
-      },
+      options: { redirectTo: `${window.location.origin}/admin`, queryParams: { prompt: 'select_account' } },
     });
     if (error) setGate({ kind: 'signin', error: 'Could not reach Google. Please try again.' });
   };
 
-  const signOut = async () => {
-    if (!mocked.current) await consoleClient().auth.signOut({ scope: 'local' });
-    setData(null);
+  const signOut = useCallback(async () => {
+    if (mocked.current) { try { sessionStorage.removeItem('menutha-console-mock'); } catch { /* ignore */ } }
+    else await consoleClient().auth.signOut({ scope: 'local' });
     setGate({ kind: 'signin' });
-  };
+  }, []);
+
+  const lostAccess = useCallback(async () => {
+    await consoleClient().auth.signOut({ scope: 'local' });
+    setGate({ kind: 'notfound' });
+  }, []);
 
   if (gate.kind === 'loading') return <div className="mc-root mc-center"><span className="mc-spinner" aria-label="Loading" /></div>;
   if (gate.kind === 'notfound') return <NotFound />;
   if (gate.kind === 'signin') return isRoot ? <SignIn error={gate.error} onGoogle={signIn} /> : <NotFound />;
 
   return (
-    <Routes>
-      <Route
-        index
-        element={
-          <Dashboard
-            email={gate.email}
-            data={data}
-            refreshing={refreshing}
-            error={loadError}
-            onRefresh={load}
-            onSignOut={signOut}
-          />
-        }
-      />
-      <Route path="*" element={<NotFound />} />
-    </Routes>
+    <ToastProvider>
+      <Console email={gate.email} api={api} mocked={mocked.current} signOut={signOut} lostAccess={lostAccess} />
+    </ToastProvider>
+  );
+}
+
+function Console({ email, api, mocked, signOut, lostAccess }: {
+  email: string; api: ConsoleApi; mocked: boolean; signOut: () => void; lostAccess: () => void;
+}) {
+  const [data, setData] = useState<AdminOverview | null>(null);
+  const [loadError, setLoadError] = useState('');
+  const [refreshing, setRefreshing] = useState(false);
+  const [openId, setOpenId] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
+  const toast = useToast();
+
+  const refresh = useCallback(async () => {
+    setRefreshing(true); setLoadError('');
+    try {
+      setData(await api.fetchOverview());
+    } catch (e) {
+      if ((e as { denied?: boolean })?.denied) { lostAccess(); return; }
+      setLoadError('Could not load the latest numbers. Check your connection and try again.');
+    } finally {
+      setRefreshing(false);
+    }
+  }, [api, lostAccess]);
+
+  useEffect(() => { void refresh(); }, [refresh]);
+  // Fresh numbers when the tab comes back into view; cheap and keeps it honest.
+  useEffect(() => {
+    const onVis = () => { if (document.visibilityState === 'visible') void refresh(); };
+    document.addEventListener('visibilitychange', onVis);
+    return () => document.removeEventListener('visibilitychange', onVis);
+  }, [refresh]);
+
+  const closeDrawer = useCallback(() => setOpenId(null), []);
+  const ctx = useMemo<ConsoleCtx>(() => ({
+    email, data, refreshing, loadError, refresh, api, mocked,
+    openRestaurant: (id) => setOpenId(id),
+    openCreate: () => setCreating(true),
+    signOut, lostAccess: () => { toast('bad', 'You are no longer signed in as an admin.'); lostAccess(); },
+  }), [email, data, refreshing, loadError, refresh, api, mocked, signOut, lostAccess, toast]);
+
+  const open = openId ? data?.restaurants.find((r) => r.id === openId) ?? null : null;
+
+  return (
+    <Ctx.Provider value={ctx}>
+      <Shell>
+        <Routes>
+          <Route index element={<Home />} />
+          <Route path="restaurants" element={<Restaurants />} />
+          <Route path="plans" element={<ComingNext section="plans" />} />
+          <Route path="offers" element={<ComingNext section="offers" />} />
+          <Route path="payments" element={<ComingNext section="payments" />} />
+          <Route path="website" element={<ComingNext section="website" />} />
+          <Route path="settings" element={<ComingNext section="settings" />} />
+          <Route path="activity" element={<Activity />} />
+          <Route path="*" element={<NotFound />} />
+        </Routes>
+      </Shell>
+      <DetailDrawer restaurant={open} onClose={closeDrawer} />
+      {creating && <CreateAccount onClose={() => setCreating(false)} />}
+    </Ctx.Provider>
   );
 }
 

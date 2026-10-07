@@ -328,3 +328,20 @@ test('full lifecycle: trial → paid → halted → grace → lock', () => {
   assert.equal(entitlementsFor(r, NOW + 31 * DAY).state, 'grace');
   assert.equal(entitlementsFor(r, NOW + 30 * DAY + (GRACE_DAYS + 1) * DAY).state, 'locked');
 });
+
+test('complimentary is active on its tier, with no dates and no billing', () => {
+  for (const tier of ['basic', 'growth', 'enterprise']) {
+    // Even a row whose raw columns say "expired trial, no mandate" -- the flag wins.
+    const e = entitlementsFor({ plan_tier: tier, plan_status: 'trialing', trial_ends_at: new Date(NOW - DAY).toISOString(), is_complimentary: true }, NOW);
+    assert.equal(e.state, 'active');
+    assert.equal(e.tier, tier);
+    assert.equal(e.canOrder, true);
+    assert.equal(e.complimentary, true);
+    assert.equal(e.trialEndsAt, null);
+    assert.equal(needsBilling(e), false);
+  }
+  assert.ok(hasFeature(entitlementsFor({ plan_tier: 'enterprise', is_complimentary: true }, NOW), 'multi_outlet'));
+  // Only a real true counts.
+  assert.equal(entitlementsFor({ plan_tier: 'growth', plan_status: 'trialing', is_complimentary: 'yes' }, NOW).complimentary, false);
+  assert.equal(entitlementsFor({ plan_tier: 'growth', plan_status: 'trialing' }, NOW).state, 'locked');
+});

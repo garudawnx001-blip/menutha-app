@@ -1,4 +1,4 @@
-import type { Lifecycle } from './adminApi';
+import type { AdminRestaurant, Lifecycle } from './adminApi';
 
 const inr0 = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 });
 const num = new Intl.NumberFormat('en-IN');
@@ -27,16 +27,51 @@ export function relDays(s: string | null | undefined, now = Date.now()): string 
 export const daysUntil = (s: string | null | undefined, now = Date.now()) =>
   s ? (new Date(s).getTime() - now) / 864e5 : Infinity;
 
+/** The words an owner of the business would use — no billing jargon. */
 export const LIFECYCLE_LABEL: Record<Lifecycle, string> = {
   active: 'Active',
-  trialing: 'Trialing',
-  trial_expired: 'Trial expired',
-  grace: 'Grace',
+  trialing: 'On free trial',
+  trial_expired: 'Free trial ended',
+  grace: 'Payment overdue',
   suspended: 'Suspended',
-  lapsed: 'Lapsed',
+  lapsed: 'Stopped paying',
 };
+
+/** The one-line "what does that mean" under each status. */
+export const LIFECYCLE_HINT: Record<Lifecycle, string> = {
+  active: 'Paying and taking orders',
+  trialing: 'Using Menutha free for now',
+  trial_expired: 'Free days are over — orders are off',
+  grace: 'A payment failed — a few grace days left',
+  suspended: 'Switched off by you — no orders',
+  lapsed: 'Cancelled their plan — orders are off',
+};
+
+/** Complimentary is shown as its own status: it is the first thing to know. */
+export type Display = Lifecycle | 'complimentary';
+export const displayOf = (r: Pick<AdminRestaurant, 'lifecycle' | 'is_complimentary'>): Display =>
+  r.is_complimentary && r.lifecycle !== 'suspended' ? 'complimentary' : r.lifecycle;
+
+export const DISPLAY_LABEL: Record<Display, string> = { ...LIFECYCLE_LABEL, complimentary: 'Complimentary' };
+
+export const TIER_LABEL: Record<string, string> = { basic: 'Basic', growth: 'Growth', enterprise: 'Enterprise', trial: 'No plan yet' };
+export const tierName = (t: string | null | undefined) => TIER_LABEL[t ?? ''] ?? titleCase(t);
 
 export function titleCase(s: string | null | undefined): string {
   if (!s) return '—';
   return s.replace(/[_-]+/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 }
+
+/** Plain-language names for audit actions. */
+export const ACTION_LABEL: Record<string, string> = {
+  'admin.sign_in': 'Signed in to the console',
+  'admin.claimed': 'Admin access set up',
+  'restaurant.set_plan': 'Changed plan',
+  'restaurant.extend_trial': 'Extended free trial',
+  'restaurant.complimentary_on': 'Made complimentary',
+  'restaurant.complimentary_off': 'Removed complimentary',
+  'restaurant.suspend': 'Suspended restaurant',
+  'restaurant.activate': 'Switched restaurant back on',
+  'restaurant.login_reset': 'Reset owner login',
+  'restaurant.create': 'Created restaurant account',
+};
