@@ -6,7 +6,7 @@ import { Icon } from './icons';
 import { useConsole } from './ui';
 
 const ICON: Record<string, string> = {
-  'restaurant.set_plan': 'layers', 'restaurant.extend_trial': 'calendar', 'restaurant.complimentary_on': 'gift',
+  'restaurant.set_plan': 'layers', 'restaurant.extend_trial': 'calendar', 'restaurant.extend_trial_failed': 'alert','restaurant.complimentary_on': 'gift',
   'restaurant.complimentary_off': 'gift', 'restaurant.suspend': 'pause', 'restaurant.activate': 'power',
   'restaurant.login_reset': 'key', 'restaurant.create': 'plus', 'admin.sign_in': 'user', 'admin.claimed': 'user',
   'plan.update': 'layers', 'plan.price_change': 'rupee', 'offer.create': 'sparkle', 'offer.update': 'sparkle',

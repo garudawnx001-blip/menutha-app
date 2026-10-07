@@ -109,6 +109,17 @@ export function Plans() {
   );
 }
 
+/**
+ * " · 2 paying · 3 autopay set up" -- "paying" only for subscriptions Razorpay
+ * has actually charged; a mandate waiting for its first charge is "autopay set up".
+ */
+function priceUsers(r: { paying: number; autopay_set_up: number }): string {
+  const parts: string[] = [];
+  if (r.paying > 0) parts.push(`${r.paying} paying`);
+  if (r.autopay_set_up > 0) parts.push(`${r.autopay_set_up} autopay set up`);
+  return parts.length ? ` · ${parts.join(' · ')}` : '';
+}
+
 function PlanCard({ p, prev, featureMap, onEdit, onPrices }: {
   p: CatalogPlan; prev?: CatalogPlan | null; featureMap: Map<string, FeatureDef>; onEdit: () => void; onPrices: () => void;
 }) {
@@ -134,7 +145,7 @@ function PlanCard({ p, prev, featureMap, onEdit, onPrices }: {
             <small>
               {r.charge_inr ? `${inrWhole(r.charge_inr)} with ${r.gst_pct}% GST` : `+ ${r.gst_pct}% GST`}
               {r.duration_months > 1 ? ` · ${inrWhole(r.price_inr / r.duration_months)}/month` : ''}
-              {r.subscribers > 0 ? ` · ${r.subscribers} paying at this price` : ''}
+              {priceUsers(r)}
               {!r.razorpay_plan_id ? ' · not on sale online yet' : ''}
             </small>
           </div>
@@ -462,7 +473,7 @@ function PriceModal({ plan, rzp, email, onClose, onDone }: {
                 </span>
                 <span className="mc-new">
                   {Number.isInteger(v) && v >= 1 ? <>= <strong>{inrWhole(chargeFor(v, gstNum || 0))}</strong> with GST {per(r)}</> : <span className="mc-field-bad">Enter a price</span>}
-                  {r.subscribers > 0 && isChanged && <><br /><small className="mc-dim">{r.subscribers} paying restaurant{r.subscribers === 1 ? '' : 's'} keep {inrWhole(r.charge_inr)}</small></>}
+                  {r.subscribers > 0 && isChanged && <><br /><small className="mc-dim">{r.subscribers} restaurant{r.subscribers === 1 ? '' : 's'} with autopay keep {inrWhole(r.charge_inr)}</small></>}
                 </span>
               </div>
             );
@@ -483,7 +494,7 @@ function PriceModal({ plan, rzp, email, onClose, onDone }: {
                 <span>
                   New sign-ups pay {inrWhole(x.new_price_inr)} + {x.new_gst_pct}% GST from now.
                   {x.subscribers_keep_old_price > 0
-                    ? ` ${x.subscribers_keep_old_price} restaurant${x.subscribers_keep_old_price === 1 ? '' : 's'} already paying keep ${inrWhole(x.old_charge_inr)}.`
+                    ? ` ${x.subscribers_keep_old_price} restaurant${x.subscribers_keep_old_price === 1 ? '' : 's'} with autopay keep ${inrWhole(x.old_charge_inr)}.`
                     : ' Nobody is paying at the old price yet.'}
                   {check[x.plan_id] && <><br />{check[x.plan_id]}</>}
                 </span>

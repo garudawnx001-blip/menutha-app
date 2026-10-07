@@ -39,7 +39,7 @@ export const LIFECYCLE_LABEL: Record<Lifecycle, string> = {
 
 /** The one-line "what does that mean" under each status. */
 export const LIFECYCLE_HINT: Record<Lifecycle, string> = {
-  active: 'Paying and taking orders',
+  active: 'On a plan and taking orders',
   trialing: 'Using Menutha free for now',
   trial_expired: 'Free days are over — orders are off',
   grace: 'A payment failed — a few grace days left',
@@ -47,12 +47,29 @@ export const LIFECYCLE_HINT: Record<Lifecycle, string> = {
   lapsed: 'Cancelled their plan — orders are off',
 };
 
-/** Complimentary is shown as its own status: it is the first thing to know. */
-export type Display = Lifecycle | 'complimentary';
-export const displayOf = (r: Pick<AdminRestaurant, 'lifecycle' | 'is_complimentary'>): Display =>
-  r.is_complimentary && r.lifecycle !== 'suspended' ? 'complimentary' : r.lifecycle;
+/**
+ * Complimentary is shown as its own status: it is the first thing to know.
+ * So is "active but not billed": switched on by an admin with no autopay, so
+ * it is neither paying nor complimentary and must not look like either.
+ */
+export type Display = Lifecycle | 'complimentary' | 'not_billed';
+export const displayOf = (r: Pick<AdminRestaurant, 'lifecycle' | 'is_complimentary' | 'billing'>): Display =>
+  r.is_complimentary && r.lifecycle !== 'suspended' ? 'complimentary'
+    : r.lifecycle === 'active' && r.billing === 'not_billed' ? 'not_billed'
+    : r.lifecycle;
 
-export const DISPLAY_LABEL: Record<Display, string> = { ...LIFECYCLE_LABEL, complimentary: 'Complimentary' };
+export const DISPLAY_LABEL: Record<Display, string> = {
+  ...LIFECYCLE_LABEL, complimentary: 'Complimentary', not_billed: 'Active · not billed',
+};
+
+/** Plain words for how a restaurant is billed. */
+export const BILLING_LABEL: Record<string, string> = {
+  complimentary: 'Complimentary — never billed',
+  paying: 'Paying through Razorpay autopay',
+  autopay_set_up: 'Autopay set up — first payment not taken yet',
+  not_billed: 'Active without autopay — set by an admin, not billed through Razorpay',
+  none: 'No autopay',
+};
 
 export const TIER_LABEL: Record<string, string> = { basic: 'Basic', growth: 'Growth', enterprise: 'Enterprise', trial: 'No plan yet' };
 export const tierName = (t: string | null | undefined) => TIER_LABEL[t ?? ''] ?? titleCase(t);
@@ -68,6 +85,7 @@ export const ACTION_LABEL: Record<string, string> = {
   'admin.claimed': 'Admin access set up',
   'restaurant.set_plan': 'Changed plan',
   'restaurant.extend_trial': 'Extended free trial',
+  'restaurant.extend_trial_failed': 'Free days not added — Razorpay refused',
   'restaurant.complimentary_on': 'Made complimentary',
   'restaurant.complimentary_off': 'Removed complimentary',
   'restaurant.suspend': 'Suspended restaurant',

@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import type { AdminRestaurant } from './adminApi';
 import { ActionDialog, type ActionKind } from './Actions';
 import { StatusChip, TierPill } from './Pills';
-import { LIFECYCLE_HINT, fmtDate, fmtDateTime, fmtInr, fmtNum, relDays, tierName, titleCase } from './format';
+import { BILLING_LABEL, LIFECYCLE_HINT, fmtDate, fmtDateTime, fmtInr, fmtNum, relDays, tierName, titleCase } from './format';
 import { Icon } from './icons';
 
 /** One restaurant: what is going on, in plain words, and big buttons to act. */
@@ -89,12 +89,15 @@ export function DetailDrawer({ restaurant: r, onClose }: { restaurant: AdminRest
             {r.is_complimentary ? <p className="mc-muted mc-small">Complimentary — nothing is ever charged.</p>
               : sub ? (
                 <>
-                  <Field label="Plan paid for" value={sub.plan_name || titleCase(sub.plan_id)} />
-                  <Field label="Razorpay status" value={payWords(sub.status)} />
+                  {r.billing && <Field label="Billing" value={BILLING_LABEL[r.billing] ?? titleCase(r.billing)} />}
+                  <Field label={sub.charged ? 'Plan paid for' : 'Plan chosen'} value={sub.plan_name || titleCase(sub.plan_id)} />
+                  <Field label="Razorpay status" value={subWords(sub)} />
                   <Field label="Next payment" value={fmtDate(sub.next_charge_at)} />
                   {sub.razorpay_subscription_id && <Field label="Razorpay ID" value={sub.razorpay_subscription_id} mono copy={sub.razorpay_subscription_id} />}
                 </>
-              ) : <p className="mc-muted mc-small">They have not set up payment yet.</p>}
+              ) : <p className="mc-muted mc-small">{r.billing === 'not_billed'
+                ? 'Active without autopay — switched on by an admin, not billed through Razorpay.'
+                : 'They have not set up payment yet.'}</p>}
           </Section>
 
           <Section title="Details">
@@ -117,10 +120,19 @@ function heroSentence(r: AdminRestaurant): string {
     case 'trialing': return r.trial_ends_at ? `Free trial ends ${fmtDate(r.trial_ends_at)} (${relDays(r.trial_ends_at)}).` : LIFECYCLE_HINT.trialing;
     case 'trial_expired': return `Free trial ended ${fmtDate(r.trial_ends_at)}. Diners cannot order until they pay.`;
     case 'grace': return `A payment failed. Orders keep working until ${fmtDate(r.grace_until)} (${relDays(r.grace_until)}).`;
-    case 'active': return `Paying for ${tierName(r.plan_tier)}. Everything is on.`;
+    case 'active':
+      switch (r.billing) {
+        case 'not_billed': return `Active on ${tierName(r.plan_tier)}, switched on by an admin. No autopay, so Menutha is not billing them through Razorpay.`;
+        case 'autopay_set_up': return `Active on ${tierName(r.plan_tier)}. Autopay is set up; Razorpay has not taken the first payment yet.`;
+        default: return `Paying for ${tierName(r.plan_tier)}. Everything is on.`;
+      }
     default: return LIFECYCLE_HINT[r.lifecycle];
   }
 }
+
+/** An `active` subscription Razorpay has never charged is not "Paying" yet. */
+export const subWords = (s: { status: string | null; charged?: boolean }) =>
+  s.status === 'active' && s.charged === false ? 'Autopay set up — first payment pending' : payWords(s.status);
 
 const payWords = (s: string | null) => ({
   active: 'Paying', authenticated: 'Autopay set up — first payment pending', created: 'Started, not finished',

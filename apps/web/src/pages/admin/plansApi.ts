@@ -23,7 +23,12 @@ export interface PriceRow {
   charge_inr: number | null;
   gst_pct: number;
   razorpay_plan_id: string | null;
+  /** Every live autopay mandate on this price (they keep it on a price change). */
   subscribers: number;
+  /** Of those, how many Razorpay has actually charged at least once. */
+  paying: number;
+  /** Of those, how many have autopay set up but no charge taken yet. */
+  autopay_set_up: number;
   history: { price_inr: number; charge_inr: number | null; gst_pct: number; effective_from: string; by: string | null; note: string | null }[];
 }
 
@@ -181,6 +186,10 @@ export const plansApi = {
       for (const r of p.prices) {
         r.price_inr = Number(r.price_inr); r.gst_pct = Number(r.gst_pct);
         r.charge_inr = num(r.charge_inr); r.subscribers = Number(r.subscribers) || 0;
+        // Older servers sent only `subscribers`: treat those as "autopay set up",
+        // never as paying -- "paying" must mean a real charge.
+        r.paying = Number(r.paying) || 0;
+        r.autopay_set_up = r.autopay_set_up == null ? Math.max(0, r.subscribers - r.paying) : Number(r.autopay_set_up) || 0;
       }
       p.restaurants = Number(p.restaurants) || 0;
     }

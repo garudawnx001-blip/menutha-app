@@ -1,7 +1,7 @@
 /** Home: the whole business in big cards, and what needs doing today. */
 import React, { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import type { AdminRestaurant } from './adminApi';
+import type { AdminKpis, AdminRestaurant } from './adminApi';
 import { StatusChip } from './Pills';
 import { daysUntil, fmtDate, fmtInr, fmtNum, relDays } from './format';
 import { Icon } from './icons';
@@ -47,12 +47,15 @@ export function Home() {
               sub={`From ${fmtNum(k.paying_subscriptions)} paying restaurant${k.paying_subscriptions === 1 ? '' : 's'}`}
               onClick={() => go('paying')} />
             <BigCard tone="blue" icon="sparkle" label="Will start paying soon" value={fmtInr(k.pipeline_mrr_inr)}
-              sub="Autopay set up, first payment not taken yet" onClick={() => go('trialing')} />
+              sub={k.autopay_set_up != null
+                ? `${fmtNum(k.autopay_set_up)} with autopay set up, first payment not taken yet`
+                : 'Autopay set up, first payment not taken yet'}
+              onClick={() => go('autopay')} />
             <BigCard icon="store" label="All restaurants" value={fmtNum(k.total)}
               sub={k.outlets ? `Includes ${fmtNum(k.outlets)} extra outlet${k.outlets === 1 ? '' : 's'}` : 'Every restaurant on Menutha'}
               onClick={() => go('all')} />
             <BigCard tone="green" icon="check" label="Active" value={fmtNum(k.active)}
-              sub="Taking orders on a plan right now" onClick={() => go('active')} />
+              sub={activeBreakdown(k) ?? 'Taking orders on a plan right now'} onClick={() => go('active')} />
             <BigCard tone="blue" icon="clock" label="On free trial" value={fmtNum(k.trialing)}
               sub={k.expiring_7d ? `${fmtNum(k.expiring_7d)} ending within 7 days` : 'Trying Menutha for free'} onClick={() => go('trialing')} />
             <BigCard tone="gold" icon="gift" label="Complimentary" value={fmtNum(k.complimentary)}
@@ -96,6 +99,22 @@ export function Home() {
       </section>
     </div>
   );
+}
+
+/**
+ * What "Active" is made of, so it always adds up: paying + autopay set up +
+ * complimentary + switched on by an admin without autopay ("not billed").
+ */
+function activeBreakdown(k: AdminKpis): string | null {
+  if (k.active_paying == null) return null;   // older server
+  const parts: [number, string][] = [
+    [k.active_paying ?? 0, 'paying'],
+    [k.active_autopay ?? 0, 'autopay set up'],
+    [k.active_complimentary ?? 0, 'complimentary'],
+    [k.active_not_billed ?? 0, 'not billed'],
+  ];
+  const shown = parts.filter(([n]) => n > 0).map(([n, w]) => `${fmtNum(n)} ${w}`);
+  return shown.length ? shown.join(' · ') : 'Taking orders on a plan right now';
 }
 
 function BigCard({ label, value, sub, tone, icon, feature, onClick }: {

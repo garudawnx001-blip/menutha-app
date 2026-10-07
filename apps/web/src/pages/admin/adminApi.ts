@@ -58,7 +58,19 @@ export interface AdminSubscription {
   created_at?: string | null;
   updated_at: string | null;
   razorpay_subscription_id?: string | null;
+  /** Razorpay has taken at least one real payment on it. */
+  charged?: boolean;
 }
+
+/**
+ * How a restaurant is billed (from its payer), so "Active" can say which kind:
+ *   complimentary  free forever, given by an admin
+ *   paying         live autopay that Razorpay has charged at least once
+ *   autopay_set_up live autopay, first charge not taken yet
+ *   not_billed     switched to Active by an admin, no autopay (paid outside Razorpay)
+ *   none           anything else
+ */
+export type Billing = 'complimentary' | 'paying' | 'autopay_set_up' | 'not_billed' | 'none';
 
 export interface AdminOwner {
   user_id: string;
@@ -89,6 +101,7 @@ export interface AdminRestaurant {
   trial_ends_at: string | null;
   grace_until: string | null;
   lifecycle: Lifecycle;
+  billing?: Billing;
   ends_at: string | null;
   owner: AdminOwner | null;
   latest_subscription: AdminSubscription | null;
@@ -114,7 +127,15 @@ export interface AdminKpis {
   expiring_7d: number;
   mrr_inr: number;
   pipeline_mrr_inr: number;
+  /** Restaurants Razorpay has actually charged (not subscription rows). */
   paying_subscriptions: number;
+  /** Restaurants with autopay set up, no charge yet. */
+  autopay_set_up?: number;
+  /** "Active" split by how it is billed; the four always add up to `active`. */
+  active_complimentary?: number;
+  active_paying?: number;
+  active_autopay?: number;
+  active_not_billed?: number;
 }
 
 export interface AdminOverview {

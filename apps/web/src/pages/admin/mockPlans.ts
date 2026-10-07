@@ -25,7 +25,7 @@ const LABELS: [string, string, boolean?][] = [
 
 const row = (id: string, m: number, price: number, charge: number, subs = 0) => ({
   id, duration_months: m, price_inr: price, charge_inr: charge, gst_pct: 18, razorpay_plan_id: 'plan_mock' + id,
-  subscribers: subs, history: [{ price_inr: price, charge_inr: charge, gst_pct: 18, effective_from: '2026-10-08T00:00:00Z', by: null, note: 'Price when the history started' }],
+  subscribers: subs, paying: Math.floor(subs / 2), autopay_set_up: subs - Math.floor(subs / 2), history: [{ price_inr: price, charge_inr: charge, gst_pct: 18, effective_from: '2026-10-08T00:00:00Z', by: null, note: 'Price when the history started' }],
 });
 
 export function mockPlans(): PlansOverview {

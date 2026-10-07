@@ -7,14 +7,23 @@ import { daysUntil, fmtDate, fmtNum, relDays, tierName } from './format';
 import { Icon } from './icons';
 import { useConsole } from './ui';
 
-type Filter = 'all' | 'active' | 'complimentary' | 'paying' | 'trialing' | 'expiring' | 'trial_expired' | 'grace' | 'suspended' | 'lapsed';
+type Filter = 'all' | 'active' | 'complimentary' | 'paying' | 'autopay' | 'not_billed' | 'trialing' | 'expiring' | 'trial_expired' | 'grace' | 'suspended' | 'lapsed';
+
+/** "Paying" means Razorpay has actually charged them (server's `billing`). */
+const billingOf = (r: AdminRestaurant) => r.billing
+  ?? (r.is_complimentary ? 'complimentary'
+    : r.latest_subscription?.status === 'active' && r.latest_subscription?.charged ? 'paying'
+    : r.latest_subscription?.status === 'authenticated' ? 'autopay_set_up'
+    : r.lifecycle === 'active' ? 'not_billed' : 'none');
 type SortKey = 'name' | 'created_at' | 'ends_at' | 'orders_30d';
 
 const FILTERS: { key: Filter; label: string; test: (r: AdminRestaurant) => boolean }[] = [
   { key: 'all', label: 'All', test: () => true },
   { key: 'active', label: 'Active', test: (r) => r.lifecycle === 'active' },
   { key: 'complimentary', label: 'Complimentary', test: (r) => r.is_complimentary },
-  { key: 'paying', label: 'Paying', test: (r) => r.latest_subscription?.status === 'active' },
+  { key: 'paying', label: 'Paying', test: (r) => billingOf(r) === 'paying' },
+  { key: 'autopay', label: 'Autopay set up', test: (r) => billingOf(r) === 'autopay_set_up' },
+  { key: 'not_billed', label: 'Active · not billed', test: (r) => r.lifecycle === 'active' && billingOf(r) === 'not_billed' },
   { key: 'trialing', label: 'On free trial', test: (r) => r.lifecycle === 'trialing' },
   { key: 'expiring', label: 'Trial ends in 7 days', test: (r) => (r.lifecycle === 'trialing' || r.lifecycle === 'grace') && daysUntil(r.ends_at) <= 7 },
   { key: 'trial_expired', label: 'Free trial ended', test: (r) => r.lifecycle === 'trial_expired' },
