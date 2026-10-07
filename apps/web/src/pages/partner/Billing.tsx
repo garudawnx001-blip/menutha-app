@@ -3,9 +3,9 @@
  *  mark paid (Cash / UPI received). */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { fetchLiveOrders, fetchOrdersByIds, createBill, quoteBill, fetchBillMoney, recordBillPrint, payBill, fetchBillLayout, setOrdersAc, waiveService, setParcelPacking, voidTableBill, voidBill, setBillChargeLine, removeBillChargeLine, staffSetOrderItemQty, setBillService, type BillChargeLine, type PortalOrder } from '../../lib/portalApi';
+import { fetchLiveOrders, fetchOrdersByIds, createBill, quoteBill, fetchBillMoney, recordBillPrint, payBill, fetchBillLayout, setOrdersAc, waiveService, setParcelPacking, voidTableBill, voidBill, setBillChargeLine, removeBillChargeLine, staffSetOrderItemQty, setBillService, billShareToken, type BillChargeLine, type PortalOrder } from '../../lib/portalApi';
 import { WalkIn } from './WalkIn';
-import { renderBillHtml, billNumbersFromBreakdown, billLabel, billDateText, needsGstinWarning, GSTIN_WARNING, type BillData } from '../../lib/billTemplate';
+import { renderBillHtml, billNumbersFromBreakdown, billLabel, billDateText, whatsappBillLink, needsGstinWarning, GSTIN_WARNING, type BillData } from '../../lib/billTemplate';
 import { printBillHtml } from '../../lib/printBill';
 import { inr } from '../../lib/types';
 import { usePartner } from './PartnerShell';
@@ -590,6 +590,25 @@ export function Billing() {
     printBillHtml(renderBillHtml({ ...printData(), duplicate: n != null && n > 1 }, layout));
   };
 
+  /** A free wa.me link to the online copy of this bill (/b/<token>). Opened
+   *  synchronously so the browser does not block it as a pop-up. */
+  const shareWhatsApp = async () => {
+    if (!bill) return;
+    const win = window.open('', '_blank');
+    const token = await billShareToken(bill.id);
+    if (!token) {
+      win?.close();
+      setError('Sharing a bill needs the database update for online bills.');
+      return;
+    }
+    const link = whatsappBillLink({
+      baseUrl: window.location.origin, token, restaurantName: restaurant.name ?? 'our restaurant',
+      label: billLabel(bill), total: bill.total,
+      phone: bill.orders.find((o) => o.guest_phone)?.guest_phone ?? null,
+    });
+    if (win) win.location.href = link; else window.location.href = link;
+  };
+
   if (orders === null) return <Spinner label="Loading unpaid orders…" />;
 
   return (
@@ -859,6 +878,10 @@ export function Billing() {
             <strong>{billLabel(bill)}</strong>
             <span style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
               <button className="btn btn-glass btn-sm" onClick={printBill}>🖨 Print bill</button>
+              <button className="btn btn-glass btn-sm" onClick={shareWhatsApp}
+                title="Send the guest a link to this bill (and a UPI pay link if your UPI id is set)">
+                Share on WhatsApp
+              </button>
               {/* The way back from a bill raised against the wrong table.
                   Before this the only exits were "mark it paid" and "leave it
                   unpaid on record for ever". */}

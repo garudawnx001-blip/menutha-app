@@ -30,6 +30,7 @@ import { Menu } from './pages/Menu';
 import { Cart } from './pages/Cart';
 import { Track } from './pages/Track';
 import { Bill } from './pages/Bill';
+import { BillOnline } from './pages/BillOnline';
 
 /** The platform console. Lazy, so its code and styles live in their own chunk
  *  and are never downloaded by a diner or a restaurant -- only by someone who
@@ -76,6 +77,8 @@ export function App() {
           <Route path="/cart" element={<Cart />} />
           <Route path="/track/:id" element={<Track />} />
           <Route path="/bill" element={<Bill />} />
+          {/* The bill a diner was sent on WhatsApp (2026-10-11). */}
+          <Route path="/b/:token" element={<BillOnline />} />
           <Route path="/partner" element={<PartnerLogin />} />
           <Route path="/partner/register" element={<Register />} />
           {/* Screens for approval, drawn from fixtures. See DesignPreview. */}

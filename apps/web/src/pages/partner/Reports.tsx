@@ -13,6 +13,7 @@
  */
 import { usePartner } from './PartnerShell';
 import { Growth } from './Growth';
+import { TaxReports } from './TaxReports';
 
 export function Reports() {
   const { restaurant } = usePartner();
@@ -24,6 +25,7 @@ export function Reports() {
         Revenue and orders over any period, and the dishes that earn most.
       </p>
       <Growth restaurantId={restaurant.id} />
+      <TaxReports restaurantId={restaurant.id} restaurantName={restaurant.name ?? ''} gstin={(restaurant as any).gstin ?? null} />
     </div>
   );
 }

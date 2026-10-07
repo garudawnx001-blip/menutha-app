@@ -17,6 +17,8 @@ import { ServiceStrip, ago } from './ServiceStrip';
 import { fetchTableSignals, type TableSignal } from '../../lib/portalApi';
 import { Spinner, VegMark } from '../../components';
 import { startPoll } from '../../lib/poll';
+import { printBillHtml } from '../../lib/printBill';
+import { renderKotHtml } from '../../lib/billTemplate';
 
 const LIVE = ['placed', 'accepted', 'preparing', 'ready'];
 
@@ -623,6 +625,21 @@ export function OrdersBoard() {
                 it did nor how final it was — the one destructive control on the
                 ticket was also the least legible. */}
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+              {/* KOT (2026-10-11): the kitchen's own slip -- order number,
+                  table, time, dishes, notes, no prices. Same document as the
+                  phone's. Any staff may print it. */}
+              <button className="btn btn-glass btn-sm" title="Print the kitchen order ticket"
+                onClick={() => printBillHtml(renderKotHtml({
+                  restaurantName: restaurant.name ?? '',
+                  orderNo: all.map((x) => x.order_no).join('+'),
+                  tableText: o.is_parcel ? 'Parcel / Takeaway' : (o.table_label ?? 'Table'),
+                  placedAt: (o as any).placed_at ?? null,
+                  items: merged.map((it) => ({ name: it.name, qty: it.qty })),
+                  notes: notes.join(' · ') || null,
+                  paper: (restaurant as any).bill_paper ?? null,
+                }))}>
+                🖨 KOT
+              </button>
               {canEdit && (
                 <>
                   <button className="btn btn-glass btn-sm" disabled={busy === o.id}

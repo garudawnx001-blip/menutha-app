@@ -366,6 +366,98 @@ export function billNumbersFromBreakdown(bd: any): Pick<BillData,
   };
 }
 
+/**
+ * THE DINER'S COPY (2026-10-11), from public_bill(): the same numbers and the
+ * same invoice number as the bill the staff printed. Used by the online bill
+ * page (WhatsApp link) and the diner app's PDF, so neither invents a second
+ * "invoice" with its own number.
+ */
+export function billDataFromPublic(pb: any): BillData {
+  const r = pb?.restaurant ?? {};
+  const base: BillData = {
+    restaurant: {
+      name: r.name ?? 'Restaurant', address: r.address ?? '', city: r.city ?? '', phone: r.phone ?? '',
+      gstin: r.gstin ?? '', fssai: r.fssai_no ?? '', thanks: r.bill_thanks ?? '', terms: r.bill_terms ?? '',
+      logoUrl: r.logo_url ?? null, header: r.bill_header ?? '', paper: r.bill_paper ?? null, gstMode: r.gst_mode ?? null,
+    },
+    billNo: billLabel(pb ?? {}),
+    dateText: billDateText(pb?.issued_at),
+    tableText: pb?.table ?? 'Dine-in',
+    customer: { name: '', phone: '' },
+    items: (pb?.items ?? []).map((i: any) => ({ name: String(i.name), qty: Number(i.qty), unit_price: Number(i.unit_price) })),
+    subtotal: 0, discount: Number(pb?.discount ?? 0), packing: 0, service: 0,
+    sgstPct: Number(r.sgst_pct ?? 0), cgstPct: Number(r.cgst_pct ?? 0),
+    sgst: Number(pb?.sgst_amount ?? (Number(pb?.gst_amount ?? 0) / 2)),
+    cgst: Number(pb?.cgst_amount ?? (Number(pb?.gst_amount ?? 0) / 2)),
+    total: Number(pb?.total ?? 0),
+  };
+  base.subtotal = Math.round((base.total - base.sgst - base.cgst + base.discount) * 100) / 100;
+  return { ...base, ...(pb?.breakdown ? billNumbersFromBreakdown(pb.breakdown) : {}) };
+}
+
+/** upi://pay link for the bill's total, only when the restaurant set a UPI id. */
+export function upiPayLink(vpa: string | null | undefined, payee: string, amount: number, note: string): string {
+  const v = String(vpa ?? '').trim();
+  if (!v || !(amount > 0)) return '';
+  // Built by hand: React Native's URLSearchParams is incomplete.
+  const q = [['pa', v], ['pn', payee.slice(0, 40)], ['am', amount.toFixed(2)], ['cu', 'INR'], ['tn', note.slice(0, 60)]]
+    .map(([k, x]) => `${k}=${encodeURIComponent(x)}`).join('&');
+  return `upi://pay?${q}`;
+}
+
+/**
+ * "SHARE ON WHATSAPP" (2026-10-11): a free wa.me link with the online bill.
+ * The guest's number when we have one (Indian 10-digit gets 91), else the
+ * WhatsApp picker. No WhatsApp Business API, nothing paid.
+ */
+export function whatsappBillLink(opts: {
+  baseUrl: string; token: string; restaurantName: string; label: string; total: number; phone?: string | null;
+}): string {
+  const url = `${opts.baseUrl.replace(/\/+$/, '')}/b/${opts.token}`;
+  const text = `Your bill from ${opts.restaurantName}: ${opts.label} · ${inr(opts.total)}\n${url}`;
+  let digits = String(opts.phone ?? '').replace(/\D/g, '');
+  if (digits.length === 10) digits = '91' + digits;
+  const to = digits.length >= 11 && digits.length <= 15 ? digits : '';
+  return `https://wa.me/${to}?text=${encodeURIComponent(text)}`;
+}
+
+/**
+ * THE KITCHEN ORDER TICKET (KOT), 2026-10-11. What the kitchen needs and
+ * nothing else: big order number, table, time (India), dishes with options
+ * and notes. No prices. Same document from the portal and the phone; prints
+ * on a 58/80 mm roll (auto-fit) or the restaurant's fixed paper.
+ */
+export function renderKotHtml(k: {
+  restaurantName: string; orderNo: string | number; tableText: string; placedAt?: string | null;
+  items: { name: string; qty: number; note?: string | null }[]; notes?: string | null;
+  paper?: string | null; reprint?: boolean;
+}): string {
+  const size = k.paper === '58' ? '58mm auto' : k.paper === '80' ? '80mm auto' : 'auto';
+  const rows = k.items.map((i) => `<tr><td class="q">${esc(i.qty)}×</td><td>${esc(i.name)}${
+    i.note ? `<div class="n">${esc(i.note)}</div>` : ''}</td></tr>`).join('');
+  return `<!doctype html><html><head><meta charset="utf-8"><style>
+  @page { size: ${size}; margin: 3mm; }
+  body { margin: 0; font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif; color: #000; }
+  .k { max-width: 80mm; margin: 0 auto; }
+  .h { text-align: center; font-size: 11pt; } .no { text-align: center; font-size: 26pt; font-weight: 900; margin: 1mm 0; }
+  .t { text-align: center; font-size: 15pt; font-weight: 800; }
+  .m { text-align: center; font-size: 9.5pt; margin: 1mm 0 2mm; border-bottom: 1px dashed #000; padding-bottom: 2mm; }
+  table { width: 100%; border-collapse: collapse; font-size: 13pt; }
+  td { padding: 1.2mm 0; vertical-align: top; border-bottom: 1px dotted #999; } td.q { width: 12mm; font-weight: 900; }
+  .n { font-size: 10pt; font-style: italic; } .note { margin-top: 2mm; font-size: 11pt; font-weight: 700; }
+  .rp { text-align: center; font-weight: 900; letter-spacing: .1em; }
+  @media print and (max-width: 58mm) { table { font-size: 11pt; } .no { font-size: 22pt; } }
+</style></head><body><div class="k">
+  <div class="h">${k.restaurantName ? `${esc(k.restaurantName)} · ` : ''}KOT</div>
+  ${k.reprint ? '<div class="rp">REPRINT</div>' : ''}
+  <div class="no">#${esc(k.orderNo)}</div>
+  <div class="t">${esc(k.tableText)}</div>
+  <div class="m">${esc(billDateText(k.placedAt))}</div>
+  <table>${rows}</table>
+  ${k.notes ? `<div class="note">Note: ${esc(k.notes)}</div>` : ''}
+</div></body></html>`;
+}
+
 /* ── Rendering ───────────────────────────────────────────────────────────── */
 
 /** Rupees, Indian digit grouping, always two decimals. One definition, so the
@@ -640,7 +732,7 @@ export function renderBillHtml(d: BillData, layoutRaw: any): string {
   </div>`,
     thanks:  d.restaurant.thanks ? `<div class="thanks">${esc(d.restaurant.thanks)}</div>` : '',
     terms:   d.restaurant.terms ? `<div class="terms">${esc(d.restaurant.terms)}</div>` : '',
-    footer:  `<div class="footer">SAC ${SAC} · computer-generated ${isSupply ? 'bill of supply' : 'tax invoice'}${d.pricesIncludeGst ? ' · prices include GST' : ''} · powered by Menutha</div>`,
+    footer:  `<div class="footer">SAC ${SAC} · computer-generated ${/ORDER SUMMARY/.test(title) ? 'order summary, not a tax invoice' : isSupply ? 'bill of supply' : 'tax invoice'}${d.pricesIncludeGst ? ' · prices include GST' : ''} · powered by Menutha</div>`,
   };
 
   /** The sections of one band, in the order they were configured. */

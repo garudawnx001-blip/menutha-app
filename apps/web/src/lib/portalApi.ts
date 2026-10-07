@@ -914,6 +914,13 @@ export async function fetchBillMoney(billId: string) {
   };
 }
 
+/** The online-bill token (2026-10-11) for the WhatsApp share link. */
+export async function billShareToken(billId: string): Promise<string | null> {
+  const { data, error } = await supabase.rpc('bill_share_token', { p_bill_id: billId });
+  if (error) return null;
+  return (data as any) ?? null;
+}
+
 /** GST rate per category (2026-10-11). null = the restaurant's own rate. */
 export async function fetchCategoryGst(restaurantId: string): Promise<{ id: string; name: string; gst_rate: number | null }[]> {
   const { data, error } = await supabase.from('menu_category')
@@ -1118,15 +1125,36 @@ export async function fetchGrowth(
   }
   if (period !== 'custom') start.setHours(0, 0, 0, 0);
 
-  const { data, error } = await supabase
-    .from('food_order')
-    .select('placed_at, total, status')
-    .eq('restaurant_id', restaurantId)
-    .neq('status', 'cancelled')
-    .gte('placed_at', start.toISOString())
-    .lte('placed_at', end.toISOString())
-    .order('placed_at');
-  if (error) throw error;
+  /* REVENUE IS MONEY COLLECTED (2026-10-11): paid payments net of credit
+     notes, by India-time bucket, from revenue_series on the server. Unpaid,
+     cancelled and written-off (walkout) bills used to count as sales here.
+     An older database without the function falls back to the old query. */
+  const ymd = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const spanForBucket = Math.ceil((end.getTime() - start.getTime()) / 86400000) + 1;
+  const bucket = period === 'day' ? 'hour' : (period === 'year' || spanForBucket > 92) ? 'month' : 'day';
+  let data: { placed_at: string; total: number; orders?: number }[] | null = null;
+  const rs = await supabase.rpc('revenue_series', {
+    p_restaurant_id: restaurantId, p_from: ymd(start), p_to: ymd(end), p_bucket: bucket,
+  });
+  if (!rs.error) {
+    data = ((rs.data ?? []) as any[]).map((r) => {
+      const [datePart, hour] = String(r.bucket).split('T');
+      const [y, m, d] = datePart.split('-').map(Number);
+      return { placed_at: new Date(y, (m || 1) - 1, d || 1, Number(hour ?? 0)).toISOString(),
+        total: Number(r.revenue) || 0, orders: Number(r.orders) || 0 };
+    });
+  } else {
+    const old = await supabase
+      .from('food_order')
+      .select('placed_at, total, status')
+      .eq('restaurant_id', restaurantId)
+      .neq('status', 'cancelled')
+      .gte('placed_at', start.toISOString())
+      .lte('placed_at', end.toISOString())
+      .order('placed_at');
+    if (old.error) throw old.error;
+    data = (old.data ?? []) as any;
+  }
 
   const buckets = new Map<string, GrowthPoint>();
   const hourKey = (d: Date) => `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}-${d.getHours()}`;
@@ -1188,13 +1216,13 @@ export async function fetchGrowth(
     });
   }
 
-  for (const row of (data ?? []) as { placed_at: string; total: number }[]) {
+  for (const row of (data ?? [])) {
     const d = new Date(row.placed_at);
     const key = mode === 'hour' ? hourKey(d) : mode === 'month' ? monKey(d) : dayKey(d);
     const b = buckets.get(key);
     if (!b) continue;
     b.revenue += Number(row.total || 0);
-    b.orders += 1;
+    b.orders += row.orders ?? 1;
   }
   return [...buckets.values()];
 }

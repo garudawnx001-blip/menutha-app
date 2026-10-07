@@ -38,10 +38,10 @@ async function fetchExtraSeries(restaurantId: string, period: GrowthPeriod, from
   const since = new Date();
   since.setDate(since.getDate() - daysForPeriod(period, from, to));
 
-  const [itemsRes, ordersRes] = await Promise.all([
+  const [itemsRes, ordersRes, paidRes] = await Promise.all([
     supabase
       .from('order_item')
-      .select('name, qty, unit_price, food_order!inner(restaurant_id, placed_at)')
+      .select('name, qty, unit_price, order_id, food_order!inner(restaurant_id, placed_at)')
       .eq('food_order.restaurant_id', restaurantId)
       .gte('food_order.placed_at', since.toISOString()),
     supabase
@@ -50,10 +50,19 @@ async function fetchExtraSeries(restaurantId: string, period: GrowthPeriod, from
       .eq('restaurant_id', restaurantId)
       .neq('status', 'cancelled')
       .gte('placed_at', since.toISOString()),
+    // Only dishes that were actually PAID FOR count as sold (2026-10-11):
+    // unpaid, cancelled and written-off orders are not sales.
+    supabase
+      .from('payment')
+      .select('order_id')
+      .eq('restaurant_id', restaurantId)
+      .eq('status', 'paid')
+      .gte('created_at', since.toISOString()),
   ]);
+  const paidIds = new Set(((paidRes.data ?? []) as any[]).map((p) => p.order_id));
 
   const agg: Record<string, { name: string; qty: number; revenue: number }> = {};
-  for (const it of (itemsRes.data ?? []) as any[]) {
+  for (const it of ((itemsRes.data ?? []) as any[]).filter((i) => paidRes.error || paidIds.has(i.order_id))) {
     if (!agg[it.name]) agg[it.name] = { name: it.name, qty: 0, revenue: 0 };
     agg[it.name].qty += it.qty;
     agg[it.name].revenue += it.qty * Number(it.unit_price);
