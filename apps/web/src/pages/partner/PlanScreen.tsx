@@ -9,6 +9,7 @@ import { supabase } from '../../lib/supabase';
 import { inr } from '../../lib/types';
 import { Spinner, Wordmark } from '../../components';
 import { entitlementsFor, type Entitlements } from '../../lib/entitlements';
+import { usePlanCatalog, featureLabel, visibleFeatures } from '../../lib/planCatalog';
 
 interface Plan {
   id: string;
@@ -24,6 +25,8 @@ interface Plan {
   tier: string | null;
   /** Billing cycle in months: 1 | 3 | 6 | 12. */
   duration_months: number;
+  /** GST rate on this row (18 today; editable in the admin console). */
+  gst_pct?: number;
   razorpay_plan_id: string | null;
   features: string[];
   sort_order: number;
@@ -40,6 +43,22 @@ interface PlanState {
   addons: string[];
   /** Platform-granted: never billed, never expiring. From get_plan_state. */
   is_complimentary?: boolean;
+  /** Feature lists per plan, from the database catalog (get_plan_state). */
+  catalog?: { tiers?: Record<string, string[]>; addons?: Record<string, string[]> };
+  /** The live subscription: the price it was signed at, and any offer on it. */
+  subscription?: {
+    plan_id: string; status: string;
+    locked_price_inr: number | null; locked_charge_inr: number | null; current_charge_inr: number | null;
+    free_months: number;
+    offer: { code: string; title: string; label: string } | null;
+  } | null;
+}
+
+/** A code checked against one plan row by the server (validate_coupon). */
+interface Quote {
+  ok: boolean; reason?: string; code?: string; title?: string; label?: string;
+  discount_type?: 'percent' | 'amount' | 'free_months';
+  final_price_inr?: number; final_charge_inr?: number; base_charge_inr?: number; free_months?: number;
 }
 
 /**
@@ -156,6 +175,20 @@ export function PlanScreen({ preview }: { preview?: boolean } = {}) {
    * useMemo that reads any of it.
    */
   const [hasMandate, setHasMandate] = useState(false);
+  /**
+   * THE PLAN CATALOG, LIVE: names, descriptions, "most popular", feature
+   * words, banner offers. A price or feature change made in the admin console
+   * reaches this screen without a refresh (realtime + focus), and `load` below
+   * re-reads the price rows when it does.
+   */
+  const catalog = usePlanCatalog();
+  /** An offer code the owner typed, and what the server said about it per plan row. */
+  const [code, setCode] = useState('');
+  const [applied, setApplied] = useState('');
+  const [quotes, setQuotes] = useState<Record<string, Quote>>({});
+  const [codeBusy, setCodeBusy] = useState(false);
+  const [codeMsg, setCodeMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const catalogSeen = React.useRef<string | null>(null);
 
   // Subscribe buttons: until a plan has its razorpay_plan_id, the button reads
   // "opens soon" and explains when pressed rather than failing -- dropping the
@@ -268,6 +301,53 @@ export function PlanScreen({ preview }: { preview?: boolean } = {}) {
 
   useEffect(() => { load(); }, []);
 
+  /**
+   * A PRICE CHANGED WHILE THIS PAGE WAS OPEN: re-read the plan rows. The
+   * catalog hook hears plan_catalog / subscription_plans changes over
+   * realtime and on focus; `updated_at` moving is the signal. The first value
+   * is only recorded -- the mount-time load above already has it.
+   */
+  useEffect(() => {
+    if (preview || !catalog?.updated_at) return;
+    if (catalogSeen.current === null) { catalogSeen.current = catalog.updated_at; return; }
+    if (catalogSeen.current !== catalog.updated_at) {
+      catalogSeen.current = catalog.updated_at;
+      load();
+      setQuotes({});
+      if (applied) setCodeMsg({ ok: false, text: 'Prices were just updated — apply your code again.' });
+      setApplied('');
+    }
+  }, [catalog?.updated_at]);
+
+  /**
+   * CHECK A CODE against every plan on offer, on the server (validate_coupon:
+   * dates, plan, restaurant, new/existing, limits). The cards then show the
+   * discounted price for each plan it fits; checkout re-checks it again.
+   */
+  const applyCode = async (raw?: string) => {
+    const c = (raw ?? code).trim().toUpperCase();
+    if (!c || !restaurant) return;
+    setCode(c); setCodeBusy(true); setCodeMsg(null);
+    try {
+      const rows = plans.filter((p) => p.kind === 'tier');
+      const results = await Promise.all(rows.map(async (p) => {
+        const { data, error: e } = await supabase.rpc('validate_coupon', { p_code: c, p_restaurant_id: restaurant.id, p_plan_id: p.id });
+        return [p.id, e ? { ok: false, reason: 'Could not check that code. Try again.' } : (data as Quote)] as const;
+      }));
+      const map = Object.fromEntries(results) as Record<string, Quote>;
+      const good = Object.values(map).find((q) => q.ok);
+      if (good) {
+        setQuotes(map); setApplied(c);
+        const fits = rows.filter((p) => map[p.id]?.ok).length;
+        setCodeMsg({ ok: true, text: `${good.label} — applied${fits < rows.length ? ` to ${fits} of the plans below` : ''}.` });
+      } else {
+        setQuotes({}); setApplied('');
+        setCodeMsg({ ok: false, text: Object.values(map)[0]?.reason ?? 'This code is not valid.' });
+      }
+    } finally { setCodeBusy(false); }
+  };
+  const quoteFor = (planId: string): Quote | null => (applied && quotes[planId]?.ok ? quotes[planId] : null);
+
   const ent: Entitlements | null = useMemo(
     () => (state ? entitlementsFor({ ...(state as any), has_mandate: hasMandate }) : null),
     [state, hasMandate],
@@ -334,11 +414,26 @@ export function PlanScreen({ preview }: { preview?: boolean } = {}) {
     setError('');
     try {
       const { data: session } = await supabase.auth.getSession();
+      // The offer code goes with the plan it was checked for; the server
+      // checks it again and is the only judge of the price.
+      const offerCode = action === 'subscribe' && quoteFor(planId) ? applied : undefined;
       const { data, error: fnErr } = await supabase.functions.invoke('create-subscription', {
-        body: { action, restaurant_id: restaurant!.id, plan_id: planId },
+        body: { action, restaurant_id: restaurant!.id, plan_id: planId, ...(offerCode ? { coupon_code: offerCode } : {}) },
         headers: { Authorization: `Bearer ${session.session?.access_token}` },
       });
-      if (fnErr) throw new Error((await fnErr?.context?.text?.()) || fnErr.message);
+      if (fnErr) {
+        const raw = (await fnErr?.context?.text?.()) || fnErr.message;
+        let parsed: { error?: string; coupon_error?: boolean } | null = null;
+        try { parsed = JSON.parse(raw); } catch { /* not JSON */ }
+        if (parsed?.coupon_error) {
+          // The code stopped fitting between preview and checkout (used up,
+          // ended...). Say so, drop it, and let them subscribe at full price.
+          setApplied(''); setQuotes({});
+          setCodeMsg({ ok: false, text: parsed.error ?? 'This offer could not be applied.' });
+          throw new Error(`${parsed.error ?? 'This offer could not be applied.'} Nothing was charged — you can choose the plan again without the code.`);
+        }
+        throw new Error(parsed?.error || raw);
+      }
       if (action === 'cancel') { await load(); return; }
 
       /**
@@ -389,10 +484,12 @@ export function PlanScreen({ preview }: { preview?: boolean } = {}) {
          */
         description: (() => {
           const row = plans.find((x) => x.id === planId);
-          const total = row ? gstLines(row.price_inr, row.charge_inr).total : data.plan?.price_inr;
+          const offer = (data as any)?.offer as { label?: string; final_charge_inr?: number; free_months?: number } | null;
+          const total = offer?.final_charge_inr ?? (row ? gstLines(row.price_inr, row.charge_inr).total : data.plan?.price_inr);
           const per = row && row.duration_months > 1 ? `every ${row.duration_months} months` : 'a month';
           const name = data.plan?.name ?? row?.name ?? 'Menutha';
-          return `Free for 30 days — then ${inr(total)} ${per}. Cancel any time. (${name})`;
+          const free = offer?.free_months ? `Free for 30 days + ${offer.free_months} more month${offer.free_months === 1 ? '' : 's'}` : 'Free for 30 days';
+          return `${free} — then ${inr(total)} ${per}.${offer?.label ? ` Offer: ${offer.label}.` : ''} Cancel any time. (${name})`;
         })(),
         // Terracotta, the accent every button in both products already uses.
         // The forest green here matched nothing -- it was the only place in
@@ -635,6 +732,69 @@ export function PlanScreen({ preview }: { preview?: boolean } = {}) {
       )}
       {error && <p className="inline-error" style={{ marginTop: 12 }}>{error}</p>}
 
+      {/* YOUR PRICE, as it was signed. A price change in the admin console
+          never reaches a running subscription (Razorpay plans cannot change),
+          so when the list price has moved, say plainly that theirs has not. */}
+      {!ent?.complimentary && state?.subscription && (
+        <div className="glass" style={{ padding: 16, marginTop: 14 }}>
+          <strong style={{ fontSize: 15.5 }}>Your autopay</strong>
+          <p className="muted" style={{ fontSize: 14, margin: '6px 0 0' }}>
+            {state.subscription.locked_charge_inr
+              ? <>You pay <strong>{inr(state.subscription.locked_charge_inr)}</strong>
+                  {(() => { const r = plans.find((x) => x.id === state.subscription!.plan_id); return r && r.duration_months > 1 ? ` every ${r.duration_months} months` : ' a month'; })()}
+                  {' '}(GST included).</>
+              : 'Your autopay is set up.'}
+            {state.subscription.locked_charge_inr && state.subscription.current_charge_inr
+              && state.subscription.current_charge_inr !== state.subscription.locked_charge_inr && !state.subscription.offer && (
+              <> New sign-ups now pay {inr(state.subscription.current_charge_inr)} — <strong>your price stays the same</strong> for as long as your autopay continues.</>
+            )}
+          </p>
+          {state.subscription.offer && (
+            <p style={{ fontSize: 14, margin: '8px 0 0' }}>
+              <span className="badge gold" style={{ marginRight: 8 }}>Offer {state.subscription.offer.code}</span>
+              {state.subscription.offer.label}
+              {state.subscription.free_months > 0 && ' — your first payment moves out accordingly.'}
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* OFFERS. A banner the admin chose to show, and the box to type a code.
+          The code is checked on the server against every plan, and the cards
+          below then show the price it gives. Offers apply when a subscription
+          is started, so a restaurant already paying sees no box. */}
+      {!ent?.complimentary && !state?.subscription && (<>
+        {(catalog?.banners ?? []).filter((b) => b.code !== applied).slice(0, 1).map((b) => (
+          <div key={b.code} className="glass" style={{ padding: 14, marginTop: 14, borderColor: 'var(--gold)', display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+            <span aria-hidden style={{ fontSize: 20 }}>🎉</span>
+            <span style={{ flex: 1, minWidth: 200 }}>
+              <strong>{b.text}</strong>
+              <span className="muted" style={{ display: 'block', fontSize: 13.5 }}>
+                {b.label}{b.ends_at ? ` · until ${new Date(b.ends_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}` : ''} · code <strong>{b.code}</strong>
+              </span>
+            </span>
+            <button className="btn btn-primary btn-sm" disabled={codeBusy} onClick={() => applyCode(b.code)}>Use this offer</button>
+          </div>
+        ))}
+        <div className="glass" style={{ padding: 14, marginTop: 14 }}>
+          <label htmlFor="offer-code" style={{ fontWeight: 600, fontSize: 14.5 }}>Have an offer code?</label>
+          <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
+            <input id="offer-code" className="code-input" style={{ flex: 1, minWidth: 160, textTransform: 'uppercase', letterSpacing: '.06em' }}
+              value={code} maxLength={24} placeholder="Enter code" autoCapitalize="characters" spellCheck={false}
+              onChange={(e) => { setCode(e.target.value.toUpperCase().replace(/[^A-Z0-9_-]/g, '')); if (applied) { setApplied(''); setQuotes({}); setCodeMsg(null); } }}
+              onKeyDown={(e) => { if (e.key === 'Enter') applyCode(); }} />
+            {applied
+              ? <button className="btn btn-ghost" onClick={() => { setApplied(''); setQuotes({}); setCode(''); setCodeMsg(null); }}>Remove</button>
+              : <button className={`btn btn-primary${codeBusy ? ' is-busy' : ''}`} disabled={!code.trim() || codeBusy} onClick={() => applyCode()}>Apply</button>}
+          </div>
+          {codeMsg && (
+            <p role="status" style={{ fontSize: 13.5, margin: '8px 0 0', color: codeMsg.ok ? 'var(--forest, #2e7d52)' : 'var(--error)', fontWeight: 600 }}>
+              {codeMsg.ok ? '✓ ' : ''}{codeMsg.text}
+            </p>
+          )}
+        </div>
+      </>)}
+
       {!ent?.complimentary && (<>
       <h2 className="cat-heading">Plans</h2>
       {/* HOW LONG YOU PAY FOR, and each one is a real plan at the gateway.
@@ -666,18 +826,25 @@ export function PlanScreen({ preview }: { preview?: boolean } = {}) {
            *  the BASE, because that is the number being compared. */
           const monthlyBase = monthlyBaseFor(p.tier);
           const saved = monthlyBase ? monthlyBase * p.duration_months - p.price_inr : 0;
+          /** The catalog's own words for this plan (renamed in the console → renamed here). */
+          const cat = catalog?.tiers.find((t) => t.id === p.tier);
+          const title = cat?.display_name ?? tierLabel(p);
+          /** An applied offer code that fits THIS plan row, as the server priced it. */
+          const q = quoteFor(p.id);
+          const offerCharge = q && q.discount_type !== 'free_months' ? q.final_charge_inr ?? null : null;
+          const extraMonths = q?.discount_type === 'free_months' ? q.free_months ?? 0 : 0;
           return (
             <div key={p.id} className="glass" style={{ padding: 18, display: 'flex', flexDirection: 'column', gap: 10, borderColor: isCurrent ? 'var(--primary)' : undefined }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
                 <h3 className="display" style={{ fontSize: 21 }}>
-                  {tierLabel(p)}
+                  {title}
                   {/* ONE RECOMMENDATION, and Growth because it is the tier
                       that actually fits a single restaurant taking orders all
                       day -- Basic has no analytics and no Excel import, which
                       is the first thing an owner with 164 dishes asks for.
                       A page where every card shouts is a page with no
                       recommendation at all, so only this one is marked. */}
-                  {p.tier === 'growth' && (
+                  {(catalog ? !!catalog.tiers.find((t) => t.id === p.tier)?.is_popular : p.tier === 'growth') && (
                     <span className="badge plan-pick">Most restaurants pick this</span>
                   )}
                 </h3>
@@ -695,7 +862,7 @@ export function PlanScreen({ preview }: { preview?: boolean } = {}) {
                     </span>
                   </span>
                   <span className="dim" style={{ display: 'block', fontSize: 11.5 }}>
-                    + 18% GST · {inr(g.total)} billed
+                    + {p.gst_pct ?? 18}% GST · {inr(g.total)} billed
                   </span>
                   {p.duration_months > 1 && (
                     <span className="dim" style={{ display: 'block', fontSize: 11.5 }}>
@@ -714,16 +881,25 @@ export function PlanScreen({ preview }: { preview?: boolean } = {}) {
                   it has to be the number they would otherwise have been
                   charged today, or the comparison is a smaller saving than it
                   looks and the card is quietly overselling. */}
+              {cat?.description && (
+                <p className="muted" style={{ fontSize: 13.5, margin: 0 }}>{cat.description}</p>
+              )}
               <div className="plan-today">
                 <s className="plan-today-was">{inr(g.total)}</s>
                 <strong className="plan-today-now">₹0 today</strong>
-                <span className="plan-today-free">free for 30 days</span>
+                <span className="plan-today-free">free for 30 days{extraMonths ? ` + ${extraMonths} month${extraMonths === 1 ? '' : 's'}` : ''}</span>
               </div>
+              {q && (
+                <span className="badge gold" style={{ alignSelf: 'flex-start' }}>Offer {applied}: {q.label}</span>
+              )}
               {/* The whole offer in one sentence a tired person can read at
                   the end of service. Deliberately above the feature list: the
                   decision is made on this line, not on the features. */}
               <p className="plan-plain">
-                Free for 30 days. Then <strong>{inr(g.total)}</strong>
+                Free for 30 days{extraMonths ? `, plus ${extraMonths} more month${extraMonths === 1 ? '' : 's'} with your offer` : ''}. Then{' '}
+                {offerCharge !== null
+                  ? <><s className="dim">{inr(g.total)}</s> <strong>{inr(offerCharge)}</strong></>
+                  : <strong>{inr(g.total)}</strong>}
                 {p.duration_months === 1 ? ' a month' : ` every ${p.duration_months} months`}.
                 Cancel any time before then and you pay nothing.
               </p>
@@ -731,8 +907,8 @@ export function PlanScreen({ preview }: { preview?: boolean } = {}) {
                 <span className="badge gold" style={{ alignSelf: 'flex-start' }}>Saves {inr(saved)} vs monthly</span>
               )}
               <ul style={{ listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 6 }}>
-                {p.features.map((f) => (
-                  <li key={f} className="muted" style={{ fontSize: 13.5 }}>✓ {FEATURE_LABELS[f] ?? f}</li>
+                {visibleFeatures(catalog, p.features).map((f) => (
+                  <li key={f} className="muted" style={{ fontSize: 13.5 }}>✓ {featureLabel(catalog, f, FEATURE_LABELS)}</li>
                 ))}
               </ul>
 
@@ -759,7 +935,7 @@ export function PlanScreen({ preview }: { preview?: boolean } = {}) {
                     : setError('Online subscription is being switched on. Your 30-day trial continues meanwhile, and nothing is charged.'))}>
                   {busyPlan === p.id ? 'Opening checkout…'
                     : !p.razorpay_plan_id ? 'Online payment opens soon'
-                    : (ent?.state === 'active' ? 'Switch to this plan' : `Choose ${tierLabel(p)}`)}
+                    : (ent?.state === 'active' ? 'Switch to this plan' : `Choose ${title}`)}
                 </button>
               )}
               {/* AND AGAIN, DIRECTLY UNDER THE BUTTON THAT OPENS RAZORPAY.

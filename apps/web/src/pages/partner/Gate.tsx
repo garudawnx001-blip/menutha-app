@@ -18,15 +18,13 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { usePartner } from './PartnerShell';
-import { TIER_FEATURES } from '../../lib/entitlements';
+import { tierFor as tierForCatalog, type PlanCatalogMap } from '../../lib/entitlements';
 
 /** The cheapest tier that includes a feature — so the nudge can name it
- *  rather than always pushing the most expensive one. */
-export function tierFor(feature: string): 'basic' | 'growth' | 'enterprise' | null {
-  for (const t of ['basic', 'growth', 'enterprise'] as const) {
-    if ((TIER_FEATURES as any)[t]?.includes(feature)) return t;
-  }
-  return null;
+ *  rather than always pushing the most expensive one. Read from the same
+ *  database catalog the gate uses (built-in lists when it is unreachable). */
+export function tierFor(feature: string, catalog?: PlanCatalogMap | null): 'basic' | 'growth' | 'enterprise' | null {
+  return tierForCatalog(feature, catalog ?? null);
 }
 
 const LABEL: Record<string, string> = {
@@ -35,8 +33,10 @@ const LABEL: Record<string, string> = {
 
 export function UpgradeNudge({ feature, what }: { feature: string; what: string }) {
   const nav = useNavigate();
-  const { ent } = usePartner();
-  const tier = tierFor(feature);
+  const { ent, catalog } = usePartner();
+  const tier = tierFor(feature, catalog?.entitlements);
+  // The plan's NAME as the admin console calls it ("Growth"), not the key.
+  const nameOf = (t: string) => catalog?.tiers.find((x) => x.id === t)?.display_name ?? LABEL[t] ?? t;
   const expired = ent.state === 'locked';
 
   return (
@@ -47,14 +47,14 @@ export function UpgradeNudge({ feature, what }: { feature: string; what: string 
           <path d="M8 10V7a4 4 0 0 1 8 0v3" />
         </svg>
       </div>
-      <strong>{expired ? 'Your subscription has ended' : `${what} is on ${LABEL[tier ?? 'growth']}`}</strong>
+      <strong>{expired ? 'Your subscription has ended' : `${what} is on ${nameOf(tier ?? 'growth')}`}</strong>
       <p className="dim">
         {expired
           ? 'Everything is still here and nothing has been deleted — new orders are paused until a plan is active again.'
           : `Your plan does not include ${what.toLowerCase()} yet. Everything you have set up stays exactly as it is.`}
       </p>
       <button className="btn btn-primary" onClick={() => nav('/partner/plan')}>
-        {expired ? 'Choose a plan' : `See ${LABEL[tier ?? 'growth']}`}
+        {expired ? 'Choose a plan' : `See ${nameOf(tier ?? 'growth')}`}
       </button>
     </div>
   );

@@ -1672,9 +1672,14 @@ export function subscribeRestaurantMessages(
  * rules -- so the phone and the counter PC show the same list.
  */
 
-export type NotifKind = 'order' | 'service' | 'chat';
+/** `notice`: news from Menutha itself -- a plan price or features changed, or
+ *  an offer was published. Stored (restaurant_notice), live until "Got it". */
+export type NotifKind = 'order' | 'service' | 'chat' | 'notice';
 
 export interface LiveNotification {
+  /** notice: the row "Got it" dismisses, and the portal page it points at. */
+  noticeId?: string;
+  link?: string | null;
   /** Stable per thing: a new message on a table updates its item, not adds one. */
   id: string;
   kind: NotifKind;
@@ -1709,6 +1714,17 @@ export async function fetchLiveNotifications(restaurantId: string): Promise<Live
     if (withSettled) q = q.is('settled_at', null);
     return q.order('placed_at', { ascending: false }).limit(50);
   };
+
+  // Menutha's own notices. Fetched beside the three live sources and never
+  // allowed to fail them: a missing table (older database) is just no notices.
+  const noticesP = supabase
+    .from('restaurant_notice')
+    .select('id, title, body, link, created_at')
+    .eq('restaurant_id', restaurantId)
+    .is('read_at', null)
+    .order('created_at', { ascending: false })
+    .limit(20)
+    .then((r) => r, () => ({ data: null, error: { message: 'unavailable' } }));
 
   let [orders, services, msgs] = await Promise.all([
     settledColumnMissing ? newOrders(false) : newOrders(true),
@@ -1783,7 +1799,25 @@ export async function fetchLiveNotifications(restaurantId: string): Promise<Live
   }
   out.push(...byTable.values());
 
+  const notices = await noticesP;
+  for (const n of ((notices as any)?.data ?? []) as any[]) {
+    out.push({
+      id: `notice:${n.id}`, kind: 'notice',
+      title: String(n.title ?? 'Update from Menutha'),
+      body: String(n.body ?? ''),
+      at: n.created_at,
+      noticeId: n.id,
+      link: n.link ?? null,
+    });
+  }
+
   return out.sort((a, b) => (a.at < b.at ? 1 : -1));
+}
+
+/** "Got it" on a Menutha notice: it leaves the list on every device. */
+export async function dismissNotice(noticeId: string): Promise<void> {
+  const { error } = await supabase.rpc('dismiss_notice', { p_id: noticeId });
+  if (error) throw error;
 }
 
 /**
@@ -1801,6 +1835,7 @@ export function subscribeLiveNotifications(restaurantId: string, tag: string, on
     .on('postgres_changes', { event: '*', schema: 'public', table: 'food_order', filter: f }, onChange)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'service_request', filter: f }, onChange)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'message', filter: f }, onChange)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'restaurant_notice', filter: f }, onChange)
     .subscribe();
   return () => { supabase.removeChannel(channel); };
 }
