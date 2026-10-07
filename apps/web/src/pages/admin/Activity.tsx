@@ -11,6 +11,9 @@ const ICON: Record<string, string> = {
   'restaurant.login_reset': 'key', 'restaurant.create': 'plus', 'admin.sign_in': 'user', 'admin.claimed': 'user',
   'plan.update': 'layers', 'plan.price_change': 'rupee', 'offer.create': 'sparkle', 'offer.update': 'sparkle',
   'offer.ready': 'card', 'offer.publish': 'power', 'offer.pause': 'pause', 'notice.broadcast': 'phone',
+  'settings.update': 'phone', 'banner.create': 'sparkle', 'banner.update': 'sparkle', 'banner.on': 'power',
+  'banner.off': 'pause', 'banner.delete': 'x', 'website.save_draft': 'globe', 'website.publish': 'globe',
+  'website.restore': 'refresh', 'website.discard_draft': 'x', 'website.photo_upload': 'gift', 'website.photo_delete': 'x',
 };
 
 /** "Growth → Enterprise", "Free trial → Active" — only what changed. */
@@ -32,8 +35,23 @@ function whatChanged(a: AuditRow): string {
   }
   if (a.action.startsWith('offer.') && (f.code || b.code)) parts.push(String(f.code ?? b.code));
   if (a.action === 'notice.broadcast' && f.title) parts.push(`“${f.title}” · ${f.restaurants ?? 0} restaurants`);
+  if (a.action === 'settings.update') {
+    for (const k of Object.keys(f)) parts.push(`${SETTING_NAME[k] ?? titleCase(k)}: ${shortVal(b[k])} → ${shortVal(f[k])}`);
+  }
+  if (a.action.startsWith('banner.') && (f.text || b.text)) parts.push(`“${String(f.text ?? b.text).slice(0, 60)}”`);
+  if (a.action === 'website.publish' && f.note) parts.push(String(f.note));
+  if (a.action === 'website.save_draft' && Array.isArray(b.changed) && (b.changed as string[]).length) parts.push(`changed: ${(b.changed as string[]).join(', ')}`);
+  if (a.action.startsWith('website.photo_') && a.target_id) parts.push(a.target_id);
   return parts.join(' · ');
 }
+
+const SETTING_NAME: Record<string, string> = {
+  trial_days: 'Free trial days', grace_days: 'Grace days', support_phone: 'Help phone', support_email: 'Help email',
+  support_whatsapp: 'Help WhatsApp', min_app_version: 'Oldest app version', update_message: 'Update message',
+  maintenance_on: 'Maintenance notice', maintenance_message: 'Maintenance message', maintenance_web: 'Maintenance on website',
+  maintenance_app: 'Maintenance in app',
+};
+const shortVal = (v: unknown) => (typeof v === 'boolean' ? (v ? 'on' : 'off') : v === '' || v == null ? '(empty)' : String(v).slice(0, 40));
 
 export function Activity() {
   const { api, data, openRestaurant, lostAccess } = useConsole();

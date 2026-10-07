@@ -115,6 +115,7 @@ const FEATURE_LABELS: Record<string, string> = {
 };
 
 import { loadCheckout } from '../../lib/razorpayCheckout';
+import { useTrialDays } from '../../lib/appConfig';
 
 /** The design preview's plans: the twelve rows the migration writes, so the
  *  preview shows the real durations and the real arithmetic. */
@@ -140,6 +141,8 @@ const PREVIEW_PLANS: Plan[] = ([
 
 export function PlanScreen({ preview }: { preview?: boolean } = {}) {
   const nav = useNavigate();
+  /** Free-trial length from /admin/settings (30 if it cannot be read). */
+  const trialDays = useTrialDays();
   const [restaurant, setRestaurant] = useState<{ id: string; name: string } | null>(null);
   const [plans, setPlans] = useState<Plan[]>([]);
   const [state, setState] = useState<PlanState | null>(null);
@@ -401,7 +404,7 @@ export function PlanScreen({ preview }: { preview?: boolean } = {}) {
      */
     return left > 0
       ? `Free for ${left} more day(s) — then billing starts. Cancel any time.`
-      : 'Free for 30 days — then billing starts. Cancel any time.';
+      : `Free for ${trialDays} days — then billing starts. Cancel any time.`;
   }, [state]);
 
   /** Which plan row the live subscription is actually on, so only that card
@@ -488,7 +491,7 @@ export function PlanScreen({ preview }: { preview?: boolean } = {}) {
           const total = offer?.final_charge_inr ?? (row ? gstLines(row.price_inr, row.charge_inr).total : data.plan?.price_inr);
           const per = row && row.duration_months > 1 ? `every ${row.duration_months} months` : 'a month';
           const name = data.plan?.name ?? row?.name ?? 'Menutha';
-          const free = offer?.free_months ? `Free for 30 days + ${offer.free_months} more month${offer.free_months === 1 ? '' : 's'}` : 'Free for 30 days';
+          const free = offer?.free_months ? `Free for ${trialDays} days + ${offer.free_months} more month${offer.free_months === 1 ? '' : 's'}` : `Free for ${trialDays} days`;
           return `${free} — then ${inr(total)} ${per}.${offer?.label ? ` Offer: ${offer.label}.` : ''} Cancel any time. (${name})`;
         })(),
         // Terracotta, the accent every button in both products already uses.
@@ -624,11 +627,11 @@ export function PlanScreen({ preview }: { preview?: boolean } = {}) {
       {mustSetUp && (
         <div className="glass" style={{ padding: 16, marginTop: 14, borderColor: 'var(--gold)' }}>
           <strong style={{ color: '#8a6a25', fontSize: 16 }}>
-            One last step — start your 30-day free trial
+            One last step — start your {trialDays}-day free trial
           </strong>
           <p className="muted" style={{ fontSize: 14, margin: '6px 0 0' }}>
             Pick a plan below to begin. <strong>You are not charged today</strong> — setting
-            up autopay is what starts the free 30 days, and the first payment is
+            up autopay is what starts the free {trialDays} days, and the first payment is
             taken only when they end. Cancel any time before then and you pay
             nothing at all.
           </p>
@@ -649,14 +652,14 @@ export function PlanScreen({ preview }: { preview?: boolean } = {}) {
               happened. Both of those cost more than the space this takes. */}
           <div className="plan-refund">
             <p className="plan-refund-lead">
-              <strong>₹0 today</strong> for your 30-day free trial.
+              <strong>₹0 today</strong> for your {trialDays}-day free trial.
             </p>
             <p className="plan-refund-line">
               To set up autopay, <strong>₹5 is temporarily debited</strong> to verify your
               UPI or card — <strong className="plan-refund-key">and it is refunded automatically.</strong>
             </p>
             <p className="plan-refund-foot">
-              You are only charged your plan price after the 30 days. Cancel any time.
+              You are only charged your plan price after the {trialDays} days. Cancel any time.
             </p>
           </div>
         </div>
@@ -681,7 +684,7 @@ export function PlanScreen({ preview }: { preview?: boolean } = {}) {
         <div className="glass" style={{ padding: 16, marginTop: 14, borderColor: 'var(--gold)' }}>
           <strong style={{ color: '#8a6a25', fontSize: 16 }}>
             {ent.trialEndsAt === null
-              ? 'Free for your first 30 days'
+              ? `Free for your first ${trialDays} days`
               : `Free for ${daysLeft(ent.trialEndsAt)} more day(s)`}
           </strong>
           {/* NAME THE TIER. A trial runs at the plan they chose, so this is a
@@ -887,7 +890,7 @@ export function PlanScreen({ preview }: { preview?: boolean } = {}) {
               <div className="plan-today">
                 <s className="plan-today-was">{inr(g.total)}</s>
                 <strong className="plan-today-now">₹0 today</strong>
-                <span className="plan-today-free">free for 30 days{extraMonths ? ` + ${extraMonths} month${extraMonths === 1 ? '' : 's'}` : ''}</span>
+                <span className="plan-today-free">free for {trialDays} days{extraMonths ? ` + ${extraMonths} month${extraMonths === 1 ? '' : 's'}` : ''}</span>
               </div>
               {q && (
                 <span className="badge gold" style={{ alignSelf: 'flex-start' }}>Offer {applied}: {q.label}</span>
@@ -896,7 +899,7 @@ export function PlanScreen({ preview }: { preview?: boolean } = {}) {
                   the end of service. Deliberately above the feature list: the
                   decision is made on this line, not on the features. */}
               <p className="plan-plain">
-                Free for 30 days{extraMonths ? `, plus ${extraMonths} more month${extraMonths === 1 ? '' : 's'} with your offer` : ''}. Then{' '}
+                Free for {trialDays} days{extraMonths ? `, plus ${extraMonths} more month${extraMonths === 1 ? '' : 's'} with your offer` : ''}. Then{' '}
                 {offerCharge !== null
                   ? <><s className="dim">{inr(g.total)}</s> <strong>{inr(offerCharge)}</strong></>
                   : <strong>{inr(g.total)}</strong>}
@@ -932,7 +935,7 @@ export function PlanScreen({ preview }: { preview?: boolean } = {}) {
                 <button className="btn btn-primary btn-block" disabled={busyPlan !== ''}
                   onClick={() => (p.razorpay_plan_id
                     ? callFn('subscribe', p.id)
-                    : setError('Online subscription is being switched on. Your 30-day trial continues meanwhile, and nothing is charged.'))}>
+                    : setError(`Online subscription is being switched on. Your ${trialDays}-day trial continues meanwhile, and nothing is charged.`))}>
                   {busyPlan === p.id ? 'Opening checkout…'
                     : !p.razorpay_plan_id ? 'Online payment opens soon'
                     : (ent?.state === 'active' ? 'Switch to this plan' : `Choose ${title}`)}

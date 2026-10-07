@@ -12,6 +12,7 @@ import { startPoll } from '../../lib/poll';
 import { useLiveNotifications } from '../../lib/useLiveNotifications';
 import { usePlanCatalog, type PlanCatalog } from '../../lib/planCatalog';
 import { MenuthaNotices } from './MenuthaNotices';
+import { HelpLine, PlatformNotices, usePlatformNotices } from './PlatformNotices';
 
 interface PartnerCtx {
   role: PortalRole;
@@ -274,6 +275,9 @@ export function PartnerShell() {
     return () => t.stop();
   }, [barred]);
 
+  // Banners, maintenance notice and help contacts from /admin/settings.
+  const platform = usePlatformNotices(member?.restaurant.id ?? null);
+
   if (loading) return <Spinner label="Opening your restaurant…" />;
   if (!member || !ent) {
     return (
@@ -399,8 +403,10 @@ export function PartnerShell() {
           {/* News from Menutha (a price or plan change, a new offer). Shown on
               every plan, because the Notifications section is a Growth
               feature and a Basic owner must hear about their own price too. */}
+          <PlatformNotices notices={platform} />
           {(member.role === 'owner' || member.role === 'manager') && <MenuthaNotices restaurantId={member.restaurant.id} />}
           <Outlet />
+          <HelpLine notices={platform} />
         </main>
       </div>
     </Ctx.Provider>
