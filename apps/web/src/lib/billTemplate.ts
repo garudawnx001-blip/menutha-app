@@ -246,7 +246,10 @@ export type BillData = {
  * setting and is not changed here.
  */
 export function billHeading(d: Pick<BillData, 'restaurant' | 'duplicate'>): string {
-  const kind = d.restaurant.gstin?.trim() ? 'TAX INVOICE' : 'BILL';
+  // Owner decision 2026-10-08: until a GSTIN is on the profile the paper is
+  // headed "Bill of supply", whatever the GST settings charge. The settings
+  // are not changed; the portal and the app warn the owner to add the GSTIN.
+  const kind = d.restaurant.gstin?.trim() ? 'TAX INVOICE' : 'BILL OF SUPPLY';
   return d.duplicate ? `${kind} — DUPLICATE` : kind;
 }
 
@@ -264,6 +267,18 @@ export function billHeading(d: Pick<BillData, 'restaurant' | 'duplicate'>): stri
  * financial year (e.g. 26-27/0001). Older bills keep the number they were
  * printed with, so a reprint of one never changes what it says.
  */
+/**
+ * THE GSTIN WARNING. True when the restaurant charges GST (either half above
+ * zero) but has no GSTIN on its profile. Both surfaces show the owner the
+ * same message from the same rule; nothing about the charge changes.
+ */
+export function needsGstinWarning(gstin: string | null | undefined, sgstPct: number, cgstPct: number): boolean {
+  return !String(gstin ?? '').trim() && ((Number(sgstPct) || 0) > 0 || (Number(cgstPct) || 0) > 0);
+}
+export const GSTIN_WARNING =
+  'You are charging GST but there is no GSTIN on your restaurant profile. Add your GSTIN in Settings. '
+  + 'Until you do, bills print as "Bill of supply" instead of "Tax invoice".';
+
 export function billLabel(b: { invoice_no?: string | null; bill_no?: number | string | null }): string {
   return b.invoice_no ? `Invoice ${b.invoice_no}` : `Bill #${b.bill_no ?? ''}`;
 }
@@ -549,7 +564,7 @@ export function renderBillHtml(d: BillData, layoutRaw: any): string {
   </div>`,
     thanks:  d.restaurant.thanks ? `<div class="thanks">${esc(d.restaurant.thanks)}</div>` : '',
     terms:   d.restaurant.terms ? `<div class="terms">${esc(d.restaurant.terms)}</div>` : '',
-    footer:  `<div class="footer">SAC ${SAC} · computer-generated ${d.restaurant.gstin?.trim() ? 'tax invoice' : 'bill'} · powered by Menutha</div>`,
+    footer:  `<div class="footer">SAC ${SAC} · computer-generated ${d.restaurant.gstin?.trim() ? 'tax invoice' : 'bill of supply'} · powered by Menutha</div>`,
   };
 
   /** The sections of one band, in the order they were configured. */

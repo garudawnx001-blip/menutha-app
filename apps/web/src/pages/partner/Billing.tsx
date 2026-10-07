@@ -5,7 +5,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { fetchLiveOrders, fetchOrdersByIds, createBill, quoteBill, fetchBillMoney, recordBillPrint, payBill, fetchBillLayout, setOrdersAc, waiveService, setParcelPacking, voidTableBill, voidBill, setBillChargeLine, removeBillChargeLine, staffSetOrderItemQty, type BillChargeLine, type PortalOrder } from '../../lib/portalApi';
 import { WalkIn } from './WalkIn';
-import { renderBillHtml, billNumbersFromBreakdown, billLabel, type BillData } from '../../lib/billTemplate';
+import { renderBillHtml, billNumbersFromBreakdown, billLabel, needsGstinWarning, GSTIN_WARNING, type BillData } from '../../lib/billTemplate';
 import { printBillHtml } from '../../lib/printBill';
 import { inr } from '../../lib/types';
 import { usePartner } from './PartnerShell';
@@ -590,6 +590,12 @@ export function Billing() {
         or your own UPI.
       </p>
       {error && <p className="inline-error" style={{ margin: '10px 0' }}>{error}</p>}
+      {/* GST CHARGED WITHOUT A GSTIN. Billing carries on exactly as set up;
+          the owner is told, and the paper says "Bill of supply" until the
+          GSTIN is on the profile. */}
+      {canDiscount && needsGstinWarning(restaurant.gstin, qn?.sgstPct ?? sgstPct, qn?.cgstPct ?? cgstPct) && (
+        <p className="inline-error" role="status" style={{ margin: '10px 0' }}>{GSTIN_WARNING}</p>
+      )}
 
       {/* THE COUNTER'S OWN ORDER PAD. Not every customer scans -- some walk in
           and say what they want -- and without this the till could not bill
