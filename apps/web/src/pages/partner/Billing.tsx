@@ -5,7 +5,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { fetchLiveOrders, fetchOrdersByIds, createBill, quoteBill, fetchBillMoney, payBill, fetchBillLayout, setOrdersAc, waiveService, setParcelPacking, voidTableBill, voidBill, setBillChargeLine, removeBillChargeLine, staffSetOrderItemQty, type BillChargeLine, type PortalOrder } from '../../lib/portalApi';
 import { WalkIn } from './WalkIn';
-import { renderBillHtml, billNumbersFromBreakdown, type BillData } from '../../lib/billTemplate';
+import { renderBillHtml, billNumbersFromBreakdown, billLabel, type BillData } from '../../lib/billTemplate';
 import { printBillHtml } from '../../lib/printBill';
 import { inr } from '../../lib/types';
 import { usePartner } from './PartnerShell';
@@ -13,6 +13,8 @@ import { Spinner } from '../../components';
 
 interface BillDraft {
   id: string; bill_no: number; subtotal: number; discount: number; gst_amount: number; total: number;
+  /** The restaurant's own series number (26-27/0001); null on older bills. */
+  invoice_no?: string | null;
   /** The server's calculation, stored on the bill. What the paper prints. */
   breakdown?: any;
   orders: PortalOrder[];
@@ -341,7 +343,7 @@ export function Billing() {
   const cancelBill = () => guard(async () => {
     if (!bill) return;
     if (!window.confirm(
-      `Cancel bill #${bill.bill_no}?\n\n`
+      `Cancel ${billLabel(bill)}?\n\n`
       + 'The orders go back on the board so you can bill them again. '
       + 'Nothing is deleted — the cancelled bill stays on record.',
     )) return;
@@ -495,7 +497,7 @@ export function Billing() {
         terms: (restaurant as any).bill_terms ?? '',
         logoUrl: (restaurant as any).logo_url ?? null,
       },
-      billNo: `Bill #${b.bill_no}`,
+      billNo: billLabel(b),
       dateText: new Date().toLocaleString('en-IN'),
       // The label from the orders themselves. A bill can span several orders
       // at one table, so the first one's label is the table's; a parcel bill
@@ -829,7 +831,7 @@ export function Billing() {
       {bill && (
         <div className="glass-strong" style={{ padding: 16, marginTop: 16, borderColor: 'var(--primary)' }}>
           <div className="topbar" style={{ padding: 0 }}>
-            <strong>Bill #{bill.bill_no}</strong>
+            <strong>{billLabel(bill)}</strong>
             <span style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
               <button className="btn btn-glass btn-sm" onClick={printBill}>🖨 Print bill</button>
               {/* The way back from a bill raised against the wrong table.

@@ -857,6 +857,8 @@ export async function createBill(restaurantId: string, orderIds: string[], disco
     id: string; bill_no: number; subtotal: number; discount: number; gst_amount: number; total: number;
     /** The server's full calculation (2026-10-08 on). Absent on an older database. */
     breakdown?: any;
+    /** The restaurant's own invoice number for the year, e.g. 26-27/0001. */
+    invoice_no?: string | null;
   };
 
   /**

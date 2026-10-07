@@ -240,6 +240,16 @@ export type BillData = {
  * adds nothing up -- so every line on the paper is a line in the total and
  * the paper always agrees with what the counter collects.
  */
+/**
+ * WHAT A BILL IS CALLED, everywhere it is shown or printed. Bills raised from
+ * the 2026-10-08 update carry the restaurant's own invoice number for the
+ * financial year (e.g. 26-27/0001). Older bills keep the number they were
+ * printed with, so a reprint of one never changes what it says.
+ */
+export function billLabel(b: { invoice_no?: string | null; bill_no?: number | string | null }): string {
+  return b.invoice_no ? `Invoice ${b.invoice_no}` : `Bill #${b.bill_no ?? ''}`;
+}
+
 export function billNumbersFromBreakdown(bd: any): Pick<BillData,
   'items' | 'subtotal' | 'discount' | 'packing' | 'service' | 'sgstPct' | 'cgstPct'
   | 'sgst' | 'cgst' | 'total' | 'serviceWaived' | 'chargeLines' | 'taxable' | 'roundOff'> {
