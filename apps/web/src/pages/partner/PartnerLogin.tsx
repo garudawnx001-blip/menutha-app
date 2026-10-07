@@ -23,6 +23,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
+import { useTrialDays } from '../../lib/appConfig';
 import { EyeIcon, EyeOffIcon } from './Glyphs';
 import { Wordmark } from '../../components';
 import {
@@ -36,6 +37,7 @@ import { GoogleMark } from './GoogleMark';
 
 export function PartnerLogin() {
   const nav = useNavigate();
+  const trialDays = useTrialDays();
   /** THE SIGN-UP LINKS HAVE TO LAND ON SIGN UP. The marketing site's trial
    *  CTAs arrive with ?mode=signup. Read once; after that the anchor at the
    *  bottom owns the mode. */
@@ -363,7 +365,7 @@ export function PartnerLogin() {
           <Header
             eyebrow="Create account"
             title="Get your restaurant online."
-            sub="QR ordering, live kitchen board and billing. Free for 30 days — then choose a plan. Nothing is charged today, zero commission ever."
+            sub={`QR ordering, live kitchen board and billing. Free for ${trialDays} days — then choose a plan. Nothing is charged today, zero commission ever.`}
           />
         )}
 
@@ -382,7 +384,7 @@ export function PartnerLogin() {
               {error && <p className="field-error" style={{ marginTop: 10 }}>{error}</p>}
               <p className="dim auth-note">
                 Google confirms your email. Next you choose a username and password, then add your
-                restaurant — <b>30 days free</b>, ₹0 today, zero commission.
+                restaurant — <b>{trialDays} days free</b>, ₹0 today, zero commission.
               </p>
             </>
           ) : (
@@ -449,7 +451,7 @@ export function PartnerLogin() {
           <button className="btn btn-glass btn-glass-accent auth-anchor-btn" onClick={() => switchMode(mode === 'login' ? 'signup' : 'login')}>
             {mode === 'login' ? 'Create new account' : 'Log in'}
           </button>
-          <p className="dim auth-fine">30 days free · 0% commission · cancel any time</p>
+          <p className="dim auth-fine">{trialDays} days free · 0% commission · cancel any time</p>
         </div>
       </div>
     </div>

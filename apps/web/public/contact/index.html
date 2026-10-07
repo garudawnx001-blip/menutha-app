@@ -27,17 +27,19 @@
   <p class="lede">Onboarding help, Enterprise plans, partnerships, or anything else — we answer fast.</p>
 </div></header>
 <section class="block"><div class="wrap grid-3" style="margin-top:0">
-  <div class="card reveal"><h3>Restaurants &amp; support</h3><p><a href="mailto:support@menutha.com">support@menutha.com</a><br/>Onboarding, billing, day-to-day help.</p></div>
-  <div class="card reveal"><h3>Enterprise &amp; partnerships</h3><p><a href="mailto:hello@menutha.com">hello@menutha.com</a><br/>Multi-location groups, POS partners, integrations.</p></div>
-  <div class="card reveal"><h3>Where we are</h3><p>Menutha Technologies (Daiva)<br/>Hospet &amp; Hubli, Karnataka, India</p></div>
+  <div class="card reveal"><h3>Restaurants &amp; support</h3><p><a href="mailto:support@menutha.com" data-cms-email="contact.support_email">support@menutha.com</a><br/>Onboarding, billing, day-to-day help.</p></div>
+  <div class="card reveal"><h3>Enterprise &amp; partnerships</h3><p><a href="mailto:hello@menutha.com" data-cms-email="contact.business_email">hello@menutha.com</a><br/>Multi-location groups, POS partners, integrations.</p></div>
+  <div class="card reveal"><h3>Where we are</h3><p><span data-cms="contact.company">Menutha Technologies (Daiva)</span><br/><span data-cms="contact.address">Hospet &amp; Hubli, Karnataka, India</span></p></div>
+  <div class="card reveal" data-cms-contact-extra style="display:none"><h3>Call or WhatsApp</h3><p></p></div>
 </div></section>
 <footer><div class="wrap foot">
-  <div><span class="wordmark" style="font-size:18px"><b>menu</b>tha</span><p style="margin-top:6px">Menutha Technologies · Hospet &amp; Hubli, Karnataka</p></div>
+  <div><span class="wordmark" style="font-size:18px"><b>menu</b>tha</span><p style="margin-top:6px" data-cms="footer.tagline">Menutha Technologies · Hospet &amp; Hubli, Karnataka</p><p data-cms-social style="display:none;margin-top:6px"></p></div>
   <div><a href="/">Home</a><a href="/pricing/">Pricing</a><a href="/about/">About</a><a href="/for-restaurants/">For restaurants</a></div>
 </div></footer>
 <script>
   const io = new IntersectionObserver((es)=>es.forEach((e)=>e.isIntersecting&&e.target.classList.add('in')),{threshold:0.12});
   document.querySelectorAll('.reveal').forEach((el)=>io.observe(el));
 </script>
+<script src="/site-live.js?v=1" defer></script>
 </body>
 </html>
