@@ -258,6 +258,30 @@ export const SAC = '996331';
  * under 80mm because five columns of a GST table on a thermal roll is four
  * characters per column.
  */
+/**
+ * ONE ROW PER CHARGE, NEVER ONE PER ORDER.
+ *
+ * A bill is several orders, and every order carries its own snapshot of the
+ * owner's lines. Printed as-is, a table that ordered dish by dish got
+ * "Parcel Charges ₹10" seven times on one bill (menutha hotel, bill #120). The
+ * bill shows each charge once, with the amounts of every order summed --
+ * addition of figures the server already computed, not a second opinion on
+ * them. Zero rows are dropped; first-seen order is kept.
+ */
+export function consolidateChargeLines(
+  lines: { label: string; amount: number }[] | undefined,
+): { label: string; amount: number }[] {
+  const out = new Map<string, { label: string; amount: number }>();
+  for (const c of lines ?? []) {
+    const label = String(c.label ?? 'Charge').trim() || 'Charge';
+    const key = label.toLowerCase();
+    const row = out.get(key) ?? { label, amount: 0 };
+    row.amount = Math.round((row.amount + (Number(c.amount) || 0)) * 100) / 100;
+    out.set(key, row);
+  }
+  return [...out.values()].filter((c) => c.amount !== 0);
+}
+
 export function renderBillHtml(d: BillData, layoutRaw: any): string {
   const l = normaliseLayout(layoutRaw);
   const logo = billLogoUrl(l, d.restaurant.logoUrl);
@@ -439,7 +463,7 @@ export function renderBillHtml(d: BillData, layoutRaw: any): string {
     ${d.discount > 0 ? `<div class="row"><span>Discount</span><span>− ${inr(d.discount)}</span></div>` : ''}
     ${d.packing > 0 ? `<div class="row"><span>Packing charge</span><span>${inr(d.packing)}</span></div>` : ''}
     ${serviceRow}
-    ${(d.chargeLines ?? []).map((c) => `<div class="row"><span>${esc(c.label)}</span><span>${inr(c.amount)}</span></div>`).join('')}
+    ${consolidateChargeLines(d.chargeLines).map((c) => `<div class="row"><span>${esc(c.label)}</span><span>${inr(c.amount)}</span></div>`).join('')}
     <!-- The RATE on the label describes the money beside it. A bill that says
          2.5% while charging 9% is worse than one showing no rate at all. -->
     <div class="row"><span>SGST @ ${esc(d.sgstPct)}%</span><span>${inr(d.sgst)}</span></div>
