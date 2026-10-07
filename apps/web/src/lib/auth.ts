@@ -62,6 +62,81 @@ export function loginErrorSentence(message: string): string {
   return message;
 }
 
+/**
+ * The sentence inside a failed Edge Function call.
+ *
+ * `functions.invoke` does not reject with the function's own words. In
+ * supabase-js 2.x it rejects with a `FunctionsHttpError` whose `message` is
+ * the fixed string "Edge Function returned a non-2xx status code" and whose
+ * `context` is the raw `Response` -- status, every header, and `Set-Cookie`
+ * with it. Handing that object to a `setError` is how a failed reset once put
+ * a session cookie on a partner's screen, in a dialog they photographed.
+ *
+ * TWO BUGS ARE FIXED HERE, AND THE SECOND IS WHY THIS IS A FUNCTION.
+ *
+ * The first: `resetByIdentifier` rethrew the error untouched while its two
+ * siblings in this file unwrapped it inline. One code path out of three
+ * leaking is exactly the drift this module single-sources everything else to
+ * avoid, so the unwrapping now lives in one place and all three use it.
+ *
+ * The second: the inline version could not actually work in a browser. It did
+ * `JSON.parse(String(error.context.body))`, and on a real `Response` `body` is
+ * a `ReadableStream` -- `String()` of it is "[object ReadableStream]", the
+ * parse throws, and the function's sentence was silently replaced by the
+ * fallback every single time. It only looked correct because the fallback is
+ * a reasonable sentence. The body has to be READ, which is asynchronous.
+ */
+export async function edgeErrorSentence(error: unknown, fallback: string): Promise<string> {
+  const ctx = (error as any)?.context;
+
+  // The ordinary path: a Response whose body has not been consumed. `clone()`
+  // so that nothing downstream finds the stream already drained.
+  if (ctx && typeof ctx.clone === 'function' && typeof ctx.json === 'function') {
+    try {
+      const said = (await ctx.clone().json())?.error;
+      if (typeof said === 'string' && said.trim()) return said.trim();
+    } catch { /* not JSON, already read, or no body -- fall through */ }
+  }
+
+  // React Native's fetch polyfill keeps the body as text rather than a stream,
+  // and some wrappers hand back a plain string. Both end up here.
+  const raw = typeof ctx === 'string' ? ctx : ctx?.body;
+  if (typeof raw === 'string') {
+    try {
+      const said = JSON.parse(raw)?.error;
+      if (typeof said === 'string' && said.trim()) return said.trim();
+    } catch { /* fall through to the fallback */ }
+  }
+
+  return fallback;
+}
+
+/**
+ * What a failed *send* means, said in a way the reader can act on.
+ *
+ * GoTrue answers an SMTP problem with 500 and "Error sending recovery email".
+ * Passed through, that reads to an owner as "my email address is wrong", so
+ * they retype a correct address and fail again. Nothing about it is theirs to
+ * fix -- it is unconfigured SMTP, wrong SMTP credentials, or the built-in
+ * sender's hourly cap -- and the message should say so.
+ */
+export function sendErrorSentence(error: unknown, fallback: string): string {
+  const status = (error as any)?.status;
+  const message = typeof (error as any)?.message === 'string' ? (error as any).message : '';
+  const low = message.toLowerCase();
+
+  if (low.startsWith('error sending') || (status === 500 && low.includes('email'))) {
+    return 'We could not send the email just now. That is a problem on our side, not with your address — try again in a few minutes, or contact support.';
+  }
+  if (status === 429 || /rate limit|too many|after \d+ seconds/i.test(message)) {
+    return 'Too many attempts just now. Wait a minute and try again.';
+  }
+  // Only a sentence reaches the reader. A serialised body or header map never
+  // does, whatever a future SDK decides to put in `message`.
+  if (message && message.length <= 200 && !/^[[{<]/.test(message)) return message;
+  return fallback;
+}
+
 /** Resolves to a signed-in session or throws with a sentence for the reader. */
 export async function loginWithIdentifier(identifier: string, password: string): Promise<void> {
   const id = identifier.trim();
@@ -73,14 +148,7 @@ export async function loginWithIdentifier(identifier: string, password: string):
   const { data, error } = await supabase.functions.invoke('username-login', {
     body: { action: 'login', identifier: id.toLowerCase(), password },
   });
-  if (error) {
-    // The function answers 401 with a sentence; invoke() wraps that as an
-    // error whose message is the JSON body. Unwrap it rather than showing
-    // "Edge Function returned a non-2xx status code".
-    let msg = BAD_CREDS;
-    try { msg = JSON.parse(String((error as any)?.context?.body ?? '{}')).error ?? msg; } catch { /* keep default */ }
-    throw new Error(msg);
-  }
+  if (error) throw new Error(await edgeErrorSentence(error, BAD_CREDS));
   const session = (data as any)?.session;
   if (!session?.access_token) throw new Error(BAD_CREDS);
   // Adopt the session the function minted; from here on this client is
@@ -111,9 +179,7 @@ export async function completeReset(identifier: string, code: string, newPasswor
     },
   });
   if (error) {
-    let msg = 'That code did not match. Check it and try again.';
-    try { msg = JSON.parse(String((error as any)?.context?.body ?? '{}')).error ?? msg; } catch { /* keep default */ }
-    throw new Error(msg);
+    throw new Error(await edgeErrorSentence(error, 'That code did not match. Check it and try again.'));
   }
   const session = (data as any)?.session;
   if (!session?.access_token) throw new Error('That code did not match. Check it and try again.');
@@ -169,7 +235,7 @@ export async function changePassword(
   }
 
   const { error } = await supabase.auth.updateUser({ password: newPw });
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(sendErrorSentence(error, 'Could not change the password. Try again in a minute.'));
 
   // Everywhere else is signed out only when asked. Someone changing a
   // password because they think it leaked wants this; someone tidying up does
@@ -188,16 +254,24 @@ export function otpErrorSentence(message: string): string {
 }
 
 /** Reset by username OR email. Answers identically whether or not the
- *  identifier exists -- the enumeration this whole module exists to prevent. */
+ *  identifier exists -- the enumeration this whole module exists to prevent.
+ *
+ *  Neither branch rethrows the raw error any more. Both used to, and both
+ *  callers render what they get as `e?.message`: the email branch surfaced
+ *  GoTrue's "Error sending recovery email" (which blames the reader's own
+ *  address for an SMTP fault), and the username branch surfaced a
+ *  FunctionsHttpError -- the one carrying the whole Response. */
 export async function resetByIdentifier(identifier: string): Promise<void> {
   const id = identifier.trim();
   if (isEmailLike(id)) {
     const { error } = await supabase.auth.resetPasswordForEmail(id, { redirectTo: RESET_REDIRECT() });
-    if (error) throw error;
+    if (error) throw new Error(sendErrorSentence(error, 'Could not send the reset email. Try again in a minute.'));
     return;
   }
   const { error } = await supabase.functions.invoke('username-login', {
     body: { action: 'reset', identifier: id.toLowerCase() },
   });
-  if (error) throw error;
+  if (error) {
+    throw new Error(await edgeErrorSentence(error, 'Could not send the reset code. Try again in a minute.'));
+  }
 }
