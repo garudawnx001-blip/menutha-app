@@ -153,12 +153,21 @@ export interface NewRestaurantInput {
   complimentary: boolean;
 }
 
+/** What "Give more free days" reports back. */
+export interface ExtendTrialResult {
+  done: boolean;
+  new_trial_end: string;
+  /** True when the Razorpay autopay's first charge was moved too. */
+  moved_autopay: boolean;
+  replay?: boolean;
+}
+
 /** Everything the console can do. Real (Supabase) and DEV mock share it. */
 export interface ConsoleApi {
   fetchOverview(): Promise<AdminOverview>;
   fetchActivity(): Promise<AuditRow[]>;
   setPlan(id: string, tier: Tier, status: PlanStatus): Promise<void>;
-  extendTrial(id: string, by: { days: number } | { until: string }): Promise<void>;
+  extendTrial(id: string, by: { days: number } | { until: string }, key: string): Promise<ExtendTrialResult>;
   setComplimentary(id: string, on: boolean, opts?: { tier?: Tier; trialDays?: number }): Promise<void>;
   setStatus(id: string, status: 'active' | 'suspended'): Promise<void>;
   resetLogin(id: string): Promise<Credentials>;
@@ -187,11 +196,15 @@ async function rpc<T = unknown>(fn: string, args?: Record<string, unknown>): Pro
 }
 
 async function accountsFn(body: Record<string, unknown>): Promise<Credentials> {
+  return edgeFn<Credentials>('admin-accounts', body);
+}
+
+async function edgeFn<T>(name: string, body: Record<string, unknown>): Promise<T> {
   const c = consoleClient();
   const { data: s } = await c.auth.getSession();
   const token = s.session?.access_token;
   if (!token) throw new ConsoleError('You are no longer signed in as an admin.', true);
-  const { data, error } = await c.functions.invoke('admin-accounts', {
+  const { data, error } = await c.functions.invoke(name, {
     body, headers: { Authorization: `Bearer ${token}` },
   });
   if (error) {
@@ -205,7 +218,7 @@ async function accountsFn(body: Record<string, unknown>): Promise<Credentials> {
     if (status === 404 && (!msg || msg === 'not found')) throw new ConsoleError('You are no longer signed in as an admin.', true);
     throw new ConsoleError(msg || 'Could not reach the server. Nothing was changed — try again.');
   }
-  return data as Credentials;
+  return data as T;
 }
 
 export const realApi: ConsoleApi = {
@@ -228,10 +241,16 @@ export const realApi: ConsoleApi = {
     return (data ?? []) as AuditRow[];
   },
   async setPlan(id, tier, status) { await rpc('admin_set_plan', { p_restaurant_id: id, p_tier: tier, p_status: status }); },
-  async extendTrial(id, by) {
-    await rpc('admin_extend_trial', 'days' in by
-      ? { p_restaurant_id: id, p_days: by.days, p_until: null }
-      : { p_restaurant_id: id, p_days: null, p_until: by.until });
+  /**
+   * Goes through the admin-free-days edge function, not the RPC directly: for a
+   * restaurant with autopay set up, the first Razorpay charge has to move to
+   * the same date, and only the server holds the Razorpay key. `key` makes a
+   * repeated press safe (the days are never added twice).
+   */
+  async extendTrial(id, by, key) {
+    return edgeFn<ExtendTrialResult>('admin-free-days', 'days' in by
+      ? { key, restaurant_id: id, days: by.days }
+      : { key, restaurant_id: id, until: by.until });
   },
   async setComplimentary(id, on, opts) {
     await rpc('admin_set_complimentary', {

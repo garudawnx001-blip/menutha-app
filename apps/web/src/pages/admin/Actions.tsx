@@ -9,6 +9,15 @@ import { ConsoleError, TIERS, type AdminRestaurant, type Credentials, type PlanS
 import { fmtDate, tierName } from './format';
 import { BusyButton, CopyButton, Modal, useConsole, useToast } from './ui';
 
+/** A request key for idempotent writes (RFC 4122 v4). */
+function newKey(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') return crypto.randomUUID();
+  const b = crypto.getRandomValues(new Uint8Array(16));
+  b[6] = (b[6] & 0x0f) | 0x40; b[8] = (b[8] & 0x3f) | 0x80;
+  const h = Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('');
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
+}
+
 export type ActionKind = 'plan' | 'trial' | 'comp-on' | 'comp-off' | 'suspend' | 'activate' | 'reset';
 
 const STATUS_CHOICES: { v: PlanStatus; label: string; hint: string }[] = [
@@ -121,13 +130,21 @@ function TrialDialog({ r, onClose }: { r: AdminRestaurant; onClose: () => void }
     ? new Date(Math.max(Date.now(), currentEnd) + days * 864e5)
     : new Date(`${date}T23:59:00`)), [mode, days, date, currentEnd]);
   const valid = mode === 'days' ? days >= 1 && days <= 365 : newEnd.getTime() > Date.now();
+  // One key per distinct request: pressing again after an error (or a double
+  // click) repeats the SAME request, which the server applies at most once.
+  // Changing the days / date makes it a new request.
+  const key = useMemo(() => newKey(), [mode, days, date]);
+  const mandate = r.subscriptions.find((s) => ['authenticated', 'active', 'pending', 'halted'].includes(s.status ?? ''));
   return (
     <Modal title="Give more free days" icon="calendar" tone="green" onClose={onClose}
       footer={<>
         <button className="mc-btn mc-btn-ghost mc-btn-lg" onClick={onClose}>Cancel</button>
         <BusyButton className="mc-btn mc-btn-primary mc-btn-lg" busy={busy} disabled={!valid}
-          onClick={() => run(() => api.extendTrial(r.id, mode === 'days' ? { days } : { until: newEnd.toISOString() }),
-            `Free trial for ${r.name} now ends ${fmtDate(newEnd.toISOString())}.`)}>
+          onClick={() => run(async () => {
+            const res = await api.extendTrial(r.id, mode === 'days' ? { days } : { until: newEnd.toISOString() }, key);
+            return res;
+          }, `Free trial for ${r.name} now ends ${fmtDate(newEnd.toISOString())}`
+            + (mandate?.status === 'authenticated' ? ', and their first autopay charge moved to the same day.' : '.'))}>
           Extend free trial
         </BusyButton>
       </>}>
@@ -157,7 +174,13 @@ function TrialDialog({ r, onClose }: { r: AdminRestaurant; onClose: () => void }
         </label>
       )}
       <div className="mc-preview">New end date: <strong>{valid ? fmtDate(newEnd.toISOString()) : '—'}</strong></div>
-      {r.plan_status === 'active' && <p className="mc-note">They are already on an active plan, so this only moves the date.</p>}
+      {mandate?.status === 'authenticated' && (
+        <p className="mc-note">They have autopay set up. Their first Razorpay charge will move to this same date. If Razorpay refuses (for example a UPI mandate), nothing is changed and you will see why.</p>
+      )}
+      {mandate && mandate.status !== 'authenticated' && (
+        <p className="mc-note">Their autopay is already charging (Razorpay: {mandate.status}). Razorpay cannot move a charge date once billing has started, so this will be refused.</p>
+      )}
+      {!mandate && r.plan_status === 'active' && <p className="mc-note">They are already on an active plan, so this only moves the date.</p>}
       <ErrorLine text={error} />
     </Modal>
   );

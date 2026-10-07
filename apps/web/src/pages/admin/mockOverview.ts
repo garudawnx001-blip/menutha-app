@@ -151,12 +151,21 @@ export function mockApi(): ConsoleApi {
       x.plan_tier = tier; x.plan_status = status;
       x.grace_until = status === 'grace' ? new Date(Date.now() + 7 * D).toISOString() : null;
     }),
-    extendTrial: (id, by) => change(id, 'restaurant.extend_trial', (x) => {
-      if (x.is_complimentary) throw new ConsoleError('This restaurant is complimentary and never expires — there is no trial to extend.');
-      const base = Math.max(Date.now(), x.trial_ends_at ? Date.parse(x.trial_ends_at) : 0);
-      x.trial_ends_at = 'days' in by ? new Date(base + by.days * D).toISOString() : new Date(by.until).toISOString();
-      if (x.plan_status !== 'active' && x.plan_status !== 'grace') x.plan_status = 'trialing';
-    }),
+    extendTrial: async (id, by) => {
+      let moved = false;
+      await change(id, 'restaurant.extend_trial', (x) => {
+        if (x.is_complimentary) throw new ConsoleError('This restaurant is complimentary and never expires — there is no trial to extend.');
+        const live = x.subscriptions.find((s) => ['authenticated', 'active', 'pending', 'halted'].includes(s.status ?? ''));
+        if (live && live.status !== 'authenticated') {
+          throw new ConsoleError(`Autopay for this restaurant has already started charging (Razorpay status: ${live.status}). Nothing was changed.`);
+        }
+        moved = !!live;
+        const base = Math.max(Date.now(), x.trial_ends_at ? Date.parse(x.trial_ends_at) : 0);
+        x.trial_ends_at = 'days' in by ? new Date(base + by.days * D).toISOString() : new Date(by.until).toISOString();
+        if (x.plan_status !== 'active' && x.plan_status !== 'grace') x.plan_status = 'trialing';
+      });
+      return { done: true, new_trial_end: find(id).trial_ends_at ?? '', moved_autopay: moved };
+    },
     setComplimentary: (id, on, opts) => change(id, on ? 'restaurant.complimentary_on' : 'restaurant.complimentary_off', (x) => {
       x.is_complimentary = on;
       if (on) { x.plan_tier = opts?.tier ?? x.plan_tier; }
