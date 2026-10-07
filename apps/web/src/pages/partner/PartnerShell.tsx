@@ -10,6 +10,8 @@ import { entitlementsFor, hasFeature, needsBilling, type Entitlements } from '..
 import { Spinner, Wordmark } from '../../components';
 import { startPoll } from '../../lib/poll';
 import { useLiveNotifications } from '../../lib/useLiveNotifications';
+import { usePlanCatalog, type PlanCatalog } from '../../lib/planCatalog';
+import { MenuthaNotices } from './MenuthaNotices';
 
 interface PartnerCtx {
   role: PortalRole;
@@ -17,6 +19,8 @@ interface PartnerCtx {
   ent: Entitlements;
   can: (feature: string) => boolean;
   reload: () => Promise<void>;
+  /** The live plan catalog (null until loaded / when unreachable). */
+  catalog: PlanCatalog | null;
 }
 
 const Ctx = createContext<PartnerCtx | null>(null);
@@ -136,11 +140,18 @@ export function PartnerShell() {
 
   useEffect(() => { reload(); }, []);
 
+  /**
+   * WHAT EACH PLAN HOLDS, from the database (edited in the admin console).
+   * Until it arrives -- and if it never does -- entitlementsFor uses its
+   * built-in lists, which are the catalog's seed, so nothing flickers.
+   */
+  const catalog = usePlanCatalog();
   const ent = useMemo(
     () => (member
-      ? entitlementsFor({ ...(member.restaurant as any), has_mandate: hasMandate === true })
+      ? entitlementsFor({ ...(member.restaurant as any), has_mandate: hasMandate === true }, Date.now(),
+          catalog?.entitlements ?? null)
       : null),
-    [member, hasMandate],
+    [member, hasMandate, catalog],
   );
 
   /** The bell's count: everything live right now. Only for a plan that has
@@ -295,6 +306,7 @@ export function PartnerShell() {
         ent,
         can: (f) => hasFeature(ent, f),
         reload,
+        catalog,
       }}
     >
       <div className="portal">
@@ -384,6 +396,10 @@ export function PartnerShell() {
               <NavLink to="/partner/plan" style={{ fontWeight: 700 }}>Choose a plan →</NavLink>
             </div>
           )}
+          {/* News from Menutha (a price or plan change, a new offer). Shown on
+              every plan, because the Notifications section is a Growth
+              feature and a Basic owner must hear about their own price too. */}
+          {(member.role === 'owner' || member.role === 'manager') && <MenuthaNotices restaurantId={member.restaurant.id} />}
           <Outlet />
         </main>
       </div>
@@ -418,6 +434,7 @@ export function PartnerPreviewProvider({ children }: { children: React.ReactNode
     role: 'owner' as PortalRole, restaurant, ent,
     can: (f) => hasFeature(ent, f),
     reload: async () => {},
+    catalog: null,
   };
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

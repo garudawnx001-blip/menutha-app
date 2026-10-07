@@ -74,4 +74,12 @@ export const ACTION_LABEL: Record<string, string> = {
   'restaurant.activate': 'Switched restaurant back on',
   'restaurant.login_reset': 'Reset owner login',
   'restaurant.create': 'Created restaurant account',
+  'plan.update': 'Changed a plan',
+  'plan.price_change': 'Changed a price',
+  'offer.create': 'Created an offer',
+  'offer.update': 'Edited an offer',
+  'offer.ready': 'Set up an offer at Razorpay',
+  'offer.publish': 'Published an offer',
+  'offer.pause': 'Paused an offer',
+  'notice.broadcast': 'Sent a message to restaurants',
 };

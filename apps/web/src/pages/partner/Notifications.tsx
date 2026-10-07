@@ -19,7 +19,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useLiveNotifications } from '../../lib/useLiveNotifications';
 import {
-  resolveServiceRequest,
+  resolveServiceRequest, dismissNotice,
   fetchThreadMessages, sendRestaurantMessage, markThreadRead, subscribeRestaurantMessages,
   type LiveNotification, type PortalMessage,
 } from '../../lib/portalApi';
@@ -27,7 +27,7 @@ import { usePartner } from './PartnerShell';
 import { Spinner } from '../../components';
 
 const QUICK_REPLIES = ['On it', 'Almost done', 'Your order is ready', 'Sorry for the wait', 'Not available today'];
-const ICON: Record<string, string> = { order: '🧾', service: '🙋', chat: '💬' };
+const ICON: Record<string, string> = { order: '🧾', service: '🙋', chat: '💬', notice: '📣' };
 
 function ago(iso: string) {
   const s = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
@@ -73,7 +73,20 @@ export function Notifications() {
     } finally { setBusyId(null); reload(); }
   };
 
+  /** A Menutha notice: "Got it" clears it everywhere. */
+  const gotIt = async (n: LiveNotification) => {
+    if (!n.noticeId || busyId) return;
+    setBusyId(n.id); setActionError('');
+    try {
+      await dismissNotice(n.noticeId);
+      setItems((prev) => (prev ?? []).filter((x) => x.id !== n.id));
+    } catch {
+      setActionError('Could not clear that. Please try again.');
+    } finally { setBusyId(null); reload(); }
+  };
+
   const act = (n: LiveNotification) => {
+    if (n.kind === 'notice') { gotIt(n); return; }
     if (n.kind === 'order' && n.orderId) nav(`/partner/orders?order=${n.orderId}`);
     else if (n.kind === 'chat' && n.tableId) setReply({ tableId: n.tableId, label: n.tableLabel ?? 'Table' });
     else if (n.kind === 'service') done(n);
@@ -116,14 +129,23 @@ export function Notifications() {
               <time className="dim" style={{ fontSize: 12, marginLeft: 'auto', flex: '0 0 auto' }}>{ago(n.at)}</time>
             </span>
             <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <span className="thread-last dim" style={{ flex: 1, minWidth: 0 }}>{n.body}</span>
+              <span className={n.kind === 'notice' ? 'dim' : 'thread-last dim'}
+                style={{ flex: 1, minWidth: 0, ...(n.kind === 'notice' ? { whiteSpace: 'pre-line', fontSize: 13.5 } : {}) }}>
+                {n.body}
+              </span>
+              {n.kind === 'notice' && n.link && (
+                <button className="btn btn-glass" style={{ flex: '0 0 auto', minHeight: 40, padding: '6px 14px' }}
+                  onClick={() => nav(n.link!)}>
+                  See details
+                </button>
+              )}
               <button
-                className={n.kind === 'service' ? `btn btn-primary${busyId === n.id ? ' is-busy' : ''}` : 'btn btn-glass'}
+                className={n.kind === 'service' || n.kind === 'notice' ? `btn btn-primary${busyId === n.id ? ' is-busy' : ''}` : 'btn btn-glass'}
                 style={{ flex: '0 0 auto', minHeight: 40, padding: '6px 16px' }}
                 disabled={busyId === n.id}
                 onClick={() => act(n)}
               >
-                {n.kind === 'service' ? 'Done' : n.kind === 'chat' ? 'Reply' : 'View order'}
+                {n.kind === 'service' ? 'Done' : n.kind === 'notice' ? 'Got it' : n.kind === 'chat' ? 'Reply' : 'View order'}
               </button>
             </span>
           </div>

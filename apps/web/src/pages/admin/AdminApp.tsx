@@ -23,6 +23,8 @@ import { Home } from './Home';
 import { Restaurants } from './Restaurants';
 import { Activity } from './Activity';
 import { ComingNext } from './ComingNext';
+import { Plans } from './Plans';
+import { Offers } from './Offers';
 import { DetailDrawer } from './DetailDrawer';
 import { CreateAccount } from './CreateAccount';
 import { NotFound } from './NotFound';
@@ -202,8 +204,8 @@ function Console({ email, api, mocked, signOut, lostAccess }: {
         <Routes>
           <Route index element={<Home />} />
           <Route path="restaurants" element={<Restaurants />} />
-          <Route path="plans" element={<ComingNext section="plans" />} />
-          <Route path="offers" element={<ComingNext section="offers" />} />
+          <Route path="plans" element={<Plans />} />
+          <Route path="offers" element={<Offers />} />
           <Route path="payments" element={<ComingNext section="payments" />} />
           <Route path="website" element={<ComingNext section="website" />} />
           <Route path="settings" element={<ComingNext section="settings" />} />

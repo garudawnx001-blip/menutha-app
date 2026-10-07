@@ -35,6 +35,8 @@ export interface PlanStateInput {
   /** Platform-granted, never billed and never expiring: always `active` on
    *  plan_tier. Read from restaurant.is_complimentary / get_plan_state. */
   is_complimentary?: boolean | null;
+  /** Feature lists from the database (get_plan_state carries this). */
+  catalog?: PlanCatalogMap | null;
 }
 
 export interface Entitlements {
@@ -56,7 +58,23 @@ export interface Entitlements {
   complimentary: boolean;
 }
 
-export declare function entitlementsFor(r: PlanStateInput, now?: number): Entitlements;
+/** Features per tier / add-on, as the database carries them (get_plan_state.catalog,
+ *  get_plan_catalog.entitlements). */
+export interface PlanCatalogMap {
+  tiers?: Record<string, string[]>;
+  addons?: Record<string, string[]>;
+}
+/** The catalog actually used: server lists where valid, built-in lists otherwise. */
+export declare function resolveCatalog(catalog?: PlanCatalogMap | null): {
+  tiers: Record<string, string[]>;
+  addons: Record<string, string[]>;
+  fromServer: boolean;
+};
+/** Cheapest tier that includes a feature, by the given catalog. */
+export declare function tierFor(feature: string, catalog?: PlanCatalogMap | null): 'basic' | 'growth' | 'enterprise' | null;
+/** `catalog` defaults to `r.catalog` (get_plan_state carries it). Omitted or
+ *  invalid -> the built-in TIER_FEATURES, tier by tier. */
+export declare function entitlementsFor(r: PlanStateInput, now?: number, catalog?: PlanCatalogMap | null): Entitlements;
 export declare function hasFeature(ent: Entitlements, feature: string): boolean;
 /** Must this restaurant be sent to the plan screen before it may use
  *  anything? One definition, so two surfaces cannot disagree. */

@@ -27,6 +27,10 @@
  * the word describes what it does to the product rather than to the invoice.
  *
  * ── THE TIERS ─────────────────────────────────────────────────────────────
+ * WHAT EACH TIER HOLDS NOW LIVES IN THE DATABASE (public.plan_catalog, edited
+ * from /admin/plans) -- see resolveCatalog() below. The lists here are the
+ * OFFLINE FALLBACK ONLY, and equal the catalog's seed, so a client that cannot
+ * reach the catalog behaves exactly as the product did before the move.
  * Each tier is a superset of the one below it, built by spreading, so a
  * feature can never be in Growth and missing from Enterprise by a typo.
  */
@@ -127,7 +131,52 @@ const knownTier = (t, fallback) => (TIER_NAMES.has(t) ? t : fallback);
 
 const toTime = (v) => (v ? new Date(v).getTime() : null);
 
-export function entitlementsFor(r, now = Date.now()) {
+const own = (o, k) => o !== null && typeof o === 'object' && Object.prototype.hasOwnProperty.call(o, k);
+const isKeyList = (v) => Array.isArray(v) && v.every((x) => typeof x === 'string');
+
+/**
+ * WHICH FEATURES EACH PLAN HOLDS — read from the database, with this file's
+ * lists only as the offline fallback.
+ *
+ * The plan catalog (public.plan_catalog, edited from /admin/plans) is the
+ * single source of truth. Every server answer that feeds this function --
+ * get_plan_state and get_plan_catalog -- carries it as
+ *   { tiers: { basic: [...], growth: [...], enterprise: [...] },
+ *     addons: { addon_pos: [...], ... } }
+ * and callers pass it in as `r.catalog` (or as the third argument).
+ *
+ * The fallback is per tier, not all-or-nothing: a catalog missing one tier,
+ * or carrying something that is not a list of strings, leaves that tier on
+ * the built-in list rather than on nothing. Tier NAMES still come only from
+ * TIER_FEATURES -- the database can change what a tier holds, never invent a
+ * tier the gates do not know.
+ */
+export function resolveCatalog(catalog) {
+  const tiers = {};
+  for (const t of TIER_NAMES) {
+    tiers[t] = own(catalog?.tiers, t) && isKeyList(catalog.tiers[t]) ? catalog.tiers[t] : TIER_FEATURES[t];
+  }
+  const addons = { ...ADDON_FEATURES };
+  if (catalog?.addons && typeof catalog.addons === 'object') {
+    for (const k of Object.keys(catalog.addons)) {
+      if (k !== '__proto__' && isKeyList(catalog.addons[k])) addons[k] = catalog.addons[k];
+    }
+  }
+  return { tiers, addons, fromServer: !!(catalog && typeof catalog.tiers === 'object') };
+}
+
+/** The cheapest tier that includes a feature, by the same catalog the gate
+ *  used -- so an upgrade nudge never names a tier that would not unlock it. */
+export function tierFor(feature, catalog) {
+  const { tiers } = resolveCatalog(catalog);
+  for (const t of ['basic', 'growth', 'enterprise']) {
+    if (tiers[t].includes(feature)) return t;
+  }
+  return null;
+}
+
+export function entitlementsFor(r, now = Date.now(), catalog = r?.catalog) {
+  const cat = resolveCatalog(catalog);
   const status = r?.plan_status || 'trialing';
   const trialEndsAt = toTime(r?.trial_ends_at);
   const graceUntil = toTime(r?.grace_until);
@@ -222,9 +271,10 @@ export function entitlementsFor(r, now = Date.now()) {
    */
   const barred = state === 'setup' || state === 'locked';
 
-  const features = new Set(barred || !TIER_NAMES.has(tier) ? [] : TIER_FEATURES[tier]);
+  const features = new Set(barred || !TIER_NAMES.has(tier) ? [] : cat.tiers[tier]);
   if (!barred) {
-    for (const a of addons) for (const f of ADDON_FEATURES[a] ?? []) features.add(f);
+    // own(): an add-on id of 'constructor' must find nothing, not Object.
+    for (const a of addons) for (const f of (own(cat.addons, a) ? cat.addons[a] : [])) features.add(f);
   }
 
   return { tier, state, canOrder: !barred, features, trialEndsAt: complimentary ? null : trialEndsAt, graceUntil: complimentary ? null : graceUntil, complimentary };

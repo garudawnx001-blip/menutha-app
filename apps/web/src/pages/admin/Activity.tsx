@@ -9,6 +9,8 @@ const ICON: Record<string, string> = {
   'restaurant.set_plan': 'layers', 'restaurant.extend_trial': 'calendar', 'restaurant.complimentary_on': 'gift',
   'restaurant.complimentary_off': 'gift', 'restaurant.suspend': 'pause', 'restaurant.activate': 'power',
   'restaurant.login_reset': 'key', 'restaurant.create': 'plus', 'admin.sign_in': 'user', 'admin.claimed': 'user',
+  'plan.update': 'layers', 'plan.price_change': 'rupee', 'offer.create': 'sparkle', 'offer.update': 'sparkle',
+  'offer.ready': 'card', 'offer.publish': 'power', 'offer.pause': 'pause', 'notice.broadcast': 'phone',
 };
 
 /** "Growth → Enterprise", "Free trial → Active" — only what changed. */
@@ -19,6 +21,17 @@ function whatChanged(a: AuditRow): string {
   if (b.plan_status !== f.plan_status && f.plan_status) parts.push(`${titleCase(b.plan_status as string)} → ${titleCase(f.plan_status as string)}`);
   if (b.trial_ends_at !== f.trial_ends_at && f.trial_ends_at) parts.push(`trial ends ${new Date(String(f.trial_ends_at)).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}`);
   if (a.action === 'restaurant.create' && f.name) parts.push(String(f.name) + (f.is_complimentary ? ' · complimentary' : ''));
+  if (a.action === 'plan.price_change' && a.target_id) {
+    parts.push(`${a.target_id}: ₹${b.price_inr} → ₹${f.price_inr} (₹${b.charge_inr} → ₹${f.charge_inr} with GST)`);
+  }
+  if (a.action === 'plan.update' && f.display_name) {
+    const was = Array.isArray(b.features) ? (b.features as string[]) : [];
+    const now = Array.isArray(f.features) ? (f.features as string[]) : [];
+    const add = now.filter((x) => !was.includes(x)).length, rem = was.filter((x) => !now.includes(x)).length;
+    parts.push(`${f.display_name}${add ? ` · +${add} feature${add === 1 ? '' : 's'}` : ''}${rem ? ` · −${rem} feature${rem === 1 ? '' : 's'}` : ''}`);
+  }
+  if (a.action.startsWith('offer.') && (f.code || b.code)) parts.push(String(f.code ?? b.code));
+  if (a.action === 'notice.broadcast' && f.title) parts.push(`“${f.title}” · ${f.restaurants ?? 0} restaurants`);
   return parts.join(' · ');
 }
 

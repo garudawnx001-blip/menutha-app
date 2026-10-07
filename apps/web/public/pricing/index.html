@@ -37,16 +37,19 @@
   <div class="stagger" style="max-width:640px">
     <p class="eyebrow">Pricing</p>
     <h1>One flat subscription. 0% commission.</h1>
-    <p class="lede">Diners pay you directly — UPI or cash. Menutha's only charge is the plan below. Every plan starts with a 30-day free trial of full Enterprise features.</p>
+    <p class="lede">Diners pay you directly — UPI or cash. Menutha's only charge is the plan below. Every plan starts with a 30-day free trial of the plan you choose.</p>
   </div>
+  <!-- Filled by /plans-live.js when an offer is marked "show on pricing page". -->
+  <div class="card" data-offer-banner style="display:none;margin-top:18px;max-width:640px;border-color:#e2cf9f;background:#fdf8ec"></div>
 </header>
 
 <section class="block"><div class="wrap">
   <div class="tiers">
-    <div class="tier reveal">
-      <h3>Basic</h3><div class="price">₹589<small> /month</small></div><div style="font-size:12px;opacity:.7;margin-top:2px">₹499 + 18% GST</div>
-      <p style="color:var(--ink-soft);font-size:14px">The essentials to go QR-first.</p>
-      <ul>
+    <div class="tier reveal" data-plan-card="basic">
+      <h3 data-plan-name="basic">Basic</h3><div class="price"><span data-plan-price="basic">₹589</span><small> /month</small></div><div style="font-size:12px;opacity:.7;margin-top:2px" data-plan-base="basic">₹499 + 18% GST</div>
+      <div style="font-size:12px;opacity:.7;margin-top:2px;display:none" data-plan-annual="basic"></div>
+      <p style="color:var(--ink-soft);font-size:14px" data-plan-desc="basic">The essentials to go QR-first.</p>
+      <ul data-plan-features="basic">
         <li><b>Dynamic live menu</b> with instant price editing</li>
         <li><b>QR ordering</b> — diners order from the table</li>
         <li>Live kitchen board &amp; billing with GST invoices</li>
@@ -55,11 +58,12 @@
       </ul>
       <a class="btn btn-line" href="/partner?mode=signup">Start free trial</a>
     </div>
-    <div class="tier hot reveal">
+    <div class="tier hot reveal" data-plan-card="growth">
       <span class="tag">MOST POPULAR</span>
-      <h3>Growth</h3><div class="price">₹1,179<small> /month</small></div><div style="font-size:12px;opacity:.7;margin-top:2px">₹999 + 18% GST</div>
-      <p style="color:var(--ink-soft);font-size:14px">For busy floors that run on numbers.</p>
-      <ul>
+      <h3 data-plan-name="growth">Growth</h3><div class="price"><span data-plan-price="growth">₹1,179</span><small> /month</small></div><div style="font-size:12px;opacity:.7;margin-top:2px" data-plan-base="growth">₹999 + 18% GST</div>
+      <div style="font-size:12px;opacity:.7;margin-top:2px;display:none" data-plan-annual="growth"></div>
+      <p style="color:var(--ink-soft);font-size:14px" data-plan-desc="growth">For busy floors that run on numbers.</p>
+      <ul data-plan-features="growth">
         <li><b>Everything in Basic</b></li>
         <li><b>Analytics dashboards</b> — sales, top dishes, trends</li>
         <li><b>Excel bulk menu upload</b></li>
@@ -68,10 +72,11 @@
       </ul>
       <a class="btn btn-solid" href="/partner?mode=signup">Start free trial</a>
     </div>
-    <div class="tier reveal">
-      <h3>Enterprise</h3><div class="price">₹3,539<small> /month</small></div><div style="font-size:12px;opacity:.7;margin-top:2px">₹2,999 + 18% GST</div>
-      <p style="color:var(--ink-soft);font-size:14px">For groups and brands.</p>
-      <ul>
+    <div class="tier reveal" data-plan-card="enterprise">
+      <h3 data-plan-name="enterprise">Enterprise</h3><div class="price"><span data-plan-price="enterprise">₹3,539</span><small> /month</small></div><div style="font-size:12px;opacity:.7;margin-top:2px" data-plan-base="enterprise">₹2,999 + 18% GST</div>
+      <div style="font-size:12px;opacity:.7;margin-top:2px;display:none" data-plan-annual="enterprise"></div>
+      <p style="color:var(--ink-soft);font-size:14px" data-plan-desc="enterprise">For groups and brands.</p>
+      <ul data-plan-features="enterprise">
         <li><b>Everything in Growth</b></li>
         <li><b>Multi-location management</b></li>
         <li>White-label — your brand, no Menutha logo</li>
@@ -87,7 +92,7 @@
     <div class="card reveal"><h3>Add-on · Marketing Toolkit</h3><p>SMS &amp; WhatsApp broadcasts to your diners — festival menus, offers, and re-visits, sent from your dashboard.</p></div>
   </div>
 
-  <div class="tbl-scroll reveal"><table class="cmp">
+  <div class="tbl-scroll reveal"><table class="cmp" data-plan-table>
     <tr><th>What you get</th><th>Basic</th><th>Growth</th><th>Enterprise</th></tr>
     <tr><td>QR ordering + live kitchen board</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td></tr>
     <tr><td>GST billing &amp; instant price edits</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td></tr>
@@ -117,5 +122,7 @@
   const io = new IntersectionObserver((es) => es.forEach((e) => e.isIntersecting && e.target.classList.add('in')), { threshold: 0.12 });
   document.querySelectorAll('.reveal').forEach((el) => io.observe(el));
 </script>
+<!-- Live prices from the plan catalog; the prices written above stay as the fallback. -->
+<script src="/plans-live.js?v=1" defer></script>
 </body>
 </html>
