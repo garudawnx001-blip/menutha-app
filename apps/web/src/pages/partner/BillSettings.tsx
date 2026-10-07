@@ -56,7 +56,10 @@ export function BillSettings() {
     fssai_no: r.fssai_no ?? '',
     bill_thanks: r.bill_thanks ?? '',
     bill_terms: r.bill_terms ?? '',
+    // The phone has had these two and the portal could only read them.
+    parcel_charge: String(r.parcel_charge ?? 0),
   });
+  const [acPricing, setAcPricing] = useState<boolean>(r.ac_pricing === true);
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
 
@@ -93,6 +96,8 @@ export function BillSettings() {
     try {
       await updateRestaurant(restaurant.id, {
         ...clamped,
+        parcel_charge: Math.min(1000, Math.max(0, Number(form.parcel_charge) || 0)),
+        ac_pricing: acPricing,
         fssai_no: form.fssai_no.trim().toUpperCase() || null,
         bill_thanks: form.bill_thanks.trim() || null,
         bill_terms: form.bill_terms.trim() || null,
@@ -156,6 +161,19 @@ export function BillSettings() {
             <input id="bs-svc-ac" className="code-input" inputMode="decimal" placeholder="same as non-AC"
               value={form.service_charge_ac_pct} onChange={set('service_charge_ac_pct')} />
           </div>
+        </div>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 12, alignItems: 'end' }}>
+          <div style={{ flex: '1 1 160px', minWidth: 0 }}>
+            <label className="field-label" htmlFor="bs-parcel">Packing charge per parcel (₹)</label>
+            <input id="bs-parcel" className="code-input" inputMode="decimal" value={form.parcel_charge} onChange={set('parcel_charge')} />
+          </div>
+          <label className="row-item" style={{ flex: '1 1 220px', cursor: 'pointer', gap: 10 }}>
+            <span>
+              <strong style={{ fontSize: 14 }}>AC pricing</strong>
+              <span className="dim" style={{ display: 'block', fontSize: 12 }}>Use the AC service % on tables marked air-conditioned.</span>
+            </span>
+            <input type="checkbox" checked={acPricing} onChange={(e) => setAcPricing(e.target.checked)} style={{ width: 20, height: 20 }} />
+          </label>
         </div>
       </Section>
 

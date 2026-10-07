@@ -125,7 +125,7 @@ export function BillChargeLines({ restaurantId }: { restaurantId: string }) {
        * would charge it twice") was a sign the design was wrong rather than
        * something to word more carefully.
        *
-       * One place parcel is set now: Restaurant profile -> parcel charge.
+       * One place parcel is set now: Bill settings -> Packing charge per parcel.
        */
       const { data: r } = await supabase
         .from('restaurant').select('bill_charges').eq('id', restaurantId).maybeSingle();
@@ -221,7 +221,7 @@ export function BillChargeLines({ restaurantId }: { restaurantId: string }) {
           twice". A warning that has to be read to avoid a billing error is
           a design fault, not a documentation one.
 
-          Parcel has one home now: Restaurant profile -> parcel charge,
+          Parcel has one home now: Bill settings -> Packing charge per parcel,
           applied by create_order only when the table is_parcel. This screen
           is for taxes and service charges. */}
 
