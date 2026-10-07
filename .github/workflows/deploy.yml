@@ -100,15 +100,21 @@ jobs:
           # a 404 shows a diner an error instead of their menu, and #O is that
           # the diner surface must never glitch. A directory index makes each
           # one a real file.
-          for r in table reserve buffet menu cart bill restaurants; do
+          for r in table reserve buffet menu cart bill restaurants admin; do
             mkdir -p "dist/$r" && cp dist/index.html "dist/$r/index.html"
           done
+          # /admin (platform console) must never be indexed. The SPA adds the
+          # same tag at runtime; this covers crawlers that do not run JS. It is
+          # deliberately NOT listed in robots.txt or the sitemap -- a Disallow
+          # line would only advertise that the path exists.
+          sed -i 's#<head>#<head>\n    <meta name="robots" content="noindex, nofollow, noarchive" />#' dist/admin/index.html
+          grep -q 'name="robots" content="noindex' dist/admin/index.html || { echo "admin page is missing noindex"; exit 1; }
           cp dist/index.html dist/404.html          # unmatched paths -> ordering app
           cp dist/home/index.html dist/index.html   # premium marketing at /
           test -f dist/index.html || { echo "no index.html"; exit 1; }
           test -f dist/404.html   || { echo "no 404.html";   exit 1; }
           test -f dist/scan.html  || { echo "no scan.html";  exit 1; }
-          for r in table reserve buffet menu cart bill restaurants; do
+          for r in table reserve buffet menu cart bill restaurants admin; do
             test -f "dist/$r/index.html" || { echo "no dist/$r/index.html"; exit 1; }
             grep -q "id=\"root\"" "dist/$r/index.html" || { echo "dist/$r is not the SPA shell"; exit 1; }
           done

@@ -31,6 +31,11 @@ import { Cart } from './pages/Cart';
 import { Track } from './pages/Track';
 import { Bill } from './pages/Bill';
 
+/** The platform console. Lazy, so its code and styles live in their own chunk
+ *  and are never downloaded by a diner or a restaurant -- only by someone who
+ *  opens /admin. Everything it reads is admin-checked in Postgres. */
+const AdminApp = React.lazy(() => import('./pages/admin/AdminApp'));
+
 /** The retired Chat and Alerts addresses, query string kept: a stale
  *  /partner/chat?table=… link still opens that table's reply. */
 function LegacyToNotifications() {
@@ -96,6 +101,14 @@ export function App() {
             <Route path="/partner/settings" element={<Settings />} />
           </Route>
           <Route path="/partner/plan" element={<PlanScreen />} />
+          <Route
+            path="/admin/*"
+            element={
+              <React.Suspense fallback={null}>
+                <AdminApp />
+              </React.Suspense>
+            }
+          />
           {/* UNKNOWN PATHS GO TO THE TABLE GATE, not to '/'.
               '/' is the marketing landing on the deployed site, so a diner who
               mistypes a URL or follows a stale link would have been dropped on
