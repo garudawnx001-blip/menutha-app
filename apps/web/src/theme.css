@@ -2165,3 +2165,22 @@ select.code-input:focus { border-color: var(--primary); }
   border: 1px solid rgba(217, 119, 87, 0.22);
   font-size: 13.5px;
 }
+
+/* The bell's count on the Notifications nav item. Inline beside the label in
+   the sidebar; pinned to the icon's corner on the phone bar, where the label
+   sits under the icon. */
+.nav-count {
+  margin-left: auto;
+  min-width: 20px; height: 20px; padding: 0 6px;
+  border-radius: 999px;
+  background: var(--primary); color: #fffdf8;
+  font-size: 11px; font-weight: 800; line-height: 20px; text-align: center;
+  flex: 0 0 auto;
+}
+@media (max-width: 799px) {
+  .portal-link .nav-count {
+    position: absolute; top: 2px; left: calc(50% + 4px);
+    margin-left: 0; min-width: 18px; height: 18px; line-height: 18px;
+    font-size: 10px; padding: 0 5px;
+  }
+}

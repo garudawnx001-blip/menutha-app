@@ -1,5 +1,5 @@
 import React from 'react';
-import { BrowserRouter, HashRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { BrowserRouter, HashRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { StoreProvider } from './store';
 import { RouteErrorBoundary } from './components/RouteErrorBoundary';
 import { Restaurants } from './pages/Restaurants';
@@ -21,8 +21,7 @@ import { Reservations } from './pages/partner/Reservations';
 import { Buffets } from './pages/partner/Buffets';
 import { Showcase } from './pages/partner/Showcase';
 import { Settings } from './pages/partner/Settings';
-import { Chat } from './pages/partner/Chat';
-import { Alerts } from './pages/partner/Alerts';
+import { Notifications } from './pages/partner/Notifications';
 import { Account } from './pages/partner/Account';
 import { DesignPreview } from './pages/partner/DesignPreview';
 import { Gate } from './pages/partner/Gate';
@@ -31,6 +30,13 @@ import { Menu } from './pages/Menu';
 import { Cart } from './pages/Cart';
 import { Track } from './pages/Track';
 import { Bill } from './pages/Bill';
+
+/** The retired Chat and Alerts addresses, query string kept: a stale
+ *  /partner/chat?table=… link still opens that table's reply. */
+function LegacyToNotifications() {
+  const loc = useLocation();
+  return <Navigate to={`/partner/notifications${loc.search}`} replace />;
+}
 
 // Path routing in production (printed QRs encode /scan/<token>); hash routing
 // for single-file/static-preview builds where the host can't rewrite paths.
@@ -79,8 +85,12 @@ export function App() {
             <Route path="/partner/buffets" element={<Buffets />} />
             <Route path="/partner/showcase" element={<Showcase />} />
             <Route path="/partner/reservations" element={<Gate feature="reservations" what="Reservations"><Reservations /></Gate>} />
-            <Route path="/partner/chat" element={<Gate feature="table_chat" what="Table chat"><Chat /></Gate>} />
-            <Route path="/partner/alerts" element={<Gate feature="notifications" what="Notifications"><Alerts /></Gate>} />
+            {/* Chat and Alerts are one section now. Their old addresses still
+                land somewhere useful -- a bookmarked /partner/chat?table=… opens
+                that table's reply. */}
+            <Route path="/partner/notifications" element={<Gate feature="notifications" what="Notifications"><Notifications /></Gate>} />
+            <Route path="/partner/chat" element={<LegacyToNotifications />} />
+            <Route path="/partner/alerts" element={<LegacyToNotifications />} />
             <Route path="/partner/account" element={<Account />} />
             <Route path="/partner/bill-settings" element={<BillSettings />} />
             <Route path="/partner/settings" element={<Settings />} />

@@ -9,6 +9,7 @@ import {
 import { entitlementsFor, hasFeature, needsBilling, type Entitlements } from '../../lib/entitlements';
 import { Spinner, Wordmark } from '../../components';
 import { startPoll } from '../../lib/poll';
+import { useLiveNotifications } from '../../lib/useLiveNotifications';
 
 interface PartnerCtx {
   role: PortalRole;
@@ -47,8 +48,10 @@ const NAV: { to: string; label: string; icon: string; primary?: boolean }[] = [
   { to: '/partner/menu', label: 'Menu', icon: '🍛', primary: true },
   { to: '/partner/tables', label: 'Tables & QR', icon: '🪑', primary: true },
   { to: '/partner/billing', label: 'Billing', icon: '💳', primary: true },
-  { to: '/partner/chat', label: 'Chat', icon: '💬', primary: true },
-  { to: '/partner/alerts', label: 'Alerts', icon: '🔔', primary: true },
+  // ONE section where Chat and Alerts used to be two. The bell carries the
+  // count of what is live (see Notifications), so a diner's message is still
+  // impossible to miss without its own tab.
+  { to: '/partner/notifications', label: 'Notifications', icon: '🔔', primary: true },
   // Same items in the same order as the phone's More list. See MoreScreen.
   { to: '/partner/reports', label: 'Reports', icon: '📈' },
   { to: '/partner/reservations', label: 'Reservations', icon: '📅' },
@@ -139,6 +142,14 @@ export function PartnerShell() {
       : null),
     [member, hasMandate],
   );
+
+  /** The bell's count: everything live right now. Only for a plan that has
+   *  the section -- a badge on a page that then says "upgrade" is a nag. */
+  const notifAllowed = !!ent && hasFeature(ent, 'notifications');
+  const { items: liveNotifs } = useLiveNotifications(
+    notifAllowed ? member?.restaurant?.id ?? null : null, 'badge');
+  const chatAllowed = !!ent && hasFeature(ent, 'table_chat');
+  const notifCount = (liveNotifs ?? []).filter((n) => n.kind !== 'chat' || chatAllowed).length;
 
   /**
    * THE HARD GATE.
@@ -320,6 +331,11 @@ export function PartnerShell() {
             <NavLink key={n.to} to={n.to} className={({ isActive }) => 'portal-link' + (isActive ? ' active' : '')}>
               <span aria-hidden>{n.icon}</span>
               <span className="portal-link-label">{n.label}</span>
+              {n.to === '/partner/notifications' && notifCount > 0 && (
+                <span className="nav-count" aria-label={`${notifCount} waiting`}>
+                  {notifCount > 99 ? '99+' : notifCount}
+                </span>
+              )}
             </NavLink>
           ))}
 
