@@ -1601,10 +1601,13 @@ export async function fetchThreadMessages(tableId: string): Promise<PortalMessag
     .from('message')
     .select('id, from_role, body, created_at, guest_name, read_at')
     .eq('table_id', tableId)
-    .order('created_at', { ascending: true })
+    // NEWEST 300, then put back in reading order. Ascending + limit returned the
+    // OLDEST 300, so a long-running table's thread stopped at some message from
+    // hours ago and the line the diner had just sent was never on screen.
+    .order('created_at', { ascending: false })
     .limit(300);
   if (error) throw error;
-  return (data ?? []) as PortalMessage[];
+  return ((data ?? []) as PortalMessage[]).reverse();
 }
 
 export async function sendRestaurantMessage(restaurantId: string, tableId: string, body: string) {
@@ -1650,30 +1653,43 @@ export function subscribeRestaurantMessages(
 
 /* ── Notifications ─────────────────────────────────────────────────────────
  *
- * DERIVED, NOT STORED. There is no notification table and deliberately so: a
- * notification here is not a new fact, it is a VIEW of facts that already
- * exist -- an order was placed, a table asked for something, a diner sent a
- * message. Writing a row for each would mean two sources of truth that can
- * disagree, and the first time they did the inbox would be lying about work
- * that had already been done.
+ * ONE LIST OF WHAT IS LIVE RIGHT NOW. Chat and Alerts were two sections; the
+ * owner asked for one, with no history and no date filters: what needs doing,
+ * newest first, and anything handled simply leaves.
  *
- * So the feed is three small queries merged and sorted. Each item carries
- * enough to open the EXACT thing it is about, which is the whole point: he
- * asked for deep links that land on the right screen every time, and an item
- * that only knows its own kind cannot do that.
+ * DERIVED, NOT STORED. There is no notification table and deliberately so: an
+ * item here is a view of a fact that already exists, and "handled" is read off
+ * that fact rather than flagged on a copy of it --
+ *   - a guest request is live while service_request.status = 'open'
+ *     (Done -> resolve_service_request);
+ *   - a diner's messages are live while any of them is unread
+ *     (opening the reply -> mark_thread_read);
+ *   - an order is live while it is 'placed' and released -- new, not yet
+ *     accepted on the board.
+ * So the list can never disagree with the board, and no migration is needed.
+ *
+ * Mirrored by apps/mobile/src/lib/notificationsFeed.ts -- same kinds, same
+ * rules -- so the phone and the counter PC show the same list.
  */
 
 export type NotifKind = 'order' | 'service' | 'chat';
 
-export interface Notification {
+export interface LiveNotification {
+  /** Stable per thing: a new message on a table updates its item, not adds one. */
   id: string;
   kind: NotifKind;
   title: string;
   body: string;
   at: string;
-  unread: boolean;
-  /** Where tapping it goes. Built here so both surfaces route identically. */
-  to: string;
+  /** order: the order to open on the board. */
+  orderId?: string;
+  /** service: the request Done resolves. */
+  requestId?: string;
+  /** chat: the conversation Reply opens. */
+  tableId?: string;
+  tableLabel?: string;
+  /** chat: how many unread messages the table has sent. */
+  count?: number;
 }
 
 const NOTIF_SERVICE_LABEL: Record<string, string> = {
@@ -1681,76 +1697,112 @@ const NOTIF_SERVICE_LABEL: Record<string, string> = {
   plates: 'Extra plates', cutlery: 'Cutlery', assistance: 'Someone at the table',
 };
 
-export async function fetchNotifications(restaurantId: string): Promise<Notification[]> {
-  const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-
-  const [orders, services, msgs] = await Promise.all([
-    supabase
+export async function fetchLiveNotifications(restaurantId: string): Promise<LiveNotification[]> {
+  const nowIso = new Date().toISOString();
+  const newOrders = (withSettled: boolean) => {
+    let q = supabase
       .from('food_order')
-      .select('id, order_no, total, placed_at, dining_table(label)')
+      .select('id, order_no, total, is_parcel, placed_at, dining_table(label)')
       .eq('restaurant_id', restaurantId)
-      .gte('placed_at', since)
-      .neq('status', 'cancelled')
-      .order('placed_at', { ascending: false })
-      .limit(40),
+      .eq('status', 'placed')
+      .lte('released_at', nowIso);
+    if (withSettled) q = q.is('settled_at', null);
+    return q.order('placed_at', { ascending: false }).limit(50);
+  };
+
+  let [orders, services, msgs] = await Promise.all([
+    settledColumnMissing ? newOrders(false) : newOrders(true),
     supabase
       .from('service_request')
-      .select('id, table_id, kind, status, created_at, dining_table(label)')
+      .select('id, table_id, kind, note, created_at, dining_table(label)')
       .eq('restaurant_id', restaurantId)
-      .gte('created_at', since)
+      .eq('status', 'open')
       .order('created_at', { ascending: false })
-      .limit(40),
+      .limit(100),
     supabase
       .from('message')
-      .select('id, table_id, body, created_at, read_at, from_role, dining_table(label)')
+      .select('id, table_id, body, created_at, dining_table(label)')
       .eq('restaurant_id', restaurantId)
       .eq('from_role', 'diner')
-      .gte('created_at', since)
+      .is('read_at', null)
+      .not('table_id', 'is', null)
       .order('created_at', { ascending: false })
-      .limit(40),
+      .limit(300),
   ]);
+  if (orders.error && orders.error.code === '42703') {
+    settledColumnMissing = true;
+    orders = await newOrders(false);
+  }
+  // One failing source must not blank the other two: an order alert is no
+  // less true because the message query failed. Only all three failing is an
+  // error worth showing.
+  if (orders.error && services.error && msgs.error) throw orders.error;
 
   const label = (row: any) =>
-    (Array.isArray(row.dining_table) ? row.dining_table[0] : row.dining_table)?.label ?? 'Table';
+    (Array.isArray(row.dining_table) ? row.dining_table[0] : row.dining_table)?.label ?? null;
 
-  const out: Notification[] = [];
+  const out: LiveNotification[] = [];
 
   for (const o of (orders.data ?? []) as any[]) {
+    const where = label(o) ?? (o.is_parcel ? 'Parcel' : 'Counter');
     out.push({
       id: `order:${o.id}`, kind: 'order',
-      title: `New order · ${label(o)}`,
+      title: `New order · ${where}`,
       body: `#${o.order_no} · ${inrPlain(o.total)}`,
       at: o.placed_at,
-      // An order is "unread" while it is still work. The board is the record
-      // of whether it has been dealt with, not a flag on the notification.
-      unread: true,
-      to: `/partner/orders?order=${o.id}`,
+      orderId: o.id,
     });
   }
 
   for (const s of (services.data ?? []) as any[]) {
     out.push({
       id: `svc:${s.id}`, kind: 'service',
-      title: `${label(s)} asked for something`,
-      body: NOTIF_SERVICE_LABEL[s.kind] ?? s.kind,
+      title: `${label(s) ?? 'A table'} · ${NOTIF_SERVICE_LABEL[s.kind] ?? s.kind}`,
+      // The note is the diner's own words and beats our label for the kind.
+      body: (s.note && String(s.note).trim()) || 'Guest request',
       at: s.created_at,
-      unread: s.status === 'open',
-      to: `/partner/orders?table=${s.table_id ?? ''}`,
+      requestId: s.id,
+      tableId: s.table_id ?? undefined,
     });
   }
 
+  // Rows arrive newest first, so the first one seen for a table is its latest.
+  const byTable = new Map<string, LiveNotification>();
   for (const m of (msgs.data ?? []) as any[]) {
-    out.push({
-      id: `msg:${m.id}`, kind: 'chat',
-      title: `Message from ${label(m)}`,
-      body: m.body,
+    const th = byTable.get(m.table_id);
+    if (th) { th.count = (th.count ?? 1) + 1; continue; }
+    byTable.set(m.table_id, {
+      id: `chat:${m.table_id}`, kind: 'chat',
+      title: `Message · ${label(m) ?? 'Table'}`,
+      body: String(m.body ?? ''),
       at: m.created_at,
-      unread: !m.read_at,
-      to: `/partner/chat?table=${m.table_id}`,
+      tableId: m.table_id,
+      tableLabel: label(m) ?? 'Table',
+      count: 1,
     });
   }
+  out.push(...byTable.values());
 
   return out.sort((a, b) => (a.at < b.at ? 1 : -1));
+}
+
+/**
+ * Anything that can add or clear a live item, on one channel. Every event just
+ * re-reads the list: it is three small queries, and merging in place would
+ * mean reimplementing the grouping and the "is it still live" rules per row.
+ *
+ * `tag` keeps the channel names apart -- the shell's badge and the page both
+ * listen, and two channels with one name would collide.
+ */
+export function subscribeLiveNotifications(restaurantId: string, tag: string, onChange: () => void): () => void {
+  const f = `restaurant_id=eq.${restaurantId}`;
+  const channel = supabase
+    .channel(`notif-${tag}:${restaurantId}`)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'food_order', filter: f }, onChange)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'service_request', filter: f }, onChange)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'message', filter: f }, onChange)
+    .subscribe();
+  return () => { supabase.removeChannel(channel); };
 }
 
 /** Plain rupee formatting, local to this file so the feed does not have to
