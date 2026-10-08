@@ -39,7 +39,8 @@ test('scan → menu with no gate → name and number at the first order → sent
   await expect(page.getByRole('dialog')).toHaveCount(0);
   expect(calls.rpc.visit_start?.[0]).toEqual({ p_token: 'qr_testtable' });
 
-  await page.getByRole('button', { name: /add masala dosa/i }).click();
+  // The dish can appear twice (featured strip and its section); either places it.
+  await page.getByRole('button', { name: /add masala dosa/i }).first().click();
   const gate = page.getByRole('dialog');
   await expect(gate).toBeVisible();
   await gate.getByPlaceholder(/aarav/i).fill('Asha');
@@ -90,6 +91,8 @@ test('the online bill from WhatsApp shows the same invoice and can be printed', 
 test('the restaurant login page opens and fits the screen', async ({ page }) => {
   await fakeSupabase(page);
   await page.goto('/partner');
-  await expect(page.locator('input[type="email"], input[autocomplete="email"], input[name="email"]').first()).toBeVisible();
+  await expect(page.getByRole('heading').first()).toBeVisible();
+  await expect(page.getByRole('button', { name: /^log in$/i }).first()).toBeVisible();
+  await expect(page.locator('input[type="password"]').first()).toBeVisible();
   expect(await noHorizontalOverflow(page)).toBe(true);
 });
