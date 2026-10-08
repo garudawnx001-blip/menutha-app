@@ -39,8 +39,9 @@ test('scan → menu with no gate → name and number at the first order → sent
   await expect(page.getByRole('dialog')).toHaveCount(0);
   expect(calls.rpc.visit_start?.[0]).toEqual({ p_token: 'qr_testtable' });
 
-  // The dish can appear twice (featured strip and its section); either places it.
-  await page.getByRole('button', { name: /add masala dosa/i }).first().click();
+  // The whole dish card is a button too (it opens the dish sheet) and its name
+  // contains the Add button's label -- so match the Add button exactly.
+  await page.getByRole('button', { name: /^add masala dosa$/i }).first().click();
   const gate = page.getByRole('dialog');
   await expect(gate).toBeVisible();
   await gate.getByPlaceholder(/aarav/i).fill('Asha');
