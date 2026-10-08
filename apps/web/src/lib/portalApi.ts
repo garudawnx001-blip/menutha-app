@@ -212,9 +212,13 @@ export interface BillChargeResult {
 
 export async function setBillChargeLine(
   billId: string, lineId: string, label: string, kind: 'flat' | 'percent', value: number,
+  taxable?: boolean,
 ): Promise<BillChargeResult> {
+  // p_taxable only when switched off, so an older database (5-argument
+  // function) keeps working for the usual case.
   const { data, error } = await supabase.rpc('set_bill_charge_line', {
     p_bill_id: billId, p_line_id: lineId, p_label: label, p_kind: kind, p_value: value,
+    ...(taxable === false ? { p_taxable: false } : {}),
   });
   if (error) throw error;
   return data as BillChargeResult;
@@ -2146,4 +2150,11 @@ export async function confirmOrder(orderId: string) {
 export async function rejectUnconfirmedOrder(orderId: string) {
   const { error } = await supabase.rpc('reject_unconfirmed_order', { p_order_id: orderId });
   if (error) throw error;
+}
+
+/** Phase 3: guests on a bill, for a per-person area charge. */
+export async function setBillGuests(billId: string, guests: number): Promise<{ applied: boolean; reason?: string; total: number }> {
+  const { data, error } = await supabase.rpc('set_bill_guests', { p_bill_id: billId, p_guests: guests });
+  if (error) throw error;
+  return data as { applied: boolean; reason?: string; total: number };
 }

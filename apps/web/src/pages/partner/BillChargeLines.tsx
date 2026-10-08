@@ -52,6 +52,9 @@ export interface ChargeLine {
   base: ChargeBase;
   enabled: boolean;
   appliesTo: ChargeScope;
+  /** Phase 3: GST on this line. false = printed "(no GST)"; true/absent = the
+   *  restaurant's setting, as before. */
+  taxable: boolean;
 }
 
 /** Same rule as charge_line_scope() in the database, so the editor shows
@@ -138,6 +141,7 @@ export function BillChargeLines({ restaurantId }: { restaurantId: string }) {
         base: l.base === 'gross' ? 'gross' : 'food',
         enabled: l.enabled !== false,
         appliesTo: scopeOf(l),
+        taxable: l.taxable !== false,
       })));
       setLoaded(true);
     })().catch((e: any) => { setError(e?.message ?? 'Could not load your charges.'); setLoaded(true); });
@@ -171,13 +175,13 @@ export function BillChargeLines({ restaurantId }: { restaurantId: string }) {
     if (!preset) return;
     setLines((ls) => [...ls, {
       id: uid(), label: preset.label, kind: preset.kind,
-      value: preset.value, base: preset.base, enabled: true, appliesTo: preset.appliesTo,
+      value: preset.value, base: preset.base, enabled: true, appliesTo: preset.appliesTo, taxable: true,
     }]);
     setPresetKey('');
   };
 
   const addCustom = () =>
-    setLines((ls) => [...ls, { id: uid(), label: '', kind: 'percent', value: 0, base: 'food', enabled: true, appliesTo: 'all' }]);
+    setLines((ls) => [...ls, { id: uid(), label: '', kind: 'percent', value: 0, base: 'food', enabled: true, appliesTo: 'all', taxable: true }]);
 
   const save = async () => {
     for (const l of lines) {
@@ -186,8 +190,10 @@ export function BillChargeLines({ restaurantId }: { restaurantId: string }) {
     setBusy(true); setError(''); setNote('');
     try {
       await updateRestaurant(restaurantId, {
-        bill_charges: lines.map(({ id, label, kind, value, base, enabled, appliesTo }) => ({
+        bill_charges: lines.map(({ id, label, kind, value, base, enabled, appliesTo, taxable }) => ({
           id, label: label.trim(), kind, value: Number(value) || 0, base, enabled, applies_to: appliesTo,
+          // only written when switched off, so existing lines keep today's rule
+          ...(taxable ? {} : { taxable: false }),
         })),
       });
       setNote('Saved. New orders are priced with these lines from now on.');
@@ -271,6 +277,13 @@ export function BillChargeLines({ restaurantId }: { restaurantId: string }) {
                 onChange={(e) => edit(l.id, { enabled: e.target.checked })} />
               On the bill
             </label>
+            {!/^(s|c|i)?gst/i.test(l.label.trim()) && (
+              <label className="dim" style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5 }}>
+                <input type="checkbox" checked={l.taxable}
+                  onChange={(e) => edit(l.id, { taxable: e.target.checked })} />
+                GST on this line
+              </label>
+            )}
             <span style={{ flex: 1 }} />
             <button className="btn btn-glass btn-sm" disabled={i === 0} onClick={() => move(i, -1)} aria-label={`Move ${l.label || 'line'} up`}>↑</button>
             <button className="btn btn-glass btn-sm" disabled={i === lines.length - 1} onClick={() => move(i, +1)} aria-label={`Move ${l.label || 'line'} down`}>↓</button>

@@ -196,6 +196,10 @@ export type BillData = {
   billNo: string;
   dateText: string;
   tableText: string;
+  /** Phase 3: self-service token number, printed big beside the table. */
+  tokenNo?: number | null;
+  /** Phase 3: dine_in | takeaway | delivery | counter, from the server. */
+  orderType?: string | null;
   customer: { name: string; phone: string };
   items: BillItem[];
   subtotal: number;
@@ -316,7 +320,7 @@ export function billLabel(b: { invoice_no?: string | null; bill_no?: number | st
 export function billNumbersFromBreakdown(bd: any): Pick<BillData,
   'items' | 'subtotal' | 'discount' | 'packing' | 'service' | 'sgstPct' | 'cgstPct'
   | 'sgst' | 'cgst' | 'total' | 'serviceWaived' | 'chargeLines' | 'taxable' | 'roundOff'
-  | 'docTitle' | 'taxBuckets' | 'pricesIncludeGst' | 'taxIncluded' | 'untaxedLabels'> {
+  | 'docTitle' | 'taxBuckets' | 'pricesIncludeGst' | 'taxIncluded' | 'untaxedLabels' | 'tokenNo' | 'orderType'> {
   const r = (p: unknown) => (Number(p) || 0) / 100;
   const lines: { label: string; amount: number }[] = [];
   const taxed = bd?.taxed ?? {};
@@ -331,8 +335,10 @@ export function billNumbersFromBreakdown(bd: any): Pick<BillData,
     if (taxed.packing === false) untaxed.push(label);
   }
   if (Number(bd?.ac_p) > 0) {
-    lines.push({ label: 'AC charge', amount: r(bd.ac_p) });
-    if (taxed.ac === false) untaxed.push('AC charge');
+    // Phase 3: an area charge carries the area's own label ("AC Hall charge").
+    const acLabel = String(bd?.ac_label || 'AC charge');
+    lines.push({ label: acLabel, amount: r(bd.ac_p) });
+    if (taxed.ac === false) untaxed.push(acLabel);
   }
   for (const e of bd?.extras ?? []) {
     lines.push({ label: String(e.label ?? 'Charge'), amount: r(e.amount_p) });
@@ -342,6 +348,8 @@ export function billNumbersFromBreakdown(bd: any): Pick<BillData,
   if (taxed.service === false && Number(bd?.service_p) > 0) untaxed.push('Service charge (voluntary)');
   return {
     docTitle: bd?.doc_title || undefined,
+    tokenNo: bd?.token_no != null ? Number(bd.token_no) : undefined,
+    orderType: bd?.order_type ?? undefined,
     taxBuckets: Array.isArray(bd?.tax_buckets) && bd.tax_buckets.length > 1
       ? bd.tax_buckets.map((b: any) => ({ rate: Number(b.rate) || 0, sgstPct: Number(b.sgst_rate) || 0,
           cgstPct: Number(b.cgst_rate) || 0, taxable: r(b.taxable_p), sgst: r(b.sgst_p), cgst: r(b.cgst_p) }))
@@ -424,6 +432,8 @@ export function whatsappBillLink(opts: {
  */
 export function renderKotHtml(k: {
   restaurantName: string; orderNo: string | number; tableText: string; placedAt?: string | null;
+  /** Phase 3: self-service token, printed as the big number. */
+  token?: number | null;
   items: { name: string; qty: number; note?: string | null }[]; notes?: string | null;
   paper?: string | null; reprint?: boolean;
 }): string {
@@ -445,7 +455,8 @@ export function renderKotHtml(k: {
 </style></head><body><div class="k">
   <div class="h">${k.restaurantName ? `${esc(k.restaurantName)} · ` : ''}KOT</div>
   ${k.reprint ? '<div class="rp">REPRINT</div>' : ''}
-  <div class="no">#${esc(k.orderNo)}</div>
+  <div class="no">${k.token ? `TOKEN ${esc(k.token)}` : `#${esc(k.orderNo)}`}</div>
+  ${k.token ? `<div class="m">Order #${esc(k.orderNo)}</div>` : ''}
   <div class="t">${esc(k.tableText)}</div>
   <div class="m">${esc(billDateText(k.placedAt))}</div>
   <table>${rows}</table>
@@ -701,7 +712,8 @@ export function renderBillHtml(d: BillData, layoutRaw: any): string {
     meta:    `<hr class="rule">
   <div class="meta">
     <b>${esc(billHeading(d))} — ${esc(d.billNo)}</b><br>
-    ${esc(d.dateText)} · ${esc(d.tableText)}${
+    ${esc(d.dateText)} · ${esc(d.tableText)}${d.tokenNo ? ` · <b>Token ${esc(d.tokenNo)}</b>` : ''}${
+      d.orderType === 'delivery' ? ' · Delivery' : d.orderType === 'takeaway' ? ' · Takeaway' : ''}${
       d.customer.name && d.customer.name !== 'Guest'
         ? `<br>Bill to: ${esc(d.customer.name)}${d.customer.phone ? ` · ${esc(d.customer.phone)}` : ''}`
         : ''

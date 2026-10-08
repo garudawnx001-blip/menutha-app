@@ -125,7 +125,8 @@ export function billEscPos(d: BillData, layoutRaw: any, opts: { cols?: PaperCols
     },
     meta: () => {
       b.rule(w).align(l.sections.meta.align).raw(BOLD_ON).lines(wrap(`${title} - ${d.billNo}`, w)).raw(BOLD_OFF);
-      b.lines(wrap(`${d.dateText} - ${d.tableText}`, w));
+      b.lines(wrap(`${d.dateText} - ${d.tableText}${d.orderType === 'delivery' ? ' - Delivery' : d.orderType === 'takeaway' ? ' - Takeaway' : ''}`, w));
+      if (d.tokenNo) b.raw(BOLD_ON).raw(SIZE_TALL).line(`Token ${d.tokenNo}`).raw(SIZE_NORMAL).raw(BOLD_OFF);
       if (d.customer.name && d.customer.name !== 'Guest') {
         b.lines(wrap(`Bill to: ${d.customer.name}${d.customer.phone ? ` - ${d.customer.phone}` : ''}`, w));
       }
@@ -197,12 +198,15 @@ export function kotEscPos(k: {
   restaurantName: string; orderNo: string | number; tableText: string; placedAt?: string | null;
   items: { name: string; qty: number; note?: string | null }[]; notes?: string | null;
   paper?: string | null; reprint?: boolean; cols?: PaperCols;
+  /** Phase 3: self-service token, printed as the big number. */
+  token?: number | null;
 }): Uint8Array {
   const w: number = k.cols ?? colsForPaper(k.paper);
   const b = new Buf();
   b.align('center').line(`${k.restaurantName ? `${k.restaurantName} - ` : ''}KOT`);
   if (k.reprint) b.raw(BOLD_ON).line('REPRINT').raw(BOLD_OFF);
-  b.raw(BOLD_ON).raw(SIZE_DOUBLE).line(`#${k.orderNo}`).raw(SIZE_TALL).lines(wrap(k.tableText, w)).raw(SIZE_NORMAL).raw(BOLD_OFF);
+  b.raw(BOLD_ON).raw(SIZE_DOUBLE).line(k.token ? `TOKEN ${k.token}` : `#${k.orderNo}`).raw(SIZE_TALL).lines(wrap(k.tableText, w)).raw(SIZE_NORMAL).raw(BOLD_OFF);
+  if (k.token) b.line(`Order #${k.orderNo}`);
   b.line(billDateText(k.placedAt)).rule(w);
   b.align('left').raw(SIZE_TALL);
   for (const it of k.items) {
