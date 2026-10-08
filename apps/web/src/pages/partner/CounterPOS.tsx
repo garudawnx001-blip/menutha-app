@@ -234,7 +234,7 @@ export function CounterPOS({ restaurantId, onCreated }: { restaurantId: string; 
         )}
         <input className="code-input" style={{ flex: '1 1 140px' }} placeholder="Customer name (optional)" value={d.name}
           maxLength={40} onChange={(e) => set({ name: e.target.value })} aria-label="Customer name" />
-        <input className="code-input" style={{ flex: '1 1 140px' }} inputMode="tel" maxLength={14}
+        <input className="code-input" style={{ flex: '1 1 140px' }} inputMode="tel" maxLength={18}
           placeholder={d.type === 'delivery' ? 'Mobile (needed)' : 'Mobile (optional)'} value={d.phone}
           onChange={(e) => set({ phone: e.target.value })} aria-label="Customer mobile" />
       </div>

@@ -107,7 +107,7 @@ export function IdentityGate({
         <input
           style={field} value={phone} onChange={(e) => setPhone(e.target.value)}
           placeholder={translate(getLang(), 'gate.phonePlaceholder')} inputMode="numeric" autoComplete="tel"
-          aria-label={translate(getLang(), 'gate.phone')} maxLength={14}
+          aria-label={translate(getLang(), 'gate.phone')} maxLength={18}
           onKeyDown={(e) => e.key === 'Enter' && submit()}
         />
         {phone.length > 0 && !validPhone && (
