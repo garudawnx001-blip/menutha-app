@@ -9,7 +9,8 @@ import { writeOfflineData } from '../../lib/offline';
 import { payModeLabel } from '../../lib/splitPay';
 import { stockAlertText, type StockReport } from '../../lib/stock';
 import { fetchStockReport, fetchLiveOrders, fetchOrdersByIds, createBill, quoteBill, fetchBillMoney, recordBillPrint, type SettleResult, fetchBillLayout, setOrdersAc, waiveService, setParcelPacking, voidTableBill, voidBill, setBillChargeLine, removeBillChargeLine, setBillGuests, staffSetOrderItemQty, setBillService, billShareToken, type BillChargeLine, type PortalOrder } from '../../lib/portalApi';
-import { WalkIn } from './WalkIn';
+import { CounterPOS } from './CounterPOS';
+import { TableTools } from './TableTools';
 import { renderBillHtml, billNumbersFromBreakdown, billLabel, billDateText, whatsappBillLink, needsGstinWarning, GSTIN_WARNING, type BillData } from '../../lib/billTemplate';
 import { printBillDirect, getDirectSettings } from '../../lib/directPrint';
 import { inr } from '../../lib/types';
@@ -118,6 +119,8 @@ export function Billing() {
   /** Which order has its items open for correction. One at a time: this is the
    *  destructive end of the screen and it should take a deliberate tap. */
   const [editingItems, setEditingItems] = useState<string | null>(null);
+  /** Phase 3: the table whose Move / merge / split panel is open. */
+  const [moving, setMoving] = useState<string | null>(null);
   const [itemBusy, setItemBusy] = useState<string>('');
   // Opened from a ticket on the Orders board: focus that table straight away
   // so settling is one tap from the notification, not a hunt.
@@ -691,7 +694,7 @@ export function Billing() {
           taking money. */}
       {/* OFFLINE (Phase 2): the connection, and the offline till when it is down. */}
       <OfflineTill restaurantId={restaurant.id} onSynced={() => load()} />
-      <WalkIn restaurantId={restaurant.id} onCreated={() => load()} />
+      <CounterPOS restaurantId={restaurant.id} onCreated={() => load()} />
 
       {byTable.length === 0 && (
         <div className="glass" style={{ padding: 20, marginTop: 14, textAlign: 'center' }}>
@@ -813,8 +816,16 @@ export function Billing() {
             <button className="chip" onClick={() => setEditingItems((x) => (x === tableName ? null : tableName))}
               aria-expanded={editingItems === tableName}>
               ✎ Correct an item
+            </button>{' '}
+            <button className="chip" onClick={() => setMoving((x) => (x === tableName ? null : tableName))}
+              aria-expanded={moving === tableName}>
+              ⇄ Move / merge / split
             </button>
           </div>
+          {moving === tableName && (
+            <TableTools restaurantId={restaurant.id} tableId={list[0]?.table_id ?? null} orders={list}
+              onDone={() => { setMoving(null); load(); }} />
+          )}
           {editingItems === tableName && (
             <div className="glass" style={{ padding: '8px 16px', marginBottom: 10 }}>
               <p className="dim" style={{ fontSize: 12, margin: '0 0 6px' }}>
