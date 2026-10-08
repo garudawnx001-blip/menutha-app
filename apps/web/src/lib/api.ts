@@ -20,48 +20,75 @@ export class ScanError extends Error {
   }
 }
 
+/**
+ * PHASE 3: A SCAN IS A VISIT PASS. The QR token is exchanged, on the server,
+ * for a short-lived pass (visit_start). Every diner read and write after that
+ * carries the pass, never the table id: the table list is no longer public, a
+ * table id is no longer a credential, and a copied link stops working when the
+ * seating ends (settled or cleared) or after four hours.
+ */
 export async function resolveToken(token: string): Promise<Session> {
   if (token === DEMO_TOKEN) {
     return { token, restaurant: demoRestaurant, table: demoTable, demo: true };
   }
-  const { data, error } = await supabase
-    .from('dining_table')
-    .select(
-      // slug comes along now: create_reservation is addressed by slug, and the
-      // diner reserving from a scanned table only has the restaurant's id.
-      'id, restaurant_id, label, is_parcel, restaurant(id, slug, name, city, banner_url, logo_url, is_open, status, trial_ends_at, parcel_charge, gst_pct, service_charge_pct)',
-    )
-    .eq('qr_token', token)
-    .eq('is_active', true)
-    .maybeSingle();
-  if (error) throw error;
-  if (!data) throw new ScanError('not_found', 'This QR code is not recognised.');
+  const { data, error } = await supabase.rpc('visit_start', { p_token: token });
+  if (error) throw scanError(error);
+  return sessionFromVisit(token, data);
+}
 
-  const r = (Array.isArray(data.restaurant) ? data.restaurant[0] : data.restaurant) as Restaurant;
-  if (r.status === 'suspended') {
-    throw new ScanError('not_accepting', `${r.name} is not taking orders right now.`);
-  }
+function scanError(error: any): Error {
+  const msg = String(error?.message ?? '');
+  const hint = String(error?.hint ?? '');
+  if (msg.includes('QR_NOT_FOUND')) return new ScanError('not_found', hint || 'This QR code is not recognised.');
+  if (msg.includes('NOT_ACCEPTING') || msg.includes('NO_TAKEAWAY')) return new ScanError('not_accepting', hint || 'Not taking orders right now.');
+  if (msg.includes('RATE_LIMITED')) return new ScanError('not_accepting', hint || 'Please wait a minute and scan again.');
+  return error instanceof Error ? error : new Error(msg || 'Could not open this table.');
+}
 
-  // Soft lock (subscriptions model): menus stay viewable, ordering may be off.
-  // get_plan_state ships with the subscriptions migration; fall back to the
-  // v1 trial check if the RPC isn't deployed yet.
-  let orderingDisabled = false;
-  const { data: planState, error: psErr } = await supabase.rpc('get_plan_state', {
-    p_restaurant_id: data.restaurant_id,
-  });
-  if (!psErr && planState) {
-    orderingDisabled = !(planState as { can_order?: boolean }).can_order;
-  } else {
-    orderingDisabled = !!(r.trial_ends_at && new Date(r.trial_ends_at).getTime() < Date.now());
-  }
-
-  const table: DiningTable = {
-    id: data.id,
-    restaurant_id: data.restaurant_id,
-    label: data.label,
-    is_parcel: data.is_parcel,
+function sessionFromVisit(token: string, v: any): Session {
+  const r = v.restaurant as Restaurant;
+  return {
+    token,
+    visit: v.visit,
+    visitExpiresAt: v.expires_at,
+    restaurant: r,
+    table: { id: v.table.id, restaurant_id: v.table.restaurant_id, label: v.table.label, is_parcel: !!v.table.is_parcel },
+    orderingDisabled: !!v.ordering_disabled,
   };
-  return { token, restaurant: r, table, orderingDisabled };
+}
+
+/** The pass has ended (seating closed, table switched off, or 4 hours). */
+export class VisitExpired extends Error {
+  constructor() { super('VISIT_EXPIRED'); }
+}
+
+/** Turn a server refusal into words a diner can act on. The server sends a
+ *  short code (BAD_PHONE, RATE_LIMITED...) and a sentence in `hint`. */
+export function dinerError(error: any): Error {
+  const msg = String(error?.message ?? '');
+  if (msg.includes('VISIT_EXPIRED')) return new VisitExpired();
+  if (error?.hint) return new Error(String(error.hint));
+  if (msg.includes('row-level security') || msg.includes('trial')) {
+    return new Error('This restaurant is not accepting orders right now.');
+  }
+  return error instanceof Error ? error : new Error(msg || 'Something went wrong. Please try again.');
+}
+
+/** Is the pass still good? Used to end the seating on this phone. */
+export async function checkVisit(session: Session): Promise<'ok' | 'expired'> {
+  if (session.demo || !session.visit) return 'ok';
+  const { error } = await supabase.rpc('visit_get', { p_visit: session.visit });
+  if (!error) return 'ok';
+  if (String(error.message).includes('VISIT_EXPIRED')) return 'expired';
+  throw error;   // offline etc: never log anyone out on a failed check
+}
+
+/** Prices for this table's area, where the restaurant keeps an area price list. */
+export async function fetchAreaPrices(session: Session): Promise<Record<string, number>> {
+  if (session.demo || !session.visit) return {};
+  const { data, error } = await supabase.rpc('visit_menu_prices', { p_visit: session.visit });
+  if (error) return {};
+  return (data ?? {}) as Record<string, number>;
 }
 
 /** All listed (active, in-trial) restaurants for the browse/search screen. */
@@ -84,20 +111,14 @@ export async function startParcelSession(restaurant: Restaurant): Promise<Sessio
   if (restaurant.id === demoRestaurant.id) {
     return { token: DEMO_TOKEN, restaurant: demoRestaurant, table: demoTable, demo: true };
   }
-  const { data, error } = await supabase
-    .from('dining_table')
-    .select('id, restaurant_id, label, is_parcel, qr_token')
-    .eq('restaurant_id', restaurant.id)
-    .eq('is_parcel', true)
-    .eq('is_active', true)
-    .maybeSingle();
-  if (error) throw error;
-  if (!data) throw new ScanError('not_accepting', `${restaurant.name} doesn’t take takeaway orders yet — scan the QR at a table instead.`);
-  return {
-    token: data.qr_token,
-    restaurant,
-    table: { id: data.id, restaurant_id: data.restaurant_id, label: data.label, is_parcel: true },
-  };
+  const { data, error } = await supabase.rpc('visit_start_parcel', { p_restaurant_id: restaurant.id });
+  if (error) {
+    const e = scanError(error);
+    if (e instanceof ScanError) throw new ScanError('not_accepting', `${restaurant.name} doesn’t take takeaway orders yet — scan the QR at a table instead.`);
+    throw e;
+  }
+  const s = sessionFromVisit('parcel', data);
+  return { ...s, restaurant: { ...restaurant, ...s.restaurant } };
 }
 
 const MENU_COLS =
@@ -174,39 +195,25 @@ export async function placeOrder(
   session: Session,
   lines: CartLine[],
   notes?: string,
-): Promise<{ id: string }> {
+): Promise<{ id: string; needs_confirm?: boolean }> {
   if (!lines.length) throw new Error('Your cart is empty.');
   if (session.demo) return demoPlaceOrder(lines, notes, session.table.is_parcel);
-
-  // Server-side pricing: only ids + qty go up, place_order re-prices everything.
-  // Diner name/phone tag the order (6-arg place_order) so the kitchen and the
-  // table bill can attribute it to the person who ordered.
-  const { data, error } = await supabase.rpc('place_order', {
-    p_restaurant_id: session.restaurant.id,
-    p_table_id: session.table.id,
+  for (const l of lines) {
+    if (!Number.isInteger(l.qty) || l.qty < 1 || l.qty > 20) throw new Error('Each dish can be ordered 1 to 20 at a time.');
+  }
+  // Server-side pricing and checks: only ids + qty go up. The name and number
+  // ride along on the first order of the pass; the server remembers them.
+  const { data, error } = await supabase.rpc('diner_place_order', {
+    p_visit: session.visit,
     p_items: lines.map((l) => ({ menu_item_id: l.menuItemId, qty: l.qty, option_ids: l.optionIds })),
     p_notes: notes || null,
-    p_guest_name: session.guest?.name || null,
-    p_guest_phone: session.guest?.phone || null,
+    p_name: session.guest?.name || null,
+    p_phone: session.guest?.phone || null,
   });
-  if (error) {
-    const msg = String(error.message ?? '');
-    if (msg.includes('row-level security') || msg.includes('trial')) {
-      throw new Error('This restaurant is not accepting orders right now.');
-    }
-    throw error;
-  }
-  // NO push from here. This used to call notify-staff the instant the row was
-  // inserted, which defeated the grace window entirely: the client photographed
-  // "New order · Table 1 · #36" arriving on the staff phone while their own
-  // screen still showed the order as pending. Staff were being sent to the
-  // kitchen for an order the diner could still cancel.
-  //
-  // The release sweep is the notifier, and it already does this correctly —
-  // `where released_at <= now() and release_notified = false`, so it fires once
-  // and only after the window closes. This call was a second, earlier path to
-  // the same push. Deleting it is the whole fix.
-  return data as { id: string };
+  if (error) throw dinerError(error);
+  // No push from here: the release sweep notifies staff once the order is
+  // released (after the change window, or when staff confirm it).
+  return data as { id: string; needs_confirm?: boolean };
 }
 
 /** The whole table's live bill: every open order, a combined total (the
@@ -229,9 +236,9 @@ export async function fetchTableBill(session: Session): Promise<TableBill> {
       per_person: o ? [{ diner_name: who, diner_phone: session.guest?.phone, ...totals }] : [],
     };
   }
-  const { data, error } = await supabase.rpc('get_table_bill', { p_table_id: session.table.id });
-  if (error) throw error;
-  return data as TableBill;
+  // Staff-only on the server since Phase 3: a diner never sees other diners'
+  // names or numbers. The diner screens use fetchSessionBill / fetchMyBill.
+  throw new Error('fetchTableBill is staff-only');
 }
 
 export async function fetchOrderStatus(session: Session | null, orderId: string): Promise<OrderView> {
@@ -265,27 +272,32 @@ export interface OpenOrder {
  *  the per-dish stepper on the menu and the countdown strip. */
 export async function fetchMyOpenOrders(session: Session): Promise<OpenOrder[]> {
   if (session.demo || !session.table?.id) return [];
-  const { data, error } = await supabase.rpc('my_open_orders', {
-    p_table_id: session.table.id,
-    p_phone: session.guest?.phone ?? '',
-  });
-  if (error) throw error;
+  if (!session.visit || !session.guest?.phone) return [];
+  const { data, error } = await supabase.rpc('visit_open_orders', { p_visit: session.visit });
+  if (error) throw dinerError(error);
   return (data ?? []) as OpenOrder[];
 }
 
 /** Change a quantity before the order reaches the kitchen. qty 0 removes the
  *  line; removing the last line cancels the order. The window is enforced
  *  server-side, so a stale page cannot edit something already being cooked. */
-export async function updateMyOrderItem(orderId: string, itemId: string, qty: number) {
-  const { error } = await supabase.rpc('diner_update_order_item', {
-    p_order_id: orderId, p_order_item_id: itemId, p_qty: qty,
+export async function updateMyOrderItem(session: Session, orderId: string, itemId: string, qty: number) {
+  const { error } = await supabase.rpc('diner_change_my_item', {
+    p_visit: session.visit, p_order_id: orderId, p_order_item_id: itemId, p_qty: qty,
   });
-  if (error) throw error;
+  if (error) throw dinerError(error);
 }
 
-export async function cancelMyOrder(orderId: string) {
-  const { error } = await supabase.rpc('diner_cancel_order', { p_order_id: orderId });
-  if (error) throw error;
+export async function cancelMyOrder(session: Session, orderId: string) {
+  const { error } = await supabase.rpc('diner_cancel_my_order', { p_visit: session.visit, p_order_id: orderId });
+  if (error) throw dinerError(error);
+}
+
+/** Tell the server who is on this pass (a returning diner on a new scan). */
+export async function identifyVisit(session: Session, name: string, phone: string) {
+  if (session.demo || !session.visit) return;
+  const { error } = await supabase.rpc('visit_identify', { p_visit: session.visit, p_name: name, p_phone: phone });
+  if (error) throw dinerError(error);
 }
 
 // ── The diner's own bill ───────────────────────────────────────────────────
@@ -326,11 +338,8 @@ export async function fetchMyBill(session: Session): Promise<MyBill> {
       mine,
     };
   }
-  const { data, error } = await supabase.rpc('my_table_bill', {
-    p_table_id: session.table.id,
-    p_phone: session.guest?.phone ?? '',
-  });
-  if (error) throw error;
+  const { data, error } = await supabase.rpc('visit_my_bill', { p_visit: session.visit });
+  if (error) throw dinerError(error);
   return data as MyBill;
 }
 
@@ -370,10 +379,8 @@ export async function fetchSessionBill(session: Session): Promise<SessionBill> {
             cgst_amount: 0, gst_amount: 0, total: 0, order_count: 0 },
     };
   }
-  const { data, error } = await supabase.rpc('table_session_bill', {
-    p_table_id: session.table.id,
-  });
-  if (error) throw error;
+  const { data, error } = await supabase.rpc('visit_session_bill', { p_visit: session.visit });
+  if (error) throw dinerError(error);
   return data as SessionBill;
 }
 
@@ -419,14 +426,10 @@ export async function requestService(
   note?: string,
 ): Promise<{ ok: boolean; deduped: boolean }> {
   if (session.demo || !session.table?.id) return { ok: false, deduped: false };
-  const { data, error } = await supabase.rpc('request_service', {
-    p_table_id: session.table.id,
-    p_kind: kind,
-    p_note: note ?? null,
-    p_name: session.guest?.name ?? null,
-    p_phone: session.guest?.phone ?? null,
+  const { data, error } = await supabase.rpc('visit_request_service', {
+    p_visit: session.visit, p_kind: kind, p_note: note ?? null,
   });
-  if (error) throw error;
+  if (error) throw dinerError(error);
   return (data ?? { ok: false, deduped: false }) as { ok: boolean; deduped: boolean };
 }
 
@@ -544,51 +547,45 @@ export interface ChatMessage {
 
 /** This table's conversation, oldest first -- the order it is read in. */
 export async function fetchTableMessages(session: Session): Promise<ChatMessage[]> {
-  if (session.demo || !session.table?.id) return [];
-  const { data, error } = await supabase
-    .from('message')
-    .select('id, from_role, body, created_at, guest_name')
-    .eq('table_id', session.table.id)
-    .order('created_at', { ascending: true })
-    .limit(200);
-  if (error) throw error;
+  if (session.demo || !session.visit) return [];
+  const { data, error } = await supabase.rpc('visit_messages', { p_visit: session.visit });
+  if (error) throw dinerError(error);
   return (data ?? []) as ChatMessage[];
 }
 
 export async function sendTableMessage(session: Session, body: string): Promise<void> {
   const text = body.trim();
-  if (!text || session.demo || !session.table?.id) return;
-  const { error } = await supabase.from('message').insert({
-    restaurant_id: session.restaurant.id,
-    table_id: session.table.id,
-    from_role: 'diner',
-    body: text.slice(0, 500),
-    guest_name: session.guest?.name ?? null,
-    guest_phone: session.guest?.phone ?? null,
-  });
-  if (error) throw error;
+  if (!text || session.demo || !session.visit) return;
+  const { error } = await supabase.rpc('visit_send_message', { p_visit: session.visit, p_body: text.slice(0, 500) });
+  if (error) throw dinerError(error);
 }
 
 /**
- * LIVE, both ways. "When a customer texts it must appear immediately in the
- * owner's app AND web" -- and the same is true in reverse, which is the half
- * that makes it a conversation rather than a form.
- *
- * Filtered on table_id server-side rather than in the callback: a diner should
- * not be shipped every other table's messages and then discard them.
+ * LIVE ENOUGH, and private. A diner can no longer subscribe to the message
+ * table (that is what let anyone read every table's chat), so the thread is
+ * polled every 4 seconds through the pass. Staff still get realtime.
  */
 export function subscribeTableMessages(
   session: Session,
   onMessage: (m: ChatMessage) => void,
 ): () => void {
-  if (session.demo || !session.table?.id) return () => {};
-  const channel = supabase
-    .channel(`chat:${session.table.id}`)
-    .on(
-      'postgres_changes',
-      { event: 'INSERT', schema: 'public', table: 'message', filter: `table_id=eq.${session.table.id}` },
-      (payload) => onMessage(payload.new as ChatMessage),
-    )
-    .subscribe();
-  return () => { supabase.removeChannel(channel); };
+  if (session.demo || !session.visit) return () => {};
+  const seen = new Set<string>();
+  let alive = true;
+  let first = true;
+  let timer = 0;
+  const tick = async () => {
+    try {
+      const list = await fetchTableMessages(session);
+      for (const m of list) {
+        if (seen.has(m.id)) continue;
+        seen.add(m.id);
+        if (!first) onMessage(m);
+      }
+      first = false;
+    } catch { /* keep polling; a lost pass is handled by the screen */ }
+    if (alive) timer = window.setTimeout(tick, 4000);
+  };
+  timer = window.setTimeout(tick, 0);
+  return () => { alive = false; window.clearTimeout(timer); };
 }

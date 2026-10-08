@@ -118,8 +118,10 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       endSeating: () => {
         setSession((prev) => {
           if (!prev) return prev;
-          const { guest, guestAt, orderedAt, ...rest } = prev;
-          return rest as Session;
+          // Phase 3: the visit pass ends with the seating. The table and
+          // restaurant stay on screen; ordering again needs a fresh scan.
+          const { guest, guestAt, orderedAt, visit, visitExpiresAt, ...rest } = prev;
+          return { ...rest, visitEnded: true } as Session;
         });
         setCart([]);
       },

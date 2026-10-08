@@ -100,6 +100,12 @@ export interface Guest {
 
 export interface Session {
   token: string;
+  /** Phase 3: the visit pass this scan was given. Every diner call carries it. */
+  visit?: string;
+  visitExpiresAt?: string;
+  /** The pass ended (seating closed, or 4 hours). Menu stays readable;
+   *  ordering asks for a fresh scan. */
+  visitEnded?: boolean;
   restaurant: Restaurant;
   table: DiningTable;
   demo?: boolean;

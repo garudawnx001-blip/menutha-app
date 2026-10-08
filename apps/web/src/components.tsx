@@ -61,14 +61,18 @@ export function IdentityGate({
   restaurantName,
   tableLabel,
   onSubmit,
+  onCancel,
 }: {
   restaurantName?: string;
   tableLabel?: string;
   onSubmit: (g: { name: string; phone: string }) => void;
+  /** Phase 3: asked at the first order, so the diner can back out. */
+  onCancel?: () => void;
 }) {
   const [name, setName] = React.useState('');
   const [phone, setPhone] = React.useState('');
-  const digits = phone.replace(/\D/g, '');
+  // +91 98765 43210, 098765 43210 and 9876543210 are the same number.
+  const digits = phone.replace(/\D/g, '').replace(/^91(?=\d{10}$)/, '').replace(/^0(?=\d{10}$)/, '');
   const validPhone = /^[6-9]\d{9}$/.test(digits);
   const validName = name.trim().length >= 2;
   const ok = validName && validPhone;
@@ -80,8 +84,8 @@ export function IdentityGate({
   };
   const submit = () => ok && onSubmit({ name: name.trim(), phone: digits });
   return (
-    <div className="modal-scrim">
-      <div className="sheet" onClick={(e) => e.stopPropagation()}>
+    <div className="modal-scrim" onClick={() => onCancel?.()}>
+      <div className="sheet" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
         <span className="live-dot" aria-hidden style={{ marginBottom: 10 }} />
         <h2 className="display" style={{ fontSize: 25, lineHeight: 1.2 }}>
           {translate(getLang(), 'gate.welcome')}{restaurantName ? ` ${restaurantName}` : ''} 👋
@@ -118,6 +122,11 @@ export function IdentityGate({
         >
           {translate(getLang(), 'gate.start')} →
         </button>
+        {onCancel && (
+          <button className="btn btn-ghost btn-block" style={{ marginTop: 8 }} onClick={onCancel}>
+            {translate(getLang(), 'common.cancel')}
+          </button>
+        )}
         <p className="dim" style={{ fontSize: 11.5, textAlign: 'center', marginTop: 10 }}>
           {translate(getLang(), 'gate.privacy')}
         </p>
