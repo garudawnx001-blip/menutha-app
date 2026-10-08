@@ -26,12 +26,14 @@ const row = (...xs: unknown[]) => xs.map(cell).join(',');
 export type GstReport = {
   from: string; to: string; sac: string;
   invoices: { invoice_no: string; date: string; status: string; doc_title: string;
-              taxable: number; sgst: number; cgst: number; total: number }[];
+              taxable: number; sgst: number; cgst: number; total: number; paid_mode?: string | null }[];
   by_rate: { rate: number; taxable: number; sgst: number; cgst: number; invoices: number }[];
   totals: { taxable: number; sgst: number; cgst: number; total: number };
   documents: { from_no: string | null; to_no: string | null; issued: number; cancelled: number };
   credit_notes: { cn_no: string; date: string; against: string | null; amount: number;
                   taxable: number; sgst: number; cgst: number; reason: string }[];
+  /** Money received in the period, by method (2026-10-12a). */
+  collected_by_mode?: Record<string, number>;
 };
 
 /** GSTR-1 working file: B2CS by rate, HSN/SAC summary, documents issued,
@@ -59,10 +61,14 @@ export function gstCsv(r: GstReport, restaurantName: string, gstin?: string | nu
     out.push(row(c.cn_no, c.date, c.against ?? '', money(c.amount), money(c.taxable), money(c.cgst), money(c.sgst), c.reason));
   }
   out.push('', row('Invoice register'),
-    row('Invoice', 'Date', 'Document', 'Status', 'Taxable', 'CGST', 'SGST', 'Total'));
+    row('Invoice', 'Date', 'Document', 'Status', 'Taxable', 'CGST', 'SGST', 'Total', 'Paid by'));
   for (const i of r.invoices) {
     out.push(row(i.invoice_no, i.date, i.doc_title, i.status === 'void' ? 'cancelled' : i.status,
-      money(i.taxable), money(i.cgst), money(i.sgst), money(i.total)));
+      money(i.taxable), money(i.cgst), money(i.sgst), money(i.total), i.status === 'paid' ? (MODE[i.paid_mode ?? ''] ?? i.paid_mode ?? '') : ''));
+  }
+  if (r.collected_by_mode && Object.keys(r.collected_by_mode).length) {
+    out.push('', row('Money received by method (not part of GSTR-1)'), row('Method', 'Amount'));
+    for (const [k, v] of Object.entries(r.collected_by_mode)) out.push(row(MODE[k] ?? k, money(v)));
   }
   return out.join('\r\n') + '\r\n';
 }
@@ -77,6 +83,10 @@ export type DayEnd = {
   taxable: number; sgst: number; cgst: number;
   collected: number; collected_by_mode: Record<string, number>;
   credit_notes: number; credit_note_total: number; net_collected: number;
+  /** 2026-10-12a: split payment. Absent on a database without it. */
+  split_bills?: number; cash_handed_over?: number; change_given?: number; cash_in_drawer?: number;
+  parts_by_mode?: Record<string, { count: number; amount: number }>;
+  refunds_by_mode?: Record<string, number>;
   written_off_orders: number; written_off_value: number; written_off_by_reason: Record<string, number>;
 };
 export type StaffRow = {
@@ -85,7 +95,8 @@ export type StaffRow = {
   reprints: number; credit_notes: number; credit_value: number; service_removed: number;
 };
 
-const MODE: Record<string, string> = { cash: 'Cash', upi_qr: 'UPI', gateway: 'Card / online', card: 'Card' };
+/** Same words as lib/splitPay.ts payModeLabel. */
+const MODE: Record<string, string> = { cash: 'Cash', upi_qr: 'UPI', card: 'Card', other: 'Other', gateway: 'Online', split: 'Split' };
 
 /** A narrow page that prints on an 80mm roll and on A4 alike. */
 function page(title: string, restaurantName: string, body: string): string {
@@ -125,6 +136,10 @@ ${modes || line('Nothing collected', inr(0))}
 ${line('Collected', inr(d.collected), 't')}
 ${line('Credit notes / refunds', `${d.credit_notes} · − ${inr(d.credit_note_total)}`)}
 ${line('Net collected', inr(d.net_collected), 't')}
+${d.split_bills != null ? line('Bills paid by split payment', String(d.split_bills)) : ''}
+${d.cash_handed_over != null ? line('Cash handed over', inr(d.cash_handed_over)) : ''}
+${d.change_given != null ? line('Change given back', inr(d.change_given)) : ''}
+${d.cash_in_drawer != null ? line('Cash in drawer (cash in − cash refunds)', inr(d.cash_in_drawer), 't') : ''}
 <h2>Tax on paid bills</h2>
 ${line('Taxable value', inr(d.taxable))}${line('CGST', inr(d.cgst))}${line('SGST', inr(d.sgst))}
 <h2>Written off (not revenue)</h2>
@@ -156,5 +171,7 @@ ${line('Invoices issued', String(r.documents.issued))}${line('Cancelled', String
 ${r.documents.from_no ? line('Numbers', `${r.documents.from_no} – ${r.documents.to_no}`) : ''}
 <h2>Credit notes</h2>
 ${r.credit_notes.length ? r.credit_notes.map((c) => line(`${c.cn_no} (${c.against ?? ''})`, `− ${inr(c.amount)}`)).join('') : line('None', '')}
+${r.collected_by_mode && Object.keys(r.collected_by_mode).length ? `<h2>Money received by method</h2>${
+  Object.entries(r.collected_by_mode).map(([k, v]) => line(MODE[k] ?? k, inr(v))).join('')}` : ''}
 <p class="sub">SAC ${esc(r.sac)} · working summary for GSTR-1 / GSTR-3B. Not a filing.</p>`);
 }

@@ -1004,9 +1004,26 @@ export async function setParcelPacking(billId: string, boxes: number) {
   };
 }
 
-export async function payBill(billId: string, mode: 'cash' | 'upi_qr') {
+export async function payBill(billId: string, mode: 'cash' | 'upi_qr' | 'card' | 'other') {
   const { error } = await supabase.rpc('mark_bill_paid', { p_bill_id: billId, p_mode: mode });
   if (error) throw error;
+}
+
+export interface SettleResult {
+  id: string; status: 'paid'; mode: string; total: number; change_due: number; duplicate?: boolean;
+  tenders: { seq: number; mode: string; amount: number; tendered: number | null; change_due: number; payer: string | null }[];
+}
+
+/**
+ * Pay a bill by one or more methods. The server refuses parts that do not add
+ * up to the bill exactly. `requestId` is kept by the caller until this
+ * succeeds: sending the same id again (a retry after a dropped connection, a
+ * double tap) returns the first result and never charges twice.
+ */
+export async function settleBill(billId: string, tenders: unknown[], requestId: string): Promise<SettleResult> {
+  const { data, error } = await supabase.rpc('settle_bill', { p_bill_id: billId, p_tenders: tenders, p_idem: requestId });
+  if (error) throw error;
+  return data as SettleResult;
 }
 
 /** One-tap confirmation of a diner-initiated UPI/cash payment. */

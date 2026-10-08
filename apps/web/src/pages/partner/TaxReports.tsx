@@ -7,6 +7,7 @@ import React, { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { printBillHtml } from '../../lib/printBill';
 import { inr } from '../../lib/types';
+import { payModeLabel } from '../../lib/splitPay';
 import {
   dayEndHtml, staffActionsHtml, gstSummaryHtml, gstCsv, gstCsvName,
   type DayEnd, type StaffRow, type GstReport,
@@ -124,11 +125,14 @@ export function TaxReports({ restaurantId, restaurantName, gstin }: { restaurant
           {row('Cancelled', `${dayEnd.bills_cancelled} · ${inr(Number(dayEnd.cancelled_value))}`)}
           {row('Discounts given', inr(Number(dayEnd.discount_total)))}
           {Object.entries(dayEnd.collected_by_mode ?? {}).map(([k, v]) => (
-            <React.Fragment key={k}>{row(k === 'upi_qr' ? 'UPI' : k === 'cash' ? 'Cash' : k, inr(Number(v)))}</React.Fragment>
+            <React.Fragment key={k}>{row(payModeLabel(k), inr(Number(v)))}</React.Fragment>
           ))}
           {row('Collected', inr(Number(dayEnd.collected)), true)}
           {row('Credit notes', `${dayEnd.credit_notes} · − ${inr(Number(dayEnd.credit_note_total))}`)}
           {row('Net collected', inr(Number(dayEnd.net_collected)), true)}
+          {dayEnd.split_bills != null && row('Bills paid by split payment', String(dayEnd.split_bills))}
+          {dayEnd.change_given != null && Number(dayEnd.change_given) > 0 && row('Change given back', inr(Number(dayEnd.change_given)))}
+          {dayEnd.cash_in_drawer != null && row('Cash in drawer', inr(Number(dayEnd.cash_in_drawer)), true)}
           {row('Tax on paid bills', `CGST ${inr(Number(dayEnd.cgst))} · SGST ${inr(Number(dayEnd.sgst))}`)}
           {row('Written off (not revenue)', `${dayEnd.written_off_orders} · ${inr(Number(dayEnd.written_off_value))}`)}
         </div>

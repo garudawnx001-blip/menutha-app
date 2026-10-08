@@ -3,7 +3,9 @@
  *  mark paid (Cash / UPI received). */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { fetchLiveOrders, fetchOrdersByIds, createBill, quoteBill, fetchBillMoney, recordBillPrint, payBill, fetchBillLayout, setOrdersAc, waiveService, setParcelPacking, voidTableBill, voidBill, setBillChargeLine, removeBillChargeLine, staffSetOrderItemQty, setBillService, billShareToken, type BillChargeLine, type PortalOrder } from '../../lib/portalApi';
+import { SettlePanel } from './SettlePanel';
+import { payModeLabel } from '../../lib/splitPay';
+import { fetchLiveOrders, fetchOrdersByIds, createBill, quoteBill, fetchBillMoney, recordBillPrint, type SettleResult, fetchBillLayout, setOrdersAc, waiveService, setParcelPacking, voidTableBill, voidBill, setBillChargeLine, removeBillChargeLine, staffSetOrderItemQty, setBillService, billShareToken, type BillChargeLine, type PortalOrder } from '../../lib/portalApi';
 import { WalkIn } from './WalkIn';
 import { renderBillHtml, billNumbersFromBreakdown, billLabel, billDateText, whatsappBillLink, needsGstinWarning, GSTIN_WARNING, type BillData } from '../../lib/billTemplate';
 import { printBillHtml } from '../../lib/printBill';
@@ -437,16 +439,19 @@ export function Billing() {
     } finally { setItemBusy(''); }
   });
 
-  const settle = (mode: 'cash' | 'upi_qr') => guard(async () => {
-    if (!bill || busy) return;
-    setBusy(true); setError('');
-    try {
-      await payBill(bill.id, mode);
-      setBill(null); setSelected(new Set()); setDiscount(''); setParcelBoxes(0); setParcelNote('');
-      setExtraLines([]);
-      await load();
-    } catch (e: any) { setError(e?.message ?? 'Could not mark the bill paid.'); }
-    finally { setBusy(false); }
+  /** The bill is paid (SettlePanel talked to the server). Say so — with the
+   *  change to hand back — and clear the screen for the next table. */
+  const [paidNote, setPaidNote] = useState('');
+  const settled = (r: SettleResult) => guard(async () => {
+    const label = bill ? billLabel(bill) : 'Bill';
+    const how = r.tenders?.length > 1
+      ? r.tenders.map((t) => `${payModeLabel(t.mode)} ${inr(Number(t.amount))}`).join(' + ')
+      : payModeLabel(r.mode);
+    setPaidNote(`${label} · ${inr(Number(r.total))} paid (${how})`
+      + (Number(r.change_due) > 0 ? ` · return ${inr(Number(r.change_due))} change` : ''));
+    setBill(null); setSelected(new Set()); setDiscount(''); setParcelBoxes(0); setParcelNote('');
+    setExtraLines([]);
+    await load();
   });
   /**
    * The bill, in the shape the shared template renders. Everything about how
@@ -876,21 +881,24 @@ export function Billing() {
         <div className="glass-strong" style={{ padding: 16, marginTop: 16, borderColor: 'var(--primary)' }}>
           <div className="topbar" style={{ padding: 0 }}>
             <strong>{billLabel(bill)}</strong>
-            <span style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
-              <button className="btn btn-glass btn-sm" onClick={printBill}>🖨 Print bill</button>
-              <button className="btn btn-glass btn-sm" onClick={shareWhatsApp}
-                title="Send the guest a link to this bill (and a UPI pay link if your UPI id is set)">
-                Share on WhatsApp
+            {/* The way back from a bill raised against the wrong table.
+                Before this the only exits were "mark it paid" and "leave it
+                unpaid on record for ever". */}
+            {canCancel && (
+              <button className="btn btn-glass btn-sm" disabled={busy} onClick={cancelBill}>
+                ✕ Cancel bill
               </button>
-              {/* The way back from a bill raised against the wrong table.
-                  Before this the only exits were "mark it paid" and "leave it
-                  unpaid on record for ever". */}
-              {canCancel && (
-                <button className="btn btn-glass btn-sm" disabled={busy} onClick={cancelBill}>
-                  ✕ Cancel bill
-                </button>
-              )}
-            </span>
+            )}
+          </div>
+          {/* PRINT AND WHATSAPP, SIDE BY SIDE AND FULL SIZE. The share button
+              used to be a small glass chip in the corner and the owner could
+              not find it. Same order and words as the app. */}
+          <div className="bill-share-row" style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+            <button className="btn btn-glass" style={{ flex: 1 }} onClick={printBill}>🖨 Print bill</button>
+            <button className="btn btn-whatsapp" style={{ flex: 1 }} onClick={shareWhatsApp}
+              title="Send the guest a link to this bill on WhatsApp">
+              💬 Share on WhatsApp
+            </button>
           </div>
           <div className="bill-row total"><span>To collect</span><span>{inr(bill.total)}</span></div>
           {svcPctSet && bill.breakdown && (
@@ -991,14 +999,21 @@ export function Billing() {
           </div>
           {parcelNote && <p className="dim" style={{ fontSize: 12, margin: '4px 0 0' }}>{parcelNote}</p>}
 
-          <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-            <button className="btn btn-primary" style={{ flex: 1 }} disabled={busy} onClick={() => settle('cash')}>
-              ₹ Cash received
-            </button>
-            <button className="btn btn-primary" style={{ flex: 1 }} disabled={busy} onClick={() => settle('upi_qr')}>
-              UPI received
-            </button>
-          </div>
+          <SettlePanel
+            billId={bill.id}
+            total={Number(bill.total)}
+            items={Array.isArray(bill.breakdown?.items) ? bill.breakdown.items : []}
+            disabled={busy}
+            onSettled={settled}
+          />
+        </div>
+      )}
+
+      {paidNote && (
+        <div className="glass" role="status" style={{ padding: 12, marginTop: 12, borderColor: 'var(--success, #2e7d32)' }}
+          onClick={() => setPaidNote('')}>
+          <strong>{paidNote}</strong>
+          <span className="dim" style={{ display: 'block', fontSize: 12 }}>Tap to dismiss</span>
         </div>
       )}
 
