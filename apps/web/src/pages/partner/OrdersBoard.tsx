@@ -17,8 +17,7 @@ import { ServiceStrip, ago } from './ServiceStrip';
 import { fetchTableSignals, type TableSignal } from '../../lib/portalApi';
 import { Spinner, VegMark } from '../../components';
 import { startPoll } from '../../lib/poll';
-import { printBillHtml } from '../../lib/printBill';
-import { renderKotHtml } from '../../lib/billTemplate';
+import { printKotDirect, getDirectSettings } from '../../lib/directPrint';
 
 const LIVE = ['placed', 'accepted', 'preparing', 'ready'];
 
@@ -140,6 +139,22 @@ export function OrdersBoard() {
         if (fresh.length) {
           if (localStorage.getItem(SOUND_KEY) !== 'off') chime();
           fresh.forEach(notifyOrder);
+          // KOT to the thermal printer, when this browser is set to auto-print
+          // (Settings → Printer). Each order once; a failure leaves the KOT
+          // button on the ticket to retry.
+          if (getDirectSettings().autoKot) {
+            for (const o of fresh) {
+              printKotDirect({
+                restaurantName: restaurant.name ?? '', orderNo: o.order_no,
+                tableText: o.is_parcel ? 'Parcel / Takeaway' : (o.table_label ?? 'Table'),
+                placedAt: (o as any).placed_at ?? null,
+                items: (o.items ?? []).map((it: any) => ({ name: it.name, qty: it.qty })),
+                notes: (o as any).notes ?? null, paper: (restaurant as any).bill_paper ?? null,
+              }, { silentFallback: true }).then((r) => {
+                if (r.via === 'dialog' && r.reason) setError(`A KOT did not print: ${r.reason} Use the KOT button on the order.`);
+              }).catch(() => {});
+            }
+          }
           setJustIn((prev) => new Set([...prev, ...fresh.map((o) => o.id)]));
         }
         live.forEach((o) => seen.current!.add(o.id));
@@ -629,7 +644,7 @@ export function OrdersBoard() {
                   table, time, dishes, notes, no prices. Same document as the
                   phone's. Any staff may print it. */}
               <button className="btn btn-glass btn-sm" title="Print the kitchen order ticket"
-                onClick={() => printBillHtml(renderKotHtml({
+                onClick={() => printKotDirect(({
                   restaurantName: restaurant.name ?? '',
                   orderNo: all.map((x) => x.order_no).join('+'),
                   tableText: o.is_parcel ? 'Parcel / Takeaway' : (o.table_label ?? 'Table'),

@@ -9,6 +9,7 @@ import {
 import { usePartner } from './PartnerShell';
 import { LocationPicker, type LatLng } from './LocationPicker';
 import { UpgradeNudge } from './Gate';
+import { PrinterSettings } from './PrinterSettings';
 
 /**
  * ONE FIELD: a label over its input.
@@ -324,6 +325,8 @@ export function Settings() {
           )}
         </div>
       </div>
+
+      <PrinterSettings restaurantName={restaurant.name ?? ''} />
 
       <button className={`btn btn-primary btn-block${busy ? ' is-busy' : ''}`} disabled={busy} onClick={save}>
         {saved ? 'Saved ✓' : 'Save settings'}

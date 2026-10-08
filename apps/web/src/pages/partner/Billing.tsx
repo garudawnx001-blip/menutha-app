@@ -9,7 +9,7 @@ import { stockAlertText, type StockReport } from '../../lib/stock';
 import { fetchStockReport, fetchLiveOrders, fetchOrdersByIds, createBill, quoteBill, fetchBillMoney, recordBillPrint, type SettleResult, fetchBillLayout, setOrdersAc, waiveService, setParcelPacking, voidTableBill, voidBill, setBillChargeLine, removeBillChargeLine, staffSetOrderItemQty, setBillService, billShareToken, type BillChargeLine, type PortalOrder } from '../../lib/portalApi';
 import { WalkIn } from './WalkIn';
 import { renderBillHtml, billNumbersFromBreakdown, billLabel, billDateText, whatsappBillLink, needsGstinWarning, GSTIN_WARNING, type BillData } from '../../lib/billTemplate';
-import { printBillHtml } from '../../lib/printBill';
+import { printBillDirect, getDirectSettings } from '../../lib/directPrint';
 import { inr } from '../../lib/types';
 import { usePartner } from './PartnerShell';
 import { Spinner } from '../../components';
@@ -281,6 +281,7 @@ export function Billing() {
       setSelected(new Set(list.map((o) => o.id)));
       setDiscount('');
       setBill({ ...b, orders: billed }); setParcelBoxes(0); setParcelNote('');
+      if (getDirectSettings().autoBill) autoPrintFor.current = b.id;
       // billNow skips the preview, so the promise it is measured against is
       // the orders' own totals rather than this page's running figures --
       // as the bill left them (a duplicated parcel fee is dropped on billing).
@@ -319,6 +320,7 @@ export function Billing() {
       const b = await createBill(restaurant.id, chosen.map((o) => o.id), disc);
       const billed = await billedOrders(chosen);
       setBill({ ...b, orders: billed }); setParcelBoxes(0); setParcelNote('');
+      if (getDirectSettings().autoBill) autoPrintFor.current = b.id;
       // The server may have dropped a duplicated parcel fee while billing;
       // that correction is not a disagreement worth warning about.
       reconcile(b.total, total - (sumOf(chosen) - sumOf(billed)), b.breakdown);
@@ -601,8 +603,18 @@ export function Billing() {
     if (!bill) return;
     // Counted first: the second and later prints of one bill say DUPLICATE.
     const n = await recordBillPrint(bill.id);
-    printBillHtml(renderBillHtml({ ...printData(), duplicate: n != null && n > 1 }, layout));
+    // Straight to the thermal printer chosen in Settings → Printer (Web
+    // Serial / WebUSB), as ESC/POS from the same data; else the print dialog.
+    const out = await printBillDirect({ ...printData(), duplicate: n != null && n > 1 }, layout);
+    if (out.via === 'dialog' && out.reason) setError(`Printed with the browser's print dialog: ${out.reason}`);
   };
+
+  /* "Print the bill when it is raised" (Settings → Printer): once the raised
+     bill is on screen, print it once. */
+  const autoPrintFor = useRef<string | null>(null);
+  useEffect(() => {
+    if (bill && autoPrintFor.current === bill.id) { autoPrintFor.current = null; printBill(); }
+  }, [bill?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /** A free wa.me link to the online copy of this bill (/b/<token>). Opened
    *  synchronously so the browser does not block it as a pop-up. */
@@ -882,7 +894,7 @@ export function Billing() {
           {qn && qn.roundOff ? <div className="bill-row"><span>Round off</span><span>{inr(qn.roundOff)}</span></div> : null}
           <div className="bill-row total"><span>Total</span><span>{inr(total)}</span></div>
           <button className={`btn btn-primary btn-block${busy ? ' is-busy' : ''}`} style={{ marginTop: 12 }} disabled={busy} onClick={generate}>
-            {'Generate bill'}
+            {getDirectSettings().autoBill ? 'Raise bill & print' : 'Raise bill'}
           </button>
         </div>
       )}
