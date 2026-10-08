@@ -57,7 +57,7 @@ export function TableSoFar({ session }: { session: Session }) {
 
   const cancel = async (id: string) => {
     setCancelling(id);
-    try { await cancelMyOrder(id); setMine((prev) => prev.filter((o) => o.id !== id)); }
+    try { await cancelMyOrder(session, id); setMine((prev) => prev.filter((o) => o.id !== id)); }
     catch { /* window closed — the next poll will show it as sent */ }
     finally { setCancelling(null); }
   };

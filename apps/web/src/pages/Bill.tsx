@@ -32,7 +32,8 @@ import { useNavigate } from 'react-router-dom';
 // SEATING is over, and a settled table ends it for everybody at it.
 // fetchSessionBill answers a different question -- what this one person
 // owes -- and is used below for exactly that.
-import { fetchSessionBill, fetchTableBill, type SessionBill } from '../lib/api';
+import { fetchSessionBill, type SessionBill } from '../lib/api';
+import { useSeatingWatch } from '../lib/useSeatingWatch';
 import { inr } from '../lib/types';
 import { useStore } from '../store';
 import { Spinner, Wordmark } from '../components';
@@ -69,7 +70,7 @@ function TotalsBlock({ b, sgstPct, cgstPct }: {
 
 export function Bill() {
   const nav = useNavigate();
-  const { session, endSeating } = useStore();
+  const { session } = useStore();
   const t = useT();
   const [bill, setBill] = useState<SessionBill | null>(null);
   const [failed, setFailed] = useState(false);
@@ -88,25 +89,7 @@ export function Bill() {
    * scan is never logged out, and a failed poll never ends a seating -- if the
    * network is down the safe answer is to leave them where they are.
    */
-  useEffect(() => {
-    if (!session?.orderedAt || session.demo || !session.table?.id) return;
-    let alive = true;
-    const check = () =>
-      fetchTableBill(session)
-        .then((b) => {
-          if (!alive) return;
-          const stillOpen =
-            (b.per_person ?? []).length > 0 || Number(b.combined?.total ?? 0) > 0;
-          if (!stillOpen) endSeating();
-        })
-        .catch(() => {});
-    check();
-    const t = startPoll(check, 8000);
-    return () => { alive = false; t.stop(); };
-    // endSeating omitted for the same reason as on the menu: the store object
-    // is memoised on [session, cart], so listing it would rebuild this
-    // interval on every cart keystroke.
-  }, [session?.table?.id, session?.orderedAt]);
+  useSeatingWatch();
 
   useEffect(() => {
     if (!session) {

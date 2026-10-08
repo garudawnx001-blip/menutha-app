@@ -78,3 +78,22 @@ jobs:
           # says the map appears once the key is set.
           VITE_GOOGLE_MAPS_API_KEY: ${{ vars.VITE_GOOGLE_MAPS_API_KEY }}
         run: npx vite build
+
+      # PHASE 3: the main web flows in a real browser at 360, 768 and 1280 px,
+      # against a fake Supabase (e2e/fixtures.ts) -- never the live database.
+      # Playwright lives in e2e/ with its own package.json so the app's own
+      # dependencies and lockfile are untouched.
+      - name: End-to-end (Playwright, Chromium)
+        working-directory: apps/web/e2e
+        run: |
+          npm install --no-audit --no-fund
+          npx playwright install --with-deps chromium
+          npx playwright test
+
+      - name: Keep the Playwright report when something fails
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: apps/web/e2e/report
+          retention-days: 7

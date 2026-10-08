@@ -55,6 +55,7 @@ export function Settings() {
     brand_color: (restaurant as any).brand_color ?? '#1B5E3F',
     is_open: restaurant.is_open !== false,
     grace_seconds: String((restaurant as any).grace_seconds ?? 60),
+    confirm_first_order: (restaurant as any).confirm_first_order !== false,
     map_label: (restaurant as any).map_label ?? (restaurant as any).address ?? '',
     maps_url: (restaurant as any).maps_url ?? '',
     /* The tax and service rates, the FSSAI number, the footer trio and the AC
@@ -133,6 +134,8 @@ export function Settings() {
         // Same bounds the database enforces, so a typo is corrected here rather
         // than bounced back as a constraint error.
         grace_seconds: clamped.grace_seconds,
+        // Phase 3. Sent only when the column exists (older databases ignore it).
+        ...('confirm_first_order' in (restaurant as any) ? { confirm_first_order: form.confirm_first_order } : {}),
         // The pin, and the line shown under it. Sent as nulls when cleared, so
         // "no location" is storable rather than only "never set".
         lat: pin ? pin.lat : null,
@@ -301,6 +304,18 @@ export function Settings() {
             changing this never cuts short someone who is mid-order.
           </span>
         </F>
+        <label style={{ display: 'flex', gap: 10, alignItems: 'flex-start', marginTop: 12, cursor: 'pointer' }}>
+          <input type="checkbox" checked={form.confirm_first_order} style={{ marginTop: 3 }}
+            onChange={(e) => setForm({ ...form, confirm_first_order: e.target.checked })} />
+          <span>
+            <b>Confirm a new table’s first order</b>
+            <span className="dim" style={{ display: 'block', fontSize: 12 }}>
+              On (recommended): the first order from a table that has just been seated waits on the
+              Orders board for one tap — Confirm or Not ours — before it reaches the kitchen. Later
+              orders from that table go straight through.
+            </span>
+          </span>
+        </label>
 
       </div>
 

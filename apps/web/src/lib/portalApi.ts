@@ -212,9 +212,13 @@ export interface BillChargeResult {
 
 export async function setBillChargeLine(
   billId: string, lineId: string, label: string, kind: 'flat' | 'percent', value: number,
+  taxable?: boolean,
 ): Promise<BillChargeResult> {
+  // p_taxable only when switched off, so an older database (5-argument
+  // function) keeps working for the usual case.
   const { data, error } = await supabase.rpc('set_bill_charge_line', {
     p_bill_id: billId, p_line_id: lineId, p_label: label, p_kind: kind, p_value: value,
+    ...(taxable === false ? { p_taxable: false } : {}),
   });
   if (error) throw error;
   return data as BillChargeResult;
@@ -2108,4 +2112,49 @@ export async function fetchDishesWithStock(restaurantId: string) {
   if (error) throw error;
   return (data ?? []) as { id: string; name: string; category_id: string | null; is_available: boolean;
                            stock_qty: number | null; stock_low_at: number | null }[];
+}
+
+// ── Phase 3: first order of a new table, waiting for one tap ───────────────
+export interface AwaitingOrder {
+  id: string; order_no: number; placed_at: string; total: number;
+  guest_name: string | null; is_parcel: boolean;
+  dining_table: { label: string } | null;
+  order_item: { name: string; qty: number }[];
+}
+
+/** Orders a diner placed as the first of a new seating, held off the kitchen
+ *  until staff confirm (restaurant setting "Confirm a new table's first order"). */
+export async function fetchAwaitingConfirm(restaurantId: string): Promise<AwaitingOrder[]> {
+  const { data, error } = await supabase
+    .from('food_order')
+    .select('id, order_no, placed_at, total, guest_name, is_parcel, dining_table(label), order_item(name, qty)')
+    .eq('restaurant_id', restaurantId)
+    .eq('needs_confirm', true)
+    .is('confirmed_at', null)
+    .eq('status', 'placed')
+    .order('placed_at', { ascending: true });
+  if (error) {
+    if (error.code === '42703') return [];   // database not migrated yet: nothing waits
+    throw error;
+  }
+  return (data ?? []).map((o: any) => ({
+    ...o, dining_table: Array.isArray(o.dining_table) ? o.dining_table[0] ?? null : o.dining_table,
+  })) as AwaitingOrder[];
+}
+
+export async function confirmOrder(orderId: string) {
+  const { error } = await supabase.rpc('confirm_order', { p_order_id: orderId });
+  if (error) throw error;
+}
+
+export async function rejectUnconfirmedOrder(orderId: string) {
+  const { error } = await supabase.rpc('reject_unconfirmed_order', { p_order_id: orderId });
+  if (error) throw error;
+}
+
+/** Phase 3: guests on a bill, for a per-person area charge. */
+export async function setBillGuests(billId: string, guests: number): Promise<{ applied: boolean; reason?: string; total: number }> {
+  const { data, error } = await supabase.rpc('set_bill_guests', { p_bill_id: billId, p_guests: guests });
+  if (error) throw error;
+  return data as { applied: boolean; reason?: string; total: number };
 }

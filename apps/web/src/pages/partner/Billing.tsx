@@ -8,8 +8,9 @@ import { OfflineTill } from './OfflineTill';
 import { writeOfflineData } from '../../lib/offline';
 import { payModeLabel } from '../../lib/splitPay';
 import { stockAlertText, type StockReport } from '../../lib/stock';
-import { fetchStockReport, fetchLiveOrders, fetchOrdersByIds, createBill, quoteBill, fetchBillMoney, recordBillPrint, type SettleResult, fetchBillLayout, setOrdersAc, waiveService, setParcelPacking, voidTableBill, voidBill, setBillChargeLine, removeBillChargeLine, staffSetOrderItemQty, setBillService, billShareToken, type BillChargeLine, type PortalOrder } from '../../lib/portalApi';
-import { WalkIn } from './WalkIn';
+import { fetchStockReport, fetchLiveOrders, fetchOrdersByIds, createBill, quoteBill, fetchBillMoney, recordBillPrint, type SettleResult, fetchBillLayout, setOrdersAc, waiveService, setParcelPacking, voidTableBill, voidBill, setBillChargeLine, removeBillChargeLine, setBillGuests, staffSetOrderItemQty, setBillService, billShareToken, type BillChargeLine, type PortalOrder } from '../../lib/portalApi';
+import { CounterPOS } from './CounterPOS';
+import { TableTools } from './TableTools';
 import { renderBillHtml, billNumbersFromBreakdown, billLabel, billDateText, whatsappBillLink, needsGstinWarning, GSTIN_WARNING, type BillData } from '../../lib/billTemplate';
 import { printBillDirect, getDirectSettings } from '../../lib/directPrint';
 import { inr } from '../../lib/types';
@@ -110,10 +111,16 @@ export function Billing() {
   const [chargeLabel, setChargeLabel] = useState('');
   const [chargeValue, setChargeValue] = useState('');
   const [chargeKind, setChargeKind] = useState<'flat' | 'percent'>('flat');
+  /** Phase 3: GST on a one-off charge (on by default, as before). */
+  const [chargeTaxable, setChargeTaxable] = useState(true);
+  /** Phase 3: guests, for an area charge per person. */
+  const [guests, setGuests] = useState('');
   const [chargeBusy, setChargeBusy] = useState(false);
   /** Which order has its items open for correction. One at a time: this is the
    *  destructive end of the screen and it should take a deliberate tap. */
   const [editingItems, setEditingItems] = useState<string | null>(null);
+  /** Phase 3: the table whose Move / merge / split panel is open. */
+  const [moving, setMoving] = useState<string | null>(null);
   const [itemBusy, setItemBusy] = useState<string>('');
   // Opened from a ticket on the Orders board: focus that table straight away
   // so settling is one tap from the notification, not a hunt.
@@ -403,19 +410,34 @@ export function Billing() {
     try {
       const r = await setBillChargeLine(
         bill.id, label.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 40) || 'charge',
-        label, chargeKind, value,
+        label, chargeKind, value, chargeTaxable,
       );
       if (!r.applied) { setError(`Charge not added: ${r.reason ?? 'the bill is closed.'}`); return; }
       setExtraLines(r.extra_lines ?? []);
       const fresh = await fetchBillMoney(bill.id).catch(() => null);
       setBill((b) => (b ? { ...b, total: fresh?.total ?? r.total, breakdown: fresh?.breakdown ?? b.breakdown } : b));
-      setChargeLabel(''); setChargeValue('');
+      setChargeLabel(''); setChargeValue(''); setChargeTaxable(true);
     } catch (e: any) {
       setError(/PGRST202|could not find the function/i.test(String(e?.message ?? ''))
         ? 'One-off charges need a database update that has not been run yet. The bill is unchanged.'
         : /access denied/i.test(String(e?.message ?? ''))
           ? 'Adding a charge to a bill needs a manager.'
           : (e?.message ?? 'Could not add the charge.'));
+    } finally { setChargeBusy(false); }
+  });
+
+  const saveGuests = () => guard(async () => {
+    if (!bill) return;
+    const n = Math.round(Number(guests));
+    if (!Number.isFinite(n) || n < 1 || n > 500) { setError('Guests must be between 1 and 500.'); return; }
+    setChargeBusy(true); setError('');
+    try {
+      const r = await setBillGuests(bill.id, n);
+      if (!r.applied) { setError(`Not changed: ${r.reason ?? 'the bill is closed.'}`); return; }
+      const fresh = await fetchBillMoney(bill.id).catch(() => null);
+      setBill((x) => (x ? { ...x, total: fresh?.total ?? r.total, breakdown: fresh?.breakdown ?? x.breakdown } : x));
+    } catch (e: any) {
+      setError(e?.message ?? 'Could not set the guests.');
     } finally { setChargeBusy(false); }
   });
 
@@ -672,7 +694,7 @@ export function Billing() {
           taking money. */}
       {/* OFFLINE (Phase 2): the connection, and the offline till when it is down. */}
       <OfflineTill restaurantId={restaurant.id} onSynced={() => load()} />
-      <WalkIn restaurantId={restaurant.id} onCreated={() => load()} />
+      <CounterPOS restaurantId={restaurant.id} onCreated={() => load()} />
 
       {byTable.length === 0 && (
         <div className="glass" style={{ padding: 20, marginTop: 14, textAlign: 'center' }}>
@@ -794,8 +816,16 @@ export function Billing() {
             <button className="chip" onClick={() => setEditingItems((x) => (x === tableName ? null : tableName))}
               aria-expanded={editingItems === tableName}>
               ✎ Correct an item
+            </button>{' '}
+            <button className="chip" onClick={() => setMoving((x) => (x === tableName ? null : tableName))}
+              aria-expanded={moving === tableName}>
+              ⇄ Move / merge / split
             </button>
           </div>
+          {moving === tableName && (
+            <TableTools restaurantId={restaurant.id} tableId={list[0]?.table_id ?? null} orders={list}
+              onDone={() => { setMoving(null); load(); }} />
+          )}
           {editingItems === tableName && (
             <div className="glass" style={{ padding: '8px 16px', marginBottom: 10 }}>
               <p className="dim" style={{ fontSize: 12, margin: '0 0 6px' }}>
@@ -993,12 +1023,25 @@ export function Billing() {
                 aria-pressed={chargeKind === k}
                 onClick={() => setChargeKind(k)}>{lbl}</button>
             ))}
+            <label className="dim" style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5 }}>
+              <input type="checkbox" checked={chargeTaxable} onChange={(e) => setChargeTaxable(e.target.checked)} />
+              GST on this charge
+            </label>
             <button className={`btn btn-glass btn-sm${chargeBusy ? ' is-busy' : ''}`}
               disabled={chargeBusy} onClick={addCharge}>Add charge</button>
           </div>
           <p className="dim" style={{ fontSize: 11.5, margin: '4px 0 0' }}>
-            Added after tax, on this bill only. Charges every bill should carry belong in Bill settings.
+            On this bill only. Charges every bill should carry belong in Bill settings.
           </p>
+          {(bill as any)?.breakdown?.ac_label && (
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 8, flexWrap: 'wrap' }}>
+              <span className="dim" style={{ fontSize: 12.5 }}>Guests (for a per-person area charge)</span>
+              <input className="code-input" style={{ width: 80, padding: '6px 10px' }} inputMode="numeric"
+                value={guests} onChange={(e) => setGuests(e.target.value.replace(/\D/g, '').slice(0, 3))}
+                aria-label="Guests" placeholder="1" />
+              <button className="btn btn-glass btn-sm" disabled={chargeBusy || !guests} onClick={saveGuests}>Set guests</button>
+            </div>
+          )}
 
           {/**
             * PACKING FOR LEFTOVERS, on a dine-in bill, chosen by a person.

@@ -6,8 +6,10 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   fetchMenu, subscribeMenu, placeOrder,
-  fetchMyOpenOrders, updateMyOrderItem, fetchTableBill, fetchDinerBuffets, type OpenOrder,
+  fetchMyOpenOrders, updateMyOrderItem, fetchDinerBuffets, fetchAreaPrices, identifyVisit,
+  VisitExpired, type OpenOrder,
 } from '../lib/api';
+import { useSeatingWatch } from '../lib/useSeatingWatch';
 import type { CartLine, MenuItem } from '../lib/types';
 import { inr } from '../lib/types';
 import { useStore } from '../store';
@@ -22,6 +24,18 @@ import { startPoll } from '../lib/poll';
 export function Menu() {
   const nav = useNavigate();
   const { session, setGuest, noteOrdered, endSeating } = useStore();
+  useSeatingWatch();
+  /** Phase 3: the menu opens at once. Name and number are asked only when the
+   *  diner places their first order; the dish they tapped is held here. */
+  const [askWho, setAskWho] = useState<null | { line: CartLine; label: string }>(null);
+  /** Area price list (e.g. AC hall prices), dish id -> price. */
+  const [areaPrices, setAreaPrices] = useState<Record<string, number>>({});
+  useEffect(() => {
+    if (!session || session.demo) return;
+    let alive = true;
+    fetchAreaPrices(session).then((p) => alive && setAreaPrices(p)).catch(() => {});
+    return () => { alive = false; };
+  }, [session?.visit]);
   const t = useT();
   const lang = useLang();
   const [items, setItems] = useState<MenuItem[] | null>(null);
@@ -107,15 +121,36 @@ export function Menu() {
 
   const orderNow = async (line: CartLine, label: string) => {
     if (!session || placing.has(line.menuItemId)) return;
+    if (!session.demo && (session.visitEnded || !session.visit)) {
+      flash(t('visit.ended'), 3600);
+      return;
+    }
+    if (!session.guest && !session.demo) { setAskWho({ line, label }); return; }
     setPlacing((p) => new Set(p).add(line.menuItemId));
     try {
-      await placeOrder(session, [line]);
+      const r = await placeOrder(session, [line]);
       // #Q -- see Cart. One-tap reorder counts as ordering just as much.
       noteOrdered();
-      flash(`${label} ${t('menu.ordered')}`);
+      flash(`${label} ${r.needs_confirm ? t('menu.waitConfirm') : t('menu.ordered')}`, r.needs_confirm ? 3600 : 1600);
       await refreshOpen();
     } catch (e: any) {
-      flash(e?.message ?? t('menu.orderFailed'), 3200);
+      if (e instanceof VisitExpired) { endSeating(); flash(t('visit.ended'), 3600); }
+      else flash(e?.message ?? t('menu.orderFailed'), 3200);
+    } finally {
+      setPlacing((p) => { const n = new Set(p); n.delete(line.menuItemId); return n; });
+    }
+  };
+
+  const orderNowAs = async (s2: NonNullable<typeof session>, line: CartLine, label: string) => {
+    setPlacing((p) => new Set(p).add(line.menuItemId));
+    try {
+      const r = await placeOrder(s2, [line]);
+      noteOrdered();
+      flash(`${label} ${r.needs_confirm ? t('menu.waitConfirm') : t('menu.ordered')}`, r.needs_confirm ? 3600 : 1600);
+      await refreshOpen();
+    } catch (e: any) {
+      if (e instanceof VisitExpired) { endSeating(); flash(t('visit.ended'), 3600); }
+      else flash(e?.message ?? t('menu.orderFailed'), 3200);
     } finally {
       setPlacing((p) => { const n = new Set(p); n.delete(line.menuItemId); return n; });
     }
@@ -128,7 +163,7 @@ export function Menu() {
     setOpenOrders((prev) => prev.map((o) => (o.id !== l.orderId ? o : {
       ...o, items: o.items.map((it) => (it.id === l.itemId ? { ...it, qty } : it)),
     })));
-    try { await updateMyOrderItem(l.orderId, l.itemId, qty); }
+    try { await updateMyOrderItem(session!, l.orderId, l.itemId, qty); }
     catch (e: any) { flash(e?.message ?? t('menu.alreadySent'), 3200); }
     finally { await refreshOpen(); }
   };
@@ -194,38 +229,22 @@ export function Menu() {
    * when they have just scanned and not ordered yet. Without it, every scan
    * would clear the name it had just asked for.
    */
-  useEffect(() => {
-    if (!session?.orderedAt || session.demo || !session.table?.id) return;
-    let alive = true;
-    const check = () =>
-      fetchTableBill(session)
-        .then((b) => {
-          if (!alive) return;
-          const stillOpen =
-            (b.per_person ?? []).length > 0 || Number(b.combined?.total ?? 0) > 0;
-          if (!stillOpen) endSeating();
-        })
-        // A failed poll must never log anyone out. Silence is the safe answer:
-        // the seating simply stays open until a poll succeeds.
-        .catch(() => {});
-    check();
-    const t = startPoll(check, 8000);
-    return () => { alive = false; t.stop(); };
-    // endSeating is deliberately NOT a dependency. The store object is
-    // useMemo'd on [session, cart], so it is a new reference on every cart
-    // keystroke -- listing it here would tear down and rebuild this interval
-    // while somebody is adding dishes. The closure it captures only calls
-    // setSession, which React keeps stable.
-  }, [session?.table?.id, session?.orderedAt]);
+  // (Seating end is watched by useSeatingWatch above: the pass ends with the seating.)
 
   // Filters are built from what can be ORDERED: fetchMenu only returns
   // available dishes, so a Non-veg chip with no non-veg dish behind it, or a
   // "Juice" chip whose juices are all switched off, never appears. With only
   // one kind on offer the diet toggle is hidden entirely (see menuFilters).
-  const dietAvail = useMemo(() => dietAvailability(items ?? []), [items]);
+  // Area price list (Phase 3): the same dish can cost more in the AC hall.
+  // The server prices the order the same way; this only keeps the menu honest.
+  const pricedItems = useMemo(
+    () => (items ?? []).map((m) => (areaPrices[m.id] != null ? { ...m, price: Number(areaPrices[m.id]) } : m)),
+    [items, areaPrices],
+  );
+  const dietAvail = useMemo(() => dietAvailability(pricedItems), [pricedItems]);
   const dietNow = effectiveDiet(diet, dietAvail);
 
-  const cats = useMemo(() => categoriesWithItems(items ?? [], dietNow), [items, dietNow]);
+  const cats = useMemo(() => categoriesWithItems(pricedItems, dietNow), [pricedItems, dietNow]);
   const catNow = activeCat === 'All' || cats.includes(activeCat) ? activeCat : 'All';
 
   // A saved filter that no longer matches anything (the last non-veg dish
@@ -239,7 +258,7 @@ export function Menu() {
 
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return (items ?? []).filter(
+    return pricedItems.filter(
       (i) =>
         matchesDiet(i, dietNow) &&
         (catNow === 'All' || i.category === catNow) &&
@@ -251,7 +270,7 @@ export function Menu() {
           || dishName(i, lang).toLowerCase().includes(q)
           || (i.description ?? '').toLowerCase().includes(q)),
     );
-  }, [items, query, dietNow, catNow, lang]);
+  }, [pricedItems, query, dietNow, catNow, lang]);
 
   /** Sections in the order the restaurant arranged their categories.
    *
@@ -539,12 +558,32 @@ export function Menu() {
 
       {/* First-open identity gate — capture the diner once so orders + bill
           stay attributed. Skipped for demo and view-only (no ordering). */}
-      {!session.demo && !session.orderingDisabled && !session.guest && (
+      {askWho && !session.demo && (
         <IdentityGate
           restaurantName={restaurant.name}
           tableLabel={table.is_parcel ? undefined : table.label}
-          onSubmit={(g) => setGuest(g)}
+          onCancel={() => setAskWho(null)}
+          onSubmit={(g) => {
+            const pending = askWho;
+            setAskWho(null);
+            setGuest(g);
+            // The pass learns who this is now, so the bill and the order strip
+            // can be found again; then the dish they tapped is ordered.
+            const s2 = { ...session, guest: g };
+            identifyVisit(s2, g.name, g.phone)
+              .then(() => orderNowAs(s2, pending.line, pending.label))
+              .catch((e) => {
+                if (e instanceof VisitExpired) { endSeating(); flash(t('visit.ended'), 3600); }
+                else flash(e?.message ?? t('menu.orderFailed'), 3600);
+              });
+          }}
         />
+      )}
+
+      {session.visitEnded && (
+        <div className="glass" role="status" style={{ position: 'sticky', bottom: 12, padding: 14, margin: '16px 0', textAlign: 'center' }}>
+          <p style={{ fontWeight: 700 }}>{t('visit.ended')}</p>
+        </div>
       )}
 
       {/* Not a cart — these orders are already placed. The bar is a way back to

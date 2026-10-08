@@ -14,6 +14,7 @@ import {
 import { inr } from '../../lib/types';
 import { usePartner } from './PartnerShell';
 import { ServiceStrip, ago } from './ServiceStrip';
+import { ConfirmStrip } from './ConfirmStrip';
 import { fetchTableSignals, type TableSignal } from '../../lib/portalApi';
 import { Spinner, VegMark } from '../../components';
 import { startPoll } from '../../lib/poll';
@@ -404,6 +405,7 @@ export function OrdersBoard() {
       {/* Requests sit ABOVE the tickets: not orders, and more urgent in the
           moment -- an order has a kitchen working on it, a diner waiting for a
           napkin is waiting on nobody. */}
+      <ConfirmStrip restaurantId={restaurant.id} />
       <ServiceStrip restaurantId={restaurant.id} />
 
       {/* A TABLE THAT ASKED BUT HAS NOT ORDERED has no ticket to hang from,

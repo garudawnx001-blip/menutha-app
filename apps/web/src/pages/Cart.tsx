@@ -2,16 +2,18 @@
  *  parcel packing charge, 5% GST) mirroring the server's place_order math. */
 import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { placeOrder } from '../lib/api';
+import { placeOrder, identifyVisit, VisitExpired } from '../lib/api';
 import { calcBill, inr } from '../lib/types';
 import { useStore } from '../store';
 import { useT, translateTableLabel } from '../lib/i18n';
-import { Spinner } from '../components';
+import { Spinner, IdentityGate } from '../components';
 import { Stepper, VegMark, Wordmark } from '../components';
 
 export function Cart() {
   const nav = useNavigate();
-  const { session, cart, setQty, clearCart, noteOrdered } = useStore();
+  const { session, cart, setQty, clearCart, noteOrdered, setGuest, endSeating } = useStore();
+  /** Phase 3: name and number are asked here, at the first order, not at the door. */
+  const [askWho, setAskWho] = useState(false);
   const t = useT();
   const [notes, setNotes] = useState('');
   const [placing, setPlacing] = useState(false);
@@ -50,19 +52,21 @@ export function Cart() {
    */
   const placingRef = useRef(false);
 
-  const submit = async () => {
-    if (placingRef.current || !cart.length) return;
+  const submit = async (as = session) => {
+    if (placingRef.current || !cart.length || !as) return;
+    if (!as.guest && !as.demo) { setAskWho(true); return; }
     placingRef.current = true;
     setPlacing(true);
     setError('');
     try {
-      const order = await placeOrder(session, cart, notes.trim() || undefined);
+      const order = await placeOrder(as, cart, notes.trim() || undefined);
       // #Q -- this seating is now this device's, so settling the table ends it.
       noteOrdered();
       clearCart();
       nav(`/track/${order.id}`, { replace: true });
     } catch (e: any) {
-      setError(e?.message ?? t('common.somethingWrong'));
+      if (e instanceof VisitExpired) { endSeating(); setError(t('visit.ended')); }
+      else setError(e?.message ?? t('common.somethingWrong'));
     } finally {
       setPlacing(false);
       placingRef.current = false;
@@ -151,7 +155,7 @@ export function Cart() {
             className="btn btn-primary btn-block"
             style={{ marginTop: 16 }}
             disabled={placing}
-            onClick={submit}
+            onClick={() => submit()}
           >
             {placing ? t('cart.place') + '…' : `${t('cart.place')} · ${inr(bill.total)}`}
           </button>
@@ -159,6 +163,19 @@ export function Cart() {
             {t('cart.kitchenSeesNow')}
           </p>
         </>
+      )}
+      {askWho && (
+        <IdentityGate
+          restaurantName={session.restaurant.name}
+          tableLabel={session.table.is_parcel ? undefined : session.table.label}
+          onCancel={() => setAskWho(false)}
+          onSubmit={(g) => {
+            setAskWho(false);
+            setGuest(g);
+            const s2 = { ...session, guest: g };
+            identifyVisit(s2, g.name, g.phone).then(() => submit(s2)).catch((e) => setError(e?.message ?? t('common.somethingWrong')));
+          }}
+        />
       )}
     </div>
   );
