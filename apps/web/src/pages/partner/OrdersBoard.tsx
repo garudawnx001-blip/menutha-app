@@ -18,6 +18,7 @@ import { fetchTableSignals, type TableSignal } from '../../lib/portalApi';
 import { Spinner, VegMark } from '../../components';
 import { startPoll } from '../../lib/poll';
 import { printKotDirect, getDirectSettings } from '../../lib/directPrint';
+import { ConnectionBadge } from './OfflineTill';
 
 const LIVE = ['placed', 'accepted', 'preparing', 'ready'];
 
@@ -442,7 +443,7 @@ export function OrdersBoard() {
 
       <div className="topbar" style={{ alignItems: 'flex-end' }}>
         <div>
-          <p className="overline">Live orders</p>
+          <p className="overline">Live orders <ConnectionBadge restaurantId={restaurant.id} /></p>
           <h1 className="display" style={{ fontSize: 26 }}>
             {orders.length ? `${orders.length} active` : 'All clear'}
           </h1>

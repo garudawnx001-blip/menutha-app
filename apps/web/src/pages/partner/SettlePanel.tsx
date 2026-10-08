@@ -20,11 +20,13 @@ interface Props {
   items: { name: string; qty: number; amount_p: number }[];
   disabled?: boolean;
   onSettled: (r: SettleResult) => void;
+  /** Optional replacement for the network call (the offline till). */
+  settle?: (billId: string, tenders: unknown[], requestId: string) => Promise<SettleResult>;
 }
 
 type Tab = PayMode | 'split';
 
-export function SettlePanel({ billId, total, items, disabled, onSettled }: Props) {
+export function SettlePanel({ billId, total, items, disabled, onSettled, settle }: Props) {
   const totalP = toPaise(total);
   const [tab, setTab] = useState<Tab>('cash');
   const [handed, setHanded] = useState('');
@@ -54,7 +56,7 @@ export function SettlePanel({ billId, total, items, disabled, onSettled }: Props
     if (!c.ok && totalP > 0) { setError(c.problem); return; }
     setBusy(true); setError('');
     try {
-      const r = await settleBill(billId, tendersPayload(tenders), reqId.current);
+      const r = await (settle ?? settleBill)(billId, tendersPayload(tenders), reqId.current);
       onSettled(r);
     } catch (e: any) {
       const msg = String(e?.message ?? '');

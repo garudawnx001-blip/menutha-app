@@ -21,9 +21,11 @@
  */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { fetchMenuAdmin, fetchTables, placeStaffOrder, type PortalTable } from '../../lib/portalApi';
+import { queue, isOffline, isNetworkError, noteNetworkFailure, readOfflineData, writeOfflineData, newLocalId, checkNow } from '../../lib/offline';
+import { printKotDirect } from '../../lib/directPrint';
 import { inr } from '../../lib/types';
 
-type Dish = { id: string; name: string; price: number; is_available?: boolean | null };
+type Dish = { id: string; name: string; price: number; is_available?: boolean | null; gst_rate?: number | null };
 
 export function WalkIn({ restaurantId, onCreated }: {
   restaurantId: string;
@@ -41,18 +43,32 @@ export function WalkIn({ restaurantId, onCreated }: {
 
   useEffect(() => {
     if (!open || dishes) return;
+    // OFFLINE: the menu and tables this browser saved last time it was online.
+    const fromBrowser = () => {
+      const d = readOfflineData(restaurantId);
+      if (d && d.menu.length) {
+        setDishes(d.menu); setTables(d.tables as any);
+        setTableId(((d.tables as any[]).find((t) => t.is_parcel) ?? d.tables[0])?.id ?? '');
+      } else setError('No menu saved in this browser yet. Open billing once while online so the menu is saved for offline use.');
+    };
+    if (isOffline()) { fromBrowser(); return; }
     Promise.all([fetchMenuAdmin(restaurantId), fetchTables(restaurantId)])
       .then(([menu, ts]) => {
-        setDishes((menu.items as any[]).map((d) => ({
-          id: d.id, name: d.name, price: Number(d.price), is_available: d.is_available,
-        })));
+        const ds = (menu.items as any[]).map((d) => ({
+          id: d.id, name: d.name, price: Number(d.price), is_available: d.is_available, gst_rate: d.gst_rate ?? null,
+        }));
+        setDishes(ds);
+        writeOfflineData(restaurantId, { menu: ds, tables: ts.map((t) => ({ id: t.id, label: t.label, is_parcel: t.is_parcel })) });
         setTables(ts);
         // TAKEAWAY IS THE DEFAULT, because a walk-in who is not at a table is
         // the commonest case and every restaurant already has that row -- it
         // is created with the restaurant. Staff can still pick a real table.
         setTableId((ts.find((t) => t.is_parcel) ?? ts[0])?.id ?? '');
       })
-      .catch((e: any) => setError(e?.message ?? 'Could not load the menu.'));
+      .catch((e: any) => {
+        if (isNetworkError(e)) { noteNetworkFailure(); fromBrowser(); return; }
+        setError(e?.message ?? 'Could not load the menu.');
+      });
   }, [open, dishes, restaurantId]);
 
   const lines = useMemo(
@@ -97,12 +113,38 @@ export function WalkIn({ restaurantId, onCreated }: {
     if (!tableId) { setError('Pick where this order is for.'); return; }
     creatingRef.current = true;
     setBusy(true); setError('');
+    /* SAVED IN THIS BROWSER when there is no connection: queued with its own
+       request id (never placed twice), KOT printed now, sent and priced by the
+       server when the connection is back. */
+    const saveOffline = async () => {
+      const table = tables.find((t) => t.id === tableId);
+      const byId = new Map((dishes ?? []).map((d) => [d.id, d]));
+      const items = lines.map((l) => ({ id: l.menuItemId, name: byId.get(l.menuItemId)?.name ?? 'Dish',
+        price: byId.get(l.menuItemId)?.price ?? 0, gst_rate: byId.get(l.menuItemId)?.gst_rate ?? null, qty: l.qty }));
+      const tableLabel = table?.is_parcel ? 'Parcel / Takeaway' : String(table?.label ?? 'Table');
+      await queue.enqueue({
+        localId: newLocalId('o'), kind: 'order', label: `${tableLabel} · ${items.reduce((a, i) => a + i.qty, 0)} items`,
+        args: {
+          p_restaurant_id: restaurantId, p_table_id: tableId,
+          p_items: lines.map((l) => ({ menu_item_id: l.menuItemId, qty: l.qty, option_ids: [] })),
+          p_notes: 'Taken at the counter (offline)', p_guest_name: 'Walk-in', p_guest_phone: null,
+          p_client_at: new Date().toISOString(),
+        },
+        meta: { tableId, tableLabel, isParcel: !!table?.is_parcel, items },
+      });
+      printKotDirect({ restaurantName: '', orderNo: 'OFFLINE', tableText: tableLabel, placedAt: new Date().toISOString(),
+        items: items.map((i) => ({ name: i.name, qty: i.qty })), notes: 'Taken offline' }).catch(() => {});
+      setQty({}); setSearch(''); setOpen(false);
+      window.alert('Saved in this browser. No connection: the order is saved, the KOT is printing, and it will be sent when the connection is back.');
+    };
     try {
+      if (isOffline()) { await saveOffline(); return; }
       const id = await placeStaffOrder(restaurantId, tableId, lines);
       setQty({}); setSearch(''); setOpen(false);
       onCreated(id);
     } catch (e: any) {
-      setError(e?.message ?? 'Could not create that order.');
+      if (isNetworkError(e)) { noteNetworkFailure(); await saveOffline(); checkNow().catch(() => {}); }
+      else setError(e?.message ?? 'Could not create that order.');
     } finally { setBusy(false); creatingRef.current = false; }
   };
 

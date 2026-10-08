@@ -2201,3 +2201,11 @@ select.code-input:focus { border-color: var(--primary); }
 .stock-out { background: rgba(200, 40, 40, 0.14); color: #a32020; }
 .stock-none { background: rgba(0, 0, 0, 0.06); color: var(--muted, #6b655a); }
 .stock-alert { margin: 10px 0; padding: 10px 12px; border-radius: 12px; background: rgba(214, 140, 0, 0.12); font-size: 14px; }
+
+/* Connection indicator (offline mode). */
+.conn-badge { display: inline-flex; align-items: center; gap: 6px; margin-left: 8px; padding: 2px 10px; border-radius: 999px;
+  border: 1px solid currentColor; background: transparent; font-size: 12px; font-weight: 700; cursor: pointer; text-transform: none; letter-spacing: 0; }
+.conn-dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+.conn-online { color: #1a7a43; }
+.conn-syncing { color: #8a5a00; }
+.conn-offline { color: #a32020; }

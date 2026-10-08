@@ -4,6 +4,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { SettlePanel } from './SettlePanel';
+import { OfflineTill } from './OfflineTill';
+import { writeOfflineData } from '../../lib/offline';
 import { payModeLabel } from '../../lib/splitPay';
 import { stockAlertText, type StockReport } from '../../lib/stock';
 import { fetchStockReport, fetchLiveOrders, fetchOrdersByIds, createBill, quoteBill, fetchBillMoney, recordBillPrint, type SettleResult, fetchBillLayout, setOrdersAc, waiveService, setParcelPacking, voidTableBill, voidBill, setBillChargeLine, removeBillChargeLine, staffSetOrderItemQty, setBillService, billShareToken, type BillChargeLine, type PortalOrder } from '../../lib/portalApi';
@@ -142,6 +144,16 @@ export function Billing() {
     try {
       const all = await fetchLiveOrders(restaurant.id, ['placed', 'accepted', 'preparing', 'ready', 'served']);
       setOrders(all.filter((o) => !o.paid));
+      // This browser's offline copy: what is open, and the price settings.
+      const r: any = restaurant;
+      writeOfflineData(restaurant.id, {
+        openOrders: all.filter((o) => !o.paid).map((o: any) => ({
+          id: o.id, order_no: o.order_no, table_id: o.table_id ?? null, table_label: o.table_label, is_parcel: !!o.is_parcel,
+          total: Number(o.total), placed_at: o.placed_at, items: (o.items ?? []).map((i: any) => ({ name: i.name, qty: i.qty, unit_price: Number(i.unit_price) })),
+        })),
+        pricing: { name: r.name, sgst_pct: r.sgst_pct, cgst_pct: r.cgst_pct, gst_mode: r.gst_mode, prices_include_gst: r.prices_include_gst,
+                   round_off_bills: r.round_off_bills, parcel_charge: r.parcel_charge, tax_packing: r.tax_packing },
+      });
     } catch (e: any) { setError(e?.message ?? 'Could not load orders.'); }
   };
   useEffect(() => { load(); }, [restaurant.id]);
@@ -658,6 +670,8 @@ export function Billing() {
           and say what they want -- and without this the till could not bill
           them at all, which made a working customer phone a precondition for
           taking money. */}
+      {/* OFFLINE (Phase 2): the connection, and the offline till when it is down. */}
+      <OfflineTill restaurantId={restaurant.id} onSynced={() => load()} />
       <WalkIn restaurantId={restaurant.id} onCreated={() => load()} />
 
       {byTable.length === 0 && (
