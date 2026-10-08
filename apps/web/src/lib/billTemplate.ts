@@ -395,15 +395,10 @@ export function billDataFromPublic(pb: any): BillData {
   return { ...base, ...(pb?.breakdown ? billNumbersFromBreakdown(pb.breakdown) : {}) };
 }
 
-/** upi://pay link for the bill's total, only when the restaurant set a UPI id. */
-export function upiPayLink(vpa: string | null | undefined, payee: string, amount: number, note: string): string {
-  const v = String(vpa ?? '').trim();
-  if (!v || !(amount > 0)) return '';
-  // Built by hand: React Native's URLSearchParams is incomplete.
-  const q = [['pa', v], ['pn', payee.slice(0, 40)], ['am', amount.toFixed(2)], ['cu', 'INR'], ['tn', note.slice(0, 60)]]
-    .map(([k, x]) => `${k}=${encodeURIComponent(x)}`).join('&');
-  return `upi://pay?${q}`;
-}
+/* NO PAY LINK OF ANY KIND (owner, 8 Oct 2026). Restaurants do not take
+ * payments through Menutha or through their own UPI id: the bill is paid at
+ * the counter and recorded there (Cash / UPI at counter / Card at counter).
+ * The upiPayLink builder that used to sit here is gone. */
 
 /**
  * "SHARE ON WHATSAPP" (2026-10-11): a free wa.me link with the online bill.
@@ -758,16 +753,6 @@ export function renderBillHtml(d: BillData, layoutRaw: any): string {
 
 
 
-/**
- * The upi://pay deep link for a bill total. Shared, because the QR on the
- * printed bill has to encode the same thing on both surfaces -- a diner
- * scanning a bill from the counter PC and one scanning a bill from the phone
- * must be paying the same VPA the same amount with the same note, and two
- * builders is two chances for one of them to drift.
- *
- * Returns '' with no VPA, and the renderer then prints no QR block at all
- * rather than a QR that resolves to nothing.
- */
 
 /**
  * THE SAMPLE BILL, defined once.

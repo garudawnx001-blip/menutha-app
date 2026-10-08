@@ -17,12 +17,12 @@
 
 export type PayMode = 'cash' | 'upi_qr' | 'card' | 'other';
 
-/** The methods staff can record at the counter, in button order. "UPI" is a
- *  method recorded at the counter only (no restaurant UPI link is generated). */
+/** The methods staff RECORD at the counter, in button order. Recorded only:
+ *  Menutha generates no payment link or QR of any kind (owner, 8 Oct 2026). */
 export const PAY_MODES: { id: PayMode; label: string }[] = [
   { id: 'cash', label: 'Cash' },
-  { id: 'upi_qr', label: 'UPI' },
-  { id: 'card', label: 'Card' },
+  { id: 'upi_qr', label: 'UPI at counter' },
+  { id: 'card', label: 'Card at counter' },
   { id: 'other', label: 'Other' },
 ];
 
@@ -30,8 +30,8 @@ export const PAY_MODES: { id: PayMode; label: string }[] = [
 export function payModeLabel(mode: string | null | undefined): string {
   switch (mode) {
     case 'cash': return 'Cash';
-    case 'upi_qr': return 'UPI';
-    case 'card': return 'Card';
+    case 'upi_qr': return 'UPI at counter';
+    case 'card': return 'Card at counter';
     case 'other': return 'Other';
     case 'gateway': return 'Online';
     case 'split': return 'Split';

@@ -654,8 +654,8 @@ export function Billing() {
       <p className="overline" style={{ marginTop: 12 }}>Billing</p>
       <h1 className="display" style={{ fontSize: 26 }}>Settle a table</h1>
       <p className="muted" style={{ fontSize: 14, marginTop: 4 }}>
-        Pick the orders to merge into one bill. Diners pay you directly — cash
-        or your own UPI.
+        Pick the orders to merge into one bill. Diners pay at the counter — cash,
+        or UPI or card at the counter, recorded here.
       </p>
       {error && <p className="inline-error" style={{ margin: '10px 0' }}>{error}</p>}
       {stockLine && <p className="stock-alert" role="status">{stockLine}</p>}

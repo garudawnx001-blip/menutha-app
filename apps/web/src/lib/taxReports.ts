@@ -96,7 +96,7 @@ export type StaffRow = {
 };
 
 /** Same words as lib/splitPay.ts payModeLabel. */
-const MODE: Record<string, string> = { cash: 'Cash', upi_qr: 'UPI', card: 'Card', other: 'Other', gateway: 'Online', split: 'Split' };
+const MODE: Record<string, string> = { cash: 'Cash', upi_qr: 'UPI at counter', card: 'Card at counter', other: 'Other', gateway: 'Online', split: 'Split' };
 
 /** A narrow page that prints on an 80mm roll and on A4 alike. */
 function page(title: string, restaurantName: string, body: string): string {

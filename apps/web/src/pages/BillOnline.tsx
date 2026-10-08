@@ -4,14 +4,14 @@
  * /b/<token>: the token is a random 128-bit id stored on the bill, so the link
  * is the key -- nobody can walk from one bill to another. The page shows the
  * very document the counter printed (same template, same invoice number, same
- * numbers, from public_bill on the server), a UPI pay button when the
- * restaurant has set a UPI id and the bill is unpaid, and print / save as PDF.
- * No login, no tracking, nothing paid.
+ * numbers, from public_bill on the server) and print / save as PDF.
+ * VIEW-ONLY (owner, 8 Oct 2026): no "Pay now", no payment link or QR of any
+ * kind -- the bill is paid at the counter. No login, no tracking.
  */
 import React, { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
-import { renderBillHtml, billDataFromPublic, upiPayLink, billLabel, inr } from '../lib/billTemplate';
+import { renderBillHtml, billDataFromPublic, billLabel, inr } from '../lib/billTemplate';
 import { printBillHtml } from '../lib/printBill';
 
 export function BillOnline() {
@@ -37,7 +37,6 @@ export function BillOnline() {
   }
 
   const name = pb.restaurant?.name ?? 'Restaurant';
-  const upi = pb.status === 'unpaid' ? upiPayLink(pb.restaurant?.upi_vpa, name, Number(pb.total), billLabel(pb)) : '';
   const status = pb.status === 'paid' ? 'Paid' : pb.status === 'void' ? 'Cancelled' : 'Unpaid';
 
   return (
@@ -49,14 +48,9 @@ export function BillOnline() {
         </div>
         <span className={`chip${pb.status === 'paid' ? ' active' : ''}`} aria-label={`Bill status: ${status}`}>{status}</span>
       </div>
-      {upi && (
-        <a className="btn btn-primary btn-block" href={upi} style={{ marginBottom: 10, textAlign: 'center' }}>
-          Pay {inr(Number(pb.total))} by UPI
-        </a>
-      )}
-      {upi && (
+      {pb.status === 'unpaid' && (
         <p className="dim" style={{ fontSize: 12, margin: '0 0 10px' }}>
-          Opens your UPI app with the amount filled in. The restaurant confirms the payment at the counter.
+          Please pay at the counter.
         </p>
       )}
       <iframe title="Bill" srcDoc={html} style={{ width: '100%', minHeight: 640, border: '1px solid var(--border, #ddd)', borderRadius: 12, background: '#fff' }} />
