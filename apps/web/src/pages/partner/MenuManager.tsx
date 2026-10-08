@@ -12,6 +12,7 @@ import {
 import { downloadTemplate, exportMenu, parseWorkbook, publishPlan, type ImportPlan } from '../../lib/excelMenu';
 import { DragHandleIcon, PencilIcon } from './Glyphs';
 import { inr } from '../../lib/types';
+import { stockLabel, stockTone } from '../../lib/stock';
 import { usePartner } from './PartnerShell';
 import { Spinner, VegMark } from '../../components';
 import { transliterate } from '../../lib/translit';
@@ -191,7 +192,14 @@ export function MenuManager() {
 
   const toggleAvailable = async (d: PortalDish) => {
     setItems((prev) => prev.map((i) => (i.id === d.id ? { ...i, is_available: !d.is_available } : i))); // optimistic
-    try { await saveDish(restaurant.id, { is_available: !d.is_available } as any, d.id); }
+    try {
+      await saveDish(restaurant.id, { is_available: !d.is_available } as any, d.id);
+      // A counted dish at 0 stays off until stock is added: show the truth.
+      if (!d.is_available && d.stock_qty === 0) {
+        setError(`${d.name} is out of stock. Add stock in Reports → Stock to show it again.`);
+        await load();
+      }
+    }
     catch { await load(); }
   };
 
@@ -521,6 +529,11 @@ export function MenuManager() {
               >
                 {d.is_available ? 'In stock' : 'Out'}
               </button>
+              {d.stock_qty != null && (
+                <span className={`stock-badge stock-${stockTone(d.stock_qty, d.stock_low_at)}`}>
+                  {stockLabel(d.stock_qty, d.stock_low_at)}
+                </span>
+              )}
               <button className="btn btn-glass btn-sm" onClick={() => setDraft({
                 id: d.id, name: d.name, price: String(d.price), category_id: d.category_id,
                 description: d.description ?? '', is_veg: d.is_veg, is_available: d.is_available,

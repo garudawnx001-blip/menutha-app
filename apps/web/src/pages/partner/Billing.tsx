@@ -5,7 +5,8 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { SettlePanel } from './SettlePanel';
 import { payModeLabel } from '../../lib/splitPay';
-import { fetchLiveOrders, fetchOrdersByIds, createBill, quoteBill, fetchBillMoney, recordBillPrint, type SettleResult, fetchBillLayout, setOrdersAc, waiveService, setParcelPacking, voidTableBill, voidBill, setBillChargeLine, removeBillChargeLine, staffSetOrderItemQty, setBillService, billShareToken, type BillChargeLine, type PortalOrder } from '../../lib/portalApi';
+import { stockAlertText, type StockReport } from '../../lib/stock';
+import { fetchStockReport, fetchLiveOrders, fetchOrdersByIds, createBill, quoteBill, fetchBillMoney, recordBillPrint, type SettleResult, fetchBillLayout, setOrdersAc, waiveService, setParcelPacking, voidTableBill, voidBill, setBillChargeLine, removeBillChargeLine, staffSetOrderItemQty, setBillService, billShareToken, type BillChargeLine, type PortalOrder } from '../../lib/portalApi';
 import { WalkIn } from './WalkIn';
 import { renderBillHtml, billNumbersFromBreakdown, billLabel, billDateText, whatsappBillLink, needsGstinWarning, GSTIN_WARNING, type BillData } from '../../lib/billTemplate';
 import { printBillHtml } from '../../lib/printBill';
@@ -144,6 +145,14 @@ export function Billing() {
     } catch (e: any) { setError(e?.message ?? 'Could not load orders.'); }
   };
   useEffect(() => { load(); }, [restaurant.id]);
+
+  /* LOW / OUT OF STOCK, where staff take orders and bill. Quiet when stock
+     counting is off or nothing needs attention; refreshed with the orders. */
+  const [stock, setStock] = useState<StockReport | null>(null);
+  useEffect(() => {
+    fetchStockReport(restaurant.id).then(setStock).catch(() => setStock(null));
+  }, [restaurant.id, orders]);
+  const stockLine = stockAlertText(stock);
 
   const byTable = useMemo(() => {
     const g = new Map<string, PortalOrder[]>();
@@ -625,6 +634,7 @@ export function Billing() {
         or your own UPI.
       </p>
       {error && <p className="inline-error" style={{ margin: '10px 0' }}>{error}</p>}
+      {stockLine && <p className="stock-alert" role="status">{stockLine}</p>}
       {/* GST CHARGED WITHOUT A GSTIN. Billing carries on exactly as set up;
           the owner is told, and the paper says "Bill of supply" until the
           GSTIN is on the profile. */}

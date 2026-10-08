@@ -14,9 +14,10 @@
 import { usePartner } from './PartnerShell';
 import { Growth } from './Growth';
 import { TaxReports } from './TaxReports';
+import { StockSection } from './StockSection';
 
 export function Reports() {
-  const { restaurant } = usePartner();
+  const { restaurant, role } = usePartner();
   return (
     <div className="fade-in">
       <p className="overline" style={{ marginTop: 12 }}>Reports</p>
@@ -26,6 +27,7 @@ export function Reports() {
       </p>
       <Growth restaurantId={restaurant.id} />
       <TaxReports restaurantId={restaurant.id} restaurantName={restaurant.name ?? ''} gstin={(restaurant as any).gstin ?? null} />
+      <StockSection restaurantId={restaurant.id} canManage={role === 'owner' || role === 'manager'} />
     </div>
   );
 }

@@ -425,12 +425,16 @@ export interface PortalDish {
    *  transliteration of the English name — see lib/translit.ts. */
   name_kn?: string | null; name_hi?: string | null;
   price: number; is_veg: boolean; is_available: boolean; photo_url: string | null; sort_order: number;
+  /** Portions left when the dish is counted (2026-10-12b); null = not counted. */
+  stock_qty?: number | null; stock_low_at?: number | null;
 }
 
 const ADMIN_COLS = 'id, category_id, name, description, price, is_veg, is_available, photo_url, sort_order';
 const ADMIN_COLS_I18N = ADMIN_COLS.replace('name,', 'name, name_kn, name_hi,');
 // + the dish's own GST rate (2026-10-11). Tried first; older databases fall back.
 const ADMIN_COLS_GST = ADMIN_COLS_I18N + ', gst_rate';
+// + the dish's stock count (2026-10-12b). Tried first; older databases fall back.
+const ADMIN_COLS_STOCK = ADMIN_COLS_GST + ', stock_qty, stock_low_at';
 
 export async function fetchMenuAdmin(restaurantId: string) {
   const dishes = (cols: string) =>
@@ -442,8 +446,9 @@ export async function fetchMenuAdmin(restaurantId: string) {
   // the migration independent of each other rather than ordered.
   let [{ data: cats, error: e1 }, { data: items, error: e2 }] = await Promise.all([
     supabase.from('menu_category').select('id, name, sort_order').eq('restaurant_id', restaurantId).order('sort_order'),
-    dishes(ADMIN_COLS_GST),
+    dishes(ADMIN_COLS_STOCK),
   ]);
+  if (e2) ({ data: items, error: e2 } = await dishes(ADMIN_COLS_GST));
   if (e2) ({ data: items, error: e2 } = await dishes(ADMIN_COLS_I18N));
   if (e2) ({ data: items, error: e2 } = await dishes(ADMIN_COLS));
   if (e1 || e2) throw e1 ?? e2;
@@ -2072,3 +2077,35 @@ export const SERVICE_KIND_LABEL: Record<string, string> = {
   clean: 'Clean the table',
   help: 'Help',
 };
+
+// ── Basic stock (2026-10-12b) ─────────────────────────────────────────────
+// Counting is the server's: orders take portions and cancels give them back
+// in the same transaction. These only read the report and record stock in /
+// a physical count.
+export async function fetchStockReport(restaurantId: string) {
+  const { data, error } = await supabase.rpc('stock_report', { p_restaurant_id: restaurantId, p_day: null });
+  if (error) throw error;
+  return data as import('./stock').StockReport;
+}
+export async function setStockEnabled(restaurantId: string, on: boolean) {
+  const { error } = await supabase.rpc('set_stock_enabled', { p_restaurant_id: restaurantId, p_on: on });
+  if (error) throw error;
+}
+export async function stockIn(itemId: string, qty: number, note?: string) {
+  const { error } = await supabase.rpc('stock_in', { p_item_id: itemId, p_qty: qty, p_note: note ?? null });
+  if (error) throw error;
+}
+/** qty null = stop counting this dish. */
+export async function stockSet(itemId: string, qty: number | null, lowAt: number | null, note?: string) {
+  const { error } = await supabase.rpc('stock_set', { p_item_id: itemId, p_qty: qty, p_low_at: lowAt, p_note: note ?? null });
+  if (error) throw error;
+}
+/** Every dish (counted or not) with its stock columns, for the Stock section. */
+export async function fetchDishesWithStock(restaurantId: string) {
+  const { data, error } = await supabase.from('menu_item')
+    .select('id, name, category_id, is_available, stock_qty, stock_low_at')
+    .eq('restaurant_id', restaurantId).order('name');
+  if (error) throw error;
+  return (data ?? []) as { id: string; name: string; category_id: string | null; is_available: boolean;
+                           stock_qty: number | null; stock_low_at: number | null }[];
+}
