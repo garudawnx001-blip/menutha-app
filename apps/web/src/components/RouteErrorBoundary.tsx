@@ -38,9 +38,13 @@
  *     screen that works.
  */
 import React from 'react';
+import { reportCrash } from '../lib/crashLog';
 
-type Props = { children: React.ReactNode };
+type Props = { children: React.ReactNode; /** Phase 3: a new value clears the error (route change). */ resetKey?: string };
 type State = { error: Error | null };
+
+/** Diner pages and partner pages fail to different places. */
+const isPortal = () => typeof location !== 'undefined' && /^\/(partner|admin)/.test(location.pathname);
 
 export class RouteErrorBoundary extends React.Component<Props, State> {
   state: State = { error: null };
@@ -53,19 +57,29 @@ export class RouteErrorBoundary extends React.Component<Props, State> {
     // Full fidelity, on purpose. Whoever is looking at a white-ish panel at
     // 2am wants the component stack, not a tidied-up message.
     console.error('[RouteErrorBoundary] render failed', error, info.componentStack);
+    // Phase 3: and a short, scrubbed copy in our own crash log (free).
+    reportCrash(error);
+  }
+
+  componentDidUpdate(prev: Props) {
+    // Moving to another screen gives it a fresh start: one broken panel must
+    // not keep the whole site on the error card.
+    if (this.state.error && prev.resetKey !== this.props.resetKey) this.setState({ error: null });
   }
 
   render() {
     const { error } = this.state;
     if (!error) return this.props.children;
+    const portal = isPortal();
 
     return (
       <div className="page center-fill fade-in" role="alert">
         <div className="state-card" style={{ maxWidth: 460 }}>
           <strong>This screen ran into a problem</strong>
           <p className="dim">
-            Nothing has been lost and your restaurant is still running — it is just
-            this page that failed to load. Try again, or go to your orders.
+            {portal
+              ? 'Nothing has been lost and your restaurant is still running — it is just this page that failed to load. Try again, or go to your orders.'
+              : 'Nothing has been lost — your orders are safe with the restaurant. Try again, or go back to the menu.'}
           </p>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 4 }}>
             {/* A full reload rather than clearing the error state. Re-rendering
@@ -76,9 +90,9 @@ export class RouteErrorBoundary extends React.Component<Props, State> {
             </button>
             <button
               className="btn btn-glass"
-              onClick={() => { window.location.href = '/partner/orders'; }}
+              onClick={() => { window.location.href = portal ? '/partner/orders' : '/menu'; }}
             >
-              Go to orders
+              {portal ? 'Go to orders' : 'Back to the menu'}
             </button>
           </div>
           {/* The message, quietly, for when an owner is reading it out over the

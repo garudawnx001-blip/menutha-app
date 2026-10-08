@@ -2,35 +2,50 @@ import React from 'react';
 import { BrowserRouter, HashRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { StoreProvider } from './store';
 import { RouteErrorBoundary } from './components/RouteErrorBoundary';
+import { Spinner } from './components';
+import { installCrashHandlers } from './lib/crashLog';
 import { Restaurants } from './pages/Restaurants';
 import { Scan } from './pages/Scan';
 import { TableGate } from './pages/TableGate';
-import { Reserve } from './pages/Reserve';
-import { BuffetPick } from './pages/BuffetPick';
-import { PublicRestaurant } from './pages/PublicRestaurant';
-import { PartnerLogin } from './pages/partner/PartnerLogin';
-import { PlanScreen } from './pages/partner/PlanScreen';
-import { PartnerShell } from './pages/partner/PartnerShell';
-import { Register } from './pages/partner/Register';
-import { OrdersBoard } from './pages/partner/OrdersBoard';
-import { MenuManager } from './pages/partner/MenuManager';
-import { Reports } from './pages/partner/Reports';
-import { TablesQR } from './pages/partner/TablesQR';
-import { Billing } from './pages/partner/Billing';
-import { Reservations } from './pages/partner/Reservations';
-import { Buffets } from './pages/partner/Buffets';
-import { Showcase } from './pages/partner/Showcase';
-import { Settings } from './pages/partner/Settings';
-import { Notifications } from './pages/partner/Notifications';
-import { Account } from './pages/partner/Account';
-import { DesignPreview } from './pages/partner/DesignPreview';
-import { Gate } from './pages/partner/Gate';
-import { BillSettings } from './pages/partner/BillSettings';
 import { Menu } from './pages/Menu';
 import { Cart } from './pages/Cart';
 import { Track } from './pages/Track';
 import { Bill } from './pages/Bill';
-import { BillOnline } from './pages/BillOnline';
+
+/**
+ * PHASE 3: ONLY THE DINER'S SCREENS ARE IN THE FIRST DOWNLOAD.
+ *
+ * A diner scanning a table QR on a slow phone used to download the whole
+ * restaurant portal (billing, reports, the menu manager, Excel import) before
+ * the menu could appear. The portal now loads in its own chunks, on demand,
+ * the first time someone opens /partner -- the diner path is the scan, the
+ * menu, the cart, tracking and the bill, and nothing else.
+ */
+const lazyNamed = <T extends Record<string, any>>(load: () => Promise<T>, name: keyof T) =>
+  React.lazy(() => load().then((m) => ({ default: m[name] as React.ComponentType<any> })));
+
+const Reserve = lazyNamed(() => import('./pages/Reserve'), 'Reserve');
+const BuffetPick = lazyNamed(() => import('./pages/BuffetPick'), 'BuffetPick');
+const PublicRestaurant = lazyNamed(() => import('./pages/PublicRestaurant'), 'PublicRestaurant');
+const BillOnline = lazyNamed(() => import('./pages/BillOnline'), 'BillOnline');
+const PartnerLogin = lazyNamed(() => import('./pages/partner/PartnerLogin'), 'PartnerLogin');
+const PlanScreen = lazyNamed(() => import('./pages/partner/PlanScreen'), 'PlanScreen');
+const PartnerShell = lazyNamed(() => import('./pages/partner/PartnerShell'), 'PartnerShell');
+const Register = lazyNamed(() => import('./pages/partner/Register'), 'Register');
+const OrdersBoard = lazyNamed(() => import('./pages/partner/OrdersBoard'), 'OrdersBoard');
+const MenuManager = lazyNamed(() => import('./pages/partner/MenuManager'), 'MenuManager');
+const Reports = lazyNamed(() => import('./pages/partner/Reports'), 'Reports');
+const TablesQR = lazyNamed(() => import('./pages/partner/TablesQR'), 'TablesQR');
+const Billing = lazyNamed(() => import('./pages/partner/Billing'), 'Billing');
+const Reservations = lazyNamed(() => import('./pages/partner/Reservations'), 'Reservations');
+const Buffets = lazyNamed(() => import('./pages/partner/Buffets'), 'Buffets');
+const Showcase = lazyNamed(() => import('./pages/partner/Showcase'), 'Showcase');
+const Settings = lazyNamed(() => import('./pages/partner/Settings'), 'Settings');
+const Notifications = lazyNamed(() => import('./pages/partner/Notifications'), 'Notifications');
+const Account = lazyNamed(() => import('./pages/partner/Account'), 'Account');
+const DesignPreview = lazyNamed(() => import('./pages/partner/DesignPreview'), 'DesignPreview');
+const Gate = lazyNamed(() => import('./pages/partner/Gate'), 'Gate');
+const BillSettings = lazyNamed(() => import('./pages/partner/BillSettings'), 'BillSettings');
 
 /** The platform console. Lazy, so its code and styles live in their own chunk
  *  and are never downloaded by a diner or a restaurant -- only by someone who
@@ -44,16 +59,24 @@ function LegacyToNotifications() {
   return <Navigate to={`/partner/notifications${loc.search}`} replace />;
 }
 
+/** One broken screen never takes the site down, and leaving it clears it. */
+function Boundary({ children }: { children: React.ReactNode }) {
+  const loc = useLocation();
+  return <RouteErrorBoundary resetKey={loc.pathname}>{children}</RouteErrorBoundary>;
+}
+
 // Path routing in production (printed QRs encode /scan/<token>); hash routing
 // for single-file/static-preview builds where the host can't rewrite paths.
 const Router = import.meta.env.VITE_HASH_ROUTER ? HashRouter : BrowserRouter;
 
 export function App() {
+  React.useEffect(() => { installCrashHandlers(); }, []);
   return (
     <StoreProvider>
       <div className="ambient" aria-hidden />
       <Router>
-        <RouteErrorBoundary>
+        <Boundary>
+        <React.Suspense fallback={<Spinner label="Loading…" />}>
         <Routes>
           {/* '/' is the static marketing page, copied over index.html at deploy
               (see .github/workflows/deploy.yml). Inside the SPA -- hash-router
@@ -65,11 +88,6 @@ export function App() {
           {/* THE DINER FALLBACK. Every session-less diner path lands here --
               see TableGate for why it is not '/'. */}
           <Route path="/table" element={<TableGate />} />
-          {/* The two flows a scan can reach besides the menu. The door page
-              that used to sit in front of them is gone -- "after scanning only
-              menu should open" -- and they are reached from chips in the
-              menu's own filter row instead. Still inside the locked diner
-              scope: no account, no partner link, no marketing. */}
           <Route path="/reserve" element={<Reserve />} />
           <Route path="/buffet" element={<BuffetPick />} />
           <Route path="/scan/:token" element={<Scan />} />
@@ -104,24 +122,15 @@ export function App() {
             <Route path="/partner/settings" element={<Settings />} />
           </Route>
           <Route path="/partner/plan" element={<PlanScreen />} />
-          <Route
-            path="/admin/*"
-            element={
-              <React.Suspense fallback={null}>
-                <AdminApp />
-              </React.Suspense>
-            }
-          />
+          <Route path="/admin/*" element={<AdminApp />} />
           {/* UNKNOWN PATHS GO TO THE TABLE GATE, not to '/'.
               '/' is the marketing landing on the deployed site, so a diner who
               mistypes a URL or follows a stale link would have been dropped on
-              a page selling restaurant accounts. The gate is the safe default:
-              it explains how to get to a menu and offers nothing else. Anyone
-              actually after the marketing site loads '/' directly and gets it,
-              because that is a real file served by Pages. */}
+              a page selling restaurant accounts. The gate is the safe default. */}
           <Route path="*" element={<Navigate to="/table" replace />} />
         </Routes>
-        </RouteErrorBoundary>
+        </React.Suspense>
+        </Boundary>
       </Router>
     </StoreProvider>
   );

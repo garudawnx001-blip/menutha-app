@@ -1,0 +1,12 @@
+{
+  "name": "menutha-web-e2e",
+  "private": true,
+  "description": "Playwright end-to-end tests for the web app. Installed only in CI (kept out of the app's own dependencies). Every Supabase call is answered by a local fake, so these never touch the live database.",
+  "type": "module",
+  "scripts": {
+    "test": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.48.2"
+  }
+}
